@@ -8,11 +8,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const BUCKETS = ['route-audio', 'route-photos'] as const;
-// Maximum route folders and objects per folder to inspect per invocation
-const FOLDER_LIMIT = 200;
-const OBJECT_LIMIT = 500;
-// Validate extracted waypoint IDs before querying the DB.
-// Prevents accidental deletion of files with non-UUID names (placeholders, etc.).
+// Page size for storage list API calls. Both folders and objects paginate
+// through the full listing using offset-based iteration.
+const PAGE_SIZE = 200;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 Deno.serve(async (req: Request) => {
@@ -49,89 +47,102 @@ Deno.serve(async (req: Request) => {
     const removed: string[] = [];
     const errors: string[] = [];
 
-    // Objects are stored as {route_id}/{waypoint_id}.{ext}.
-    // list('') returns virtual folder entries (one per route_id), not actual files.
-    // We must list each route folder to reach the actual objects.
-    const { data: folders, error: folderListError } = await supabase.storage
-      .from(bucket)
-      .list('', { limit: FOLDER_LIMIT });
+    // Paginate through all route folders in the bucket.
+    // Storage list('') returns virtual folder entries (one per route_id).
+    let folderOffset = 0;
+    let hasMoreFolders = true;
 
-    if (folderListError) {
-      errors.push(`folder list error: ${folderListError.message}`);
-      results[bucket] = { removed: 0, errors };
-      continue;
-    }
-
-    for (const folder of (folders ?? [])) {
-      const { data: objects, error: objListError } = await supabase.storage
+    while (hasMoreFolders) {
+      const { data: folders, error: folderListError } = await supabase.storage
         .from(bucket)
-        .list(folder.name, { limit: OBJECT_LIMIT });
+        .list('', { limit: PAGE_SIZE, offset: folderOffset });
 
-      if (objListError) {
-        errors.push(`list error in ${folder.name}: ${objListError.message}`);
-        continue;
+      if (folderListError) {
+        errors.push(`folder list error: ${folderListError.message}`);
+        break;
       }
 
-      // Filter to files whose name (sans extension) is a valid waypoint UUID.
-      // Non-UUID names (e.g. .placeholder, stray files) are skipped.
-      const candidates = (objects ?? []).filter((obj) =>
-        UUID_RE.test(obj.name.replace(/\.[^.]+$/, ''))
-      );
+      if (!folders || folders.length === 0) break;
+      hasMoreFolders = folders.length === PAGE_SIZE;
+      folderOffset += folders.length;
 
-      if (candidates.length === 0) continue;
+      for (const folder of folders) {
+        // Paginate through all objects within each folder.
+        let objectOffset = 0;
+        let hasMoreObjects = true;
 
-      // The `pending/` folder holds pre-save uploads keyed by local UUID.
-      // These files are orphaned if the save_route RPC never completed.
-      // For route folders, check against the waypoints table.
-      const waypointIds = candidates.map((obj) => obj.name.replace(/\.[^.]+$/, ''));
-
-      if (folder.name === 'pending') {
-        // Pending files older than 24h with no matching waypoint are orphaned.
-        // All pending files use local UUIDs that never become waypoint IDs,
-        // so we can safely remove any pending files that exist here.
-        const staleThreshold = Date.now() - 24 * 60 * 60 * 1000;
-        for (const obj of candidates) {
-          const createdAt = obj.created_at ? new Date(obj.created_at).getTime() : 0;
-          if (createdAt < staleThreshold) {
-            const objectPath = `pending/${obj.name}`;
-            const { error: removeError } = await supabase.storage
-              .from(bucket)
-              .remove([objectPath]);
-            if (removeError) {
-              errors.push(`remove error for ${objectPath}: ${removeError.message}`);
-            } else {
-              removed.push(objectPath);
-            }
-          }
-        }
-        continue;
-      }
-
-      // Batch the existence check: one query per folder rather than one per object.
-      const { data: existing, error: queryError } = await supabase
-        .from('waypoints')
-        .select('id')
-        .in('id', waypointIds);
-
-      if (queryError) {
-        errors.push(`query error for folder ${folder.name}: ${queryError.message}`);
-        continue;
-      }
-
-      const existingIds = new Set((existing ?? []).map((r: { id: string }) => r.id));
-
-      for (const obj of candidates) {
-        const waypointId = obj.name.replace(/\.[^.]+$/, '');
-        if (!existingIds.has(waypointId)) {
-          const objectPath = `${folder.name}/${obj.name}`;
-          const { error: removeError } = await supabase.storage
+        while (hasMoreObjects) {
+          const { data: objects, error: objListError } = await supabase.storage
             .from(bucket)
-            .remove([objectPath]);
+            .list(folder.name, { limit: PAGE_SIZE, offset: objectOffset });
 
-          if (removeError) {
-            errors.push(`remove error for ${objectPath}: ${removeError.message}`);
-          } else {
-            removed.push(objectPath);
+          if (objListError) {
+            errors.push(`list error in ${folder.name}: ${objListError.message}`);
+            break;
+          }
+
+          if (!objects || objects.length === 0) break;
+          hasMoreObjects = objects.length === PAGE_SIZE;
+          objectOffset += objects.length;
+
+          const candidates = objects.filter((obj: { name: string }) =>
+            UUID_RE.test(obj.name.replace(/\.[^.]+$/, ''))
+          );
+
+          if (candidates.length === 0) continue;
+
+          // The `pending/` folder holds pre-save uploads keyed by local UUID.
+          // These are orphaned if the save_route RPC never completed.
+          if (folder.name === 'pending') {
+            const staleThreshold = Date.now() - 24 * 60 * 60 * 1000;
+            for (const obj of candidates) {
+              const createdAt = obj.created_at ? new Date(obj.created_at).getTime() : 0;
+              if (createdAt < staleThreshold) {
+                const objectPath = `pending/${obj.name}`;
+                const { error: removeError } = await supabase.storage
+                  .from(bucket)
+                  .remove([objectPath]);
+                if (removeError) {
+                  errors.push(`remove error for ${objectPath}: ${removeError.message}`);
+                } else {
+                  removed.push(objectPath);
+                }
+              }
+            }
+            continue;
+          }
+
+          // Batch existence check: one query per page rather than per object.
+          const waypointIds = candidates.map((obj: { name: string }) =>
+            obj.name.replace(/\.[^.]+$/, '')
+          );
+
+          const { data: existing, error: queryError } = await supabase
+            .from('waypoints')
+            .select('id')
+            .in('id', waypointIds);
+
+          if (queryError) {
+            errors.push(`query error for folder ${folder.name}: ${queryError.message}`);
+            continue;
+          }
+
+          const existingIds = new Set((existing ?? []).map((r: { id: string }) => r.id));
+
+          for (const obj of candidates) {
+            const waypointId = obj.name.replace(/\.[^.]+$/, '');
+            if (!existingIds.has(waypointId)) {
+              const objectPath = `${folder.name}/${obj.name}`;
+              const { error: removeError } = await supabase.storage
+                .from(bucket)
+                .remove([objectPath]);
+
+              if (removeError) {
+                errors.push(`remove error for ${objectPath}: ${removeError.message}`);
+              } else {
+                removed.push(objectPath);
+              }
+            }
           }
         }
       }
