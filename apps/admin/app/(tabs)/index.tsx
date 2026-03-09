@@ -7,7 +7,7 @@
  *
  * MapDetailPanel's `detailContent` slot is the extension point for ALP-966/967/968.
  */
-import { useRef, useState, useCallback, useMemo } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import { View, StyleSheet, Pressable, Text, Platform, ActivityIndicator } from 'react-native';
 import MapboxGL from '@rnmapbox/maps';
 import { Ionicons } from '@expo/vector-icons';
@@ -96,11 +96,7 @@ export default function MapScreen() {
     [],
   );
 
-  // Detect if waypoint edit has changes vs original
-  const wpHasChanges = useMemo(() => {
-    if (!wpEdit.route) return false;
-    return JSON.stringify(wpEdit.originalWaypoints) !== JSON.stringify(wpEdit.editBuffer);
-  }, [wpEdit.originalWaypoints, wpEdit.editBuffer, wpEdit.route]);
+  const wpHasChanges = wpEdit.isDirty;
 
   // Handle map press depending on current mode
   const handleMapPress = useCallback((feature: GeoJSON.Feature) => {
