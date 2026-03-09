@@ -5,6 +5,7 @@
  * Highlights added, removed, and modified waypoints.
  */
 
+import { useMemo } from 'react';
 import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import type { Waypoint } from '@echoecho/shared';
 
@@ -27,30 +28,28 @@ function buildDiff(
   original: Waypoint[],
   edited: Waypoint[],
 ): { before: DiffEntry[]; after: DiffEntry[] } {
-  const editedIds = new Set(edited.map((w) => w.id));
-  const originalIds = new Set(original.map((w) => w.id));
+  const editedById = new Map(edited.map((w) => [w.id, w]));
+  const originalById = new Map(original.map((w) => [w.id, w]));
 
-  const before: DiffEntry[] = original.map((w, i) => ({
-    index: i,
-    label: w.audioLabel ?? w.type,
-    type: w.type,
-    status: editedIds.has(w.id)
-      ? hasChanged(w, edited.find((e) => e.id === w.id)!)
-        ? 'modified'
-        : 'unchanged'
-      : 'removed',
-  }));
+  const before: DiffEntry[] = original.map((w, i) => {
+    const match = editedById.get(w.id);
+    return {
+      index: i,
+      label: w.audioLabel ?? w.type,
+      type: w.type,
+      status: match ? (hasChanged(w, match) ? 'modified' : 'unchanged') : 'removed',
+    };
+  });
 
-  const after: DiffEntry[] = edited.map((w, i) => ({
-    index: i,
-    label: w.audioLabel ?? w.type,
-    type: w.type,
-    status: originalIds.has(w.id)
-      ? hasChanged(original.find((o) => o.id === w.id)!, w)
-        ? 'modified'
-        : 'unchanged'
-      : 'added',
-  }));
+  const after: DiffEntry[] = edited.map((w, i) => {
+    const match = originalById.get(w.id);
+    return {
+      index: i,
+      label: w.audioLabel ?? w.type,
+      type: w.type,
+      status: match ? (hasChanged(match, w) ? 'modified' : 'unchanged') : 'added',
+    };
+  });
 
   return { before, after };
 }
@@ -80,7 +79,10 @@ export function WaypointBeforeAfterModal({
   onConfirm,
   onDiscard,
 }: Props) {
-  const { before, after } = buildDiff(originalWaypoints, editedWaypoints);
+  const { before, after } = useMemo(
+    () => buildDiff(originalWaypoints, editedWaypoints),
+    [originalWaypoints, editedWaypoints],
+  );
 
   const addedCount = after.filter((e) => e.status === 'added').length;
   const removedCount = before.filter((e) => e.status === 'removed').length;
