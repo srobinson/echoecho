@@ -103,6 +103,10 @@ BEGIN
     RAISE EXCEPTION 'permission_denied';
   END IF;
 
+  IF jsonb_array_length(p_waypoints) = 0 THEN
+    RAISE EXCEPTION 'no_waypoints';
+  END IF;
+
   -- a. INSERT route row; status starts as 'pending_save' so it is invisible
   --    to all list/map queries while the transaction is open.
   INSERT INTO routes (

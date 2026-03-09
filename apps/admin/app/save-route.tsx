@@ -166,10 +166,11 @@ export default function SaveRouteScreen() {
   // ── Save ───────────────────────────────────────────────────────────────────
 
   const validate = useCallback((): string | null => {
-    if (!name.trim())         return 'Route name is required.';
-    if (!startBuildingId)     return 'Start building is required.';
-    if (!endBuildingId)       return 'End building is required.';
-    if (!session?.campusId)   return 'No campus associated with this session.';
+    if (!name.trim())                        return 'Route name is required.';
+    if (!startBuildingId)                    return 'Start building is required.';
+    if (!endBuildingId)                      return 'End building is required.';
+    if (!session?.campusId)                  return 'No campus associated with this session.';
+    if ((session?.trackPoints.length ?? 0) === 0) return 'No GPS data recorded. Cannot save an empty route.';
     return null;
   }, [name, startBuildingId, endBuildingId, session]);
 
