@@ -7,19 +7,13 @@ import { StyleSheet } from 'react-native';
 import { useAuthListener } from '../src/hooks/useAuth';
 import { useProtectedRoute } from '../src/hooks/useProtectedRoute';
 import { useAuthStore } from '../src/stores/authStore';
-import { useCampusStore } from '../src/stores/campusStore';
-import { supabase } from '../src/lib/supabase';
-import type { Campus } from '@echoecho/shared';
 
-// Import GPS recording service at root level to ensure the expo-task-manager
-// background task is defined before any component renders (required by expo-task-manager).
 import '../src/services/gpsRecordingService';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const initialized = useAuthStore((s) => s.initialized);
-  const session = useAuthStore((s) => s.session);
 
   useAuthListener();
   useProtectedRoute();
@@ -29,30 +23,6 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [initialized]);
-
-  // Load campuses after auth is established. Sets the first campus as active
-  // so map layers and data queries have a campus_id to filter by.
-  useEffect(() => {
-    if (!session) return;
-
-    supabase
-      .from('v_campuses' as 'campuses')
-      .select('*')
-      .order('name')
-      .then(({ data, error }) => {
-        if (error || !data || data.length === 0) {
-          useCampusStore.getState().setLoading(false);
-          return;
-        }
-
-        const campuses = data as unknown as Campus[];
-        useCampusStore.getState().setCampuses(campuses);
-        if (!useCampusStore.getState().activeCampus) {
-          useCampusStore.getState().setActiveCampus(campuses[0]);
-        }
-        useCampusStore.getState().setLoading(false);
-      });
-  }, [session]);
 
   return (
     <GestureHandlerRootView style={styles.root}>

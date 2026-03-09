@@ -1,5 +1,8 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useCampusStore } from '../../src/stores/campusStore';
+import { useAuthStore } from '../../src/stores/authStore';
+import { CampusGateScreen } from '../../src/components/CampusGateScreen';
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -20,6 +23,13 @@ function TabIcon({
 }
 
 export default function TabsLayout() {
+  const activeCampus = useCampusStore((s) => s.activeCampus);
+  const session = useAuthStore((s) => s.session);
+
+  if (session && !activeCampus) {
+    return <CampusGateScreen />;
+  }
+
   return (
     <Tabs
       screenOptions={{
