@@ -53,6 +53,7 @@ export function RouteLayer({ routes, onRoutePress }: Props) {
     ['get', 'status'],
     'draft', '#F59E0B',
     'published', '#22C55E',
+    'archived', '#9CA3AF',
     '#9CA3AF',
   ];
 

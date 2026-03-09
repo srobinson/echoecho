@@ -85,8 +85,9 @@ const styles = StyleSheet.create({
   toggle: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    minHeight: 44,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 8,
     gap: 6,
   },

@@ -96,6 +96,7 @@ export default function MapScreen() {
           compassEnabled
           compassFadeWhenNorth
           scaleBarEnabled={false}
+          accessible={false}
         >
           <MapboxGL.Camera
             ref={cameraRef}
