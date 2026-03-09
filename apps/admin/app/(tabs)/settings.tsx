@@ -6,9 +6,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useCampusStore } from '../../src/stores/campusStore';
+import { useAuthStore } from '../../src/stores/authStore';
 
 export default function SettingsScreen() {
   const { activeCampus } = useCampusStore();
+  const { signOut, session } = useAuthStore();
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -42,11 +44,20 @@ export default function SettingsScreen() {
         <Text style={styles.sectionTitle}>Account</Text>
         <Pressable
           style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-          onPress={() => Alert.alert('Sign out', 'Sign out will be implemented with ALP-945 auth flow.')}
+          onPress={() => {
+            Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Sign Out', style: 'destructive', onPress: () => void signOut() },
+            ]);
+          }}
           accessibilityRole="button"
+          accessibilityLabel="Sign out"
         >
           <Ionicons name="log-out-outline" size={20} color="#e53e3e" />
           <Text style={[styles.rowText, { color: '#e53e3e' }]}>Sign Out</Text>
+          {session?.user?.email && (
+            <Text style={styles.emailText}>{session.user.email}</Text>
+          )}
         </Pressable>
       </View>
 
@@ -82,5 +93,6 @@ const styles = StyleSheet.create({
   },
   rowPressed: { opacity: 0.7 },
   rowText: { color: '#e8e8f0', flex: 1, fontSize: 15 },
+  emailText: { color: '#8888aa', fontSize: 12 },
   version: { color: '#4444aa', fontSize: 12, textAlign: 'center', marginTop: 'auto' },
 });
