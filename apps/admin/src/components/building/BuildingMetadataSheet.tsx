@@ -57,7 +57,12 @@ export function BuildingMetadataSheet({ sheetRef, building, onSave }: Props) {
       Alert.alert('Save failed', error.message);
       return;
     }
-    onSave({ ...building, ...(data as Partial<Building>) });
+    onSave({
+      ...building,
+      name: (data as Record<string, unknown>).name as string,
+      shortName: ((data as Record<string, unknown>).short_name as string) ?? building.shortName,
+      description: ((data as Record<string, unknown>).description as string) ?? building.description,
+    });
     sheetRef.current?.close();
   }
 

@@ -54,13 +54,13 @@ export default function RouteDetailScreen() {
     if (!id) return;
     setIsLoading(true);
     const { data, error } = await supabase
-      .from('routes')
-      .select('*, waypoints(*), hazards(*)')
+      .from('v_routes')
+      .select('*')
       .eq('id', id)
       .single();
 
     if (!error && data) {
-      const r = data as unknown as Route;
+      const r = data as Route;
       setRoute(r);
       setEditName(r.name);
       setEditDescription(r.description ?? '');
