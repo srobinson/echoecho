@@ -79,7 +79,6 @@ export default function AnalyticsDashboardScreen() {
             colors={['#6c63ff']}
           />
         }
-        accessibilityRole="scrollbar"
       >
         <CoverageCard data={coverage} />
         <RouteUsageChart data={routeUsage} />
