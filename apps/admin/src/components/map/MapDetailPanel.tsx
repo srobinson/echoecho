@@ -26,7 +26,6 @@ import {
   StyleSheet,
   ScrollView,
   AccessibilityInfo,
-  findNodeHandle,
 } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { Ionicons } from '@expo/vector-icons';
@@ -54,10 +53,12 @@ export function MapDetailPanel({ feature, detailContent, onClose }: Props) {
   useEffect(() => {
     if (feature) {
       sheetRef.current?.snapToIndex(0);
-      // Move focus to panel heading so screen readers enter the panel
       const timer = setTimeout(() => {
-        const node = headingRef.current ? findNodeHandle(headingRef.current) : null;
-        if (node != null) AccessibilityInfo.setAccessibilityFocus(node);
+        if (headingRef.current) {
+          AccessibilityInfo.setAccessibilityFocus(
+            headingRef.current as unknown as number,
+          );
+        }
       }, 350);
       return () => clearTimeout(timer);
     } else {
