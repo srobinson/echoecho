@@ -4,17 +4,20 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/stores/authStore';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [mode, setMode] = useState<'signin' | 'reset'>('signin');
   const [resetSent, setResetSent] = useState(false);
 
@@ -69,18 +72,33 @@ export default function LoginScreen() {
 
         {mode === 'signin' ? (
           <>
-            <TextInput
-              style={styles.input}
-              placeholder="Password"
-              placeholderTextColor="#666"
-              secureTextEntry
-              textContentType="password"
-              value={password}
-              onChangeText={setPassword}
-              accessibilityLabel="Password"
-              onSubmitEditing={handleSignIn}
-              returnKeyType="go"
-            />
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Password"
+                placeholderTextColor="#666"
+                secureTextEntry={!showPassword}
+                textContentType="password"
+                value={password}
+                onChangeText={setPassword}
+                accessibilityLabel="Password"
+                onSubmitEditing={handleSignIn}
+                returnKeyType="go"
+              />
+              <Pressable
+                style={styles.eyeButton}
+                onPress={() => setShowPassword((prev) => !prev)}
+                accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                accessibilityRole="button"
+                hitSlop={8}
+              >
+                <Ionicons
+                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                  size={22}
+                  color="#8888aa"
+                />
+              </Pressable>
+            </View>
 
             <TouchableOpacity
               style={[styles.primaryButton, isLoading && styles.buttonDisabled]}
@@ -173,6 +191,29 @@ const styles = StyleSheet.create({
     color: '#e8e8f0',
     borderWidth: 1,
     borderColor: '#2a2a4a',
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0f0f1a',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2a2a4a',
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: '#e8e8f0',
+  },
+  eyeButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    minHeight: 44,
+    minWidth: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   primaryButton: {
     backgroundColor: '#5b5bff',
