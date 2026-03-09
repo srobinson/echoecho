@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import * as Location from 'expo-location';
 import { supabase } from '../lib/supabase';
 import { useCampusStore } from '../stores/campusStore';

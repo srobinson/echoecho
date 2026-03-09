@@ -550,6 +550,13 @@ const HazardDetailSheet = forwardRef<
     onUpdateExpiry: (hazardId: string, expiresAt: string | null) => void;
   }
 >(({ hazard, routes, onResolve, onDismiss, onUpdateExpiry }, ref) => {
+  const renderBackdrop = useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} onPress={onDismiss} />
+    ),
+    [onDismiss],
+  );
+
   if (!hazard) return null;
 
   const routeName = hazard.routeId
@@ -564,13 +571,6 @@ const HazardDetailSheet = forwardRef<
     { label: '1 week', value: new Date(Date.now() + 7 * 86_400_000).toISOString() },
     { label: '1 month', value: new Date(Date.now() + 30 * 86_400_000).toISOString() },
   ];
-
-  const renderBackdrop = useCallback(
-    (props: BottomSheetBackdropProps) => (
-      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} onPress={onDismiss} />
-    ),
-    [onDismiss],
-  );
 
   return (
     <BottomSheet

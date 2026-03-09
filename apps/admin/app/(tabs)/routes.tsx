@@ -72,9 +72,11 @@ export default function RoutesScreen() {
     setIsLoading(false);
   }, [activeCampus]);
 
+  /* eslint-disable react-hooks/exhaustive-deps -- searchQuery excluded: search uses debounced handleSearch */
   useEffect(() => {
     void fetchRoutes(searchQuery, statusFilter);
   }, [fetchRoutes, statusFilter]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   const handleSearch = useCallback((text: string) => {
     setSearchQuery(text);
