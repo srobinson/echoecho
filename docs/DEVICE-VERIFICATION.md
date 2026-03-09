@@ -321,26 +321,25 @@ The sync engine queries `routes` and `waypoints` tables. To verify:
 
 ---
 
-## Remaining Gaps for Device Verification
+## Resolved Gaps
 
-Items 1, 2, and 4 from the original code review were resolved in this commit. Two gaps remain.
+All previously identified code gaps have been fixed:
 
-### 1. Route store never populated (ALP-1001 Test 2)
+1. **Route store population** (iter23): `RoutesScreen` now fetches routes from Supabase
+   on mount when `activeCampus` is set, using the same query pattern as `useAdminMapData`.
 
-The routes list tab reads from `routeStore.routes`, but no hook or effect fetches routes from Supabase and writes them into the store.
+2. **Student app auth** (iter23): The student app now calls `signInAnonymously()` on
+   launch (in `_layout.tsx`). Migration 008 adds RLS policies granting any authenticated
+   user (including anonymous) read access to published campuses, buildings, entrances,
+   routes, waypoints, hazards, and POIs.
 
-**Fix needed**: The routes tab or a parent component needs to fetch routes on mount.
+**Migration 008 must be applied before student app device testing:**
+```bash
+supabase db push --project-ref $STAGING_PROJECT_REF
+```
 
-### 2. Student app has no auth gate (ALP-1003 blocker)
-
-The student app does not require sign-in. The Supabase client uses the anon key. RLS policies require `current_user_role()` which queries `profiles` using `auth.uid()`. Without a session, `auth.uid()` returns NULL, so `current_user_role()` returns NULL, and all RLS policies deny access.
-
-**Fix options**:
-- Add an anonymous sign-in flow: `await supabase.auth.signInAnonymously()`
-- Add RLS policies that allow anon reads on published data
-- Add a student auth screen (mirror the admin login)
-
-This is a significant blocker for ALP-1003.
+**Supabase project setting required:** Anonymous sign-in must be enabled in the
+Supabase dashboard under Authentication > Providers > Anonymous Sign-Ins.
 
 ---
 
@@ -352,7 +351,6 @@ This is a significant blocker for ALP-1003.
 | "Network request failed" | Wrong Supabase URL | Check `.env` file has correct URL without trailing slash |
 | Map is grey/blank | Invalid Mapbox pk token | Verify token in Mapbox dashboard, check scopes |
 | Build fails on Mapbox | Missing sk download token | Add to `~/.gradle/gradle.properties` |
-| Empty route list | Store not wired to Supabase | See "Code Fixes Needed" section |
 | RLS error 401/403 | Profile role not set | Run the SQL to set role to `admin` |
 | "relation building_entrances does not exist" | Migration 007 not applied | Run `supabase db push` |
-| Student app gets no data | No auth session (anon key) | See fix option 5 above |
+| Student app gets no data | Anonymous sign-in disabled | Enable in Supabase dashboard; apply migration 008 |

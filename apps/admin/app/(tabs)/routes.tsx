@@ -2,6 +2,7 @@
  * Routes list tab — shows all recorded routes for the active campus.
  * ALP-968: Full route management (implemented in ALP-990 sprint)
  */
+import { useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -14,10 +15,38 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouteStore } from '../../src/stores/routeStore';
+import { useCampusStore } from '../../src/stores/campusStore';
+import { supabase } from '../../src/lib/supabase';
 import type { Route } from '@echoecho/shared';
 
 export default function RoutesScreen() {
-  const { routes, isLoading } = useRouteStore();
+  const { routes, isLoading, setRoutes, setLoading, setError } = useRouteStore();
+  const activeCampus = useCampusStore((s) => s.activeCampus);
+
+  const fetchRoutes = useCallback(async () => {
+    if (!activeCampus) return;
+    setLoading(true);
+    setError(null);
+
+    const { data, error } = await supabase
+      .from('routes')
+      .select('*, waypoints(*)')
+      .eq('campus_id', activeCampus.id)
+      .in('status', ['draft', 'published'])
+      .is('deleted_at', null)
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      setError(error.message);
+    } else {
+      setRoutes((data ?? []) as unknown as Route[]);
+    }
+    setLoading(false);
+  }, [activeCampus, setRoutes, setLoading, setError]);
+
+  useEffect(() => {
+    void fetchRoutes();
+  }, [fetchRoutes]);
 
   if (isLoading) {
     return (

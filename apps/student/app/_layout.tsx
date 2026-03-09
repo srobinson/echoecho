@@ -9,7 +9,7 @@
  *
  * Persistent dark mode: screen brightness affects low-vision outdoor orientation.
  */
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -18,13 +18,21 @@ import { StyleSheet } from 'react-native';
 
 import { CampusProvider } from '../src/context/CampusContext';
 import { EmergencyOverlay } from '../src/components/EmergencyOverlay';
+import { ensureAnonymousSession } from '../src/lib/supabase';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
+  const [authReady, setAuthReady] = useState(false);
+
   useEffect(() => {
-    SplashScreen.hideAsync();
+    ensureAnonymousSession()
+      .then(() => setAuthReady(true))
+      .catch(() => setAuthReady(true))
+      .finally(() => SplashScreen.hideAsync());
   }, []);
+
+  if (!authReady) return null;
 
   return (
     <GestureHandlerRootView style={styles.root}>
