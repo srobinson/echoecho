@@ -262,8 +262,8 @@ function StatusBar({
   const modeLabel = positioningMode === 'pdr' ? ' (estimated position)' : '';
 
   return (
-    <View style={[styles.statusBar, { borderColor: color }]}>
-      <View style={[styles.statusDot, { backgroundColor: color }]} />
+    <View style={[styles.statusBar, { borderColor: color }]} accessibilityLiveRegion="assertive">
+      <View style={[styles.statusDot, { backgroundColor: color }]} accessibilityElementsHidden />
       <Text
         style={[styles.statusLabel, { color }]}
         accessibilityRole="none"
@@ -324,12 +324,20 @@ function ProgressCard({
 }) {
   if (total === 0) return null;
   const progress = current / total;
+  const displayCurrent = Math.min(current + 1, total);
 
   return (
-    <View style={styles.progressCard}>
+    <View
+      style={styles.progressCard}
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel={`Progress: waypoint ${displayCurrent} of ${total}, heading to ${destination}`}
+      accessibilityValue={{ min: 0, max: total, now: displayCurrent }}
+      accessibilityLiveRegion="polite"
+    >
       <View style={styles.progressMeta}>
         <Text style={styles.progressLabel}>
-          Waypoint {Math.min(current + 1, total)} of {total}
+          Waypoint {displayCurrent} of {total}
         </Text>
         <Text style={styles.destinationLabel} numberOfLines={1}>
           {destination}
