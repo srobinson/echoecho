@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import type {
   RouteUsageStat,
   TimeOfDayStat,
@@ -69,7 +69,7 @@ export function useAnalytics(campusId: string | null): AnalyticsData {
 
   const refresh = useCallback(() => loadAll(true), [loadAll]);
 
-  const completionRates = deriveCompletionRates(routeUsage);
+  const completionRates = useMemo(() => deriveCompletionRates(routeUsage), [routeUsage]);
 
   return {
     routeUsage,

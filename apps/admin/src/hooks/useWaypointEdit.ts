@@ -211,18 +211,18 @@ export function useWaypointEdit() {
         if (error) throw error;
       }
 
-      // Insert new
-      for (const w of newWaypoints) {
+      // Insert new (batched)
+      if (newWaypoints.length > 0) {
         const { error } = await supabase
           .from('waypoints')
-          .insert({
+          .insert(newWaypoints.map((w) => ({
             route_id: route.id,
             sequence_index: w.sequenceIndex,
             location: `POINT(${w.coordinate.longitude} ${w.coordinate.latitude})`,
             type: w.type,
             audio_label: w.audioLabel,
             description: w.description,
-          });
+          })));
         if (error) throw error;
       }
 

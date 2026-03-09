@@ -2,7 +2,7 @@
  * Hazard management tab: list and map views for campus hazards.
  * ALP-970: Filter by type/route/expiry, resolve hazards, add from map.
  */
-import { useEffect, useCallback, useState, useRef, useMemo } from 'react';
+import { useEffect, useCallback, useState, useRef, useMemo, forwardRef } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import BottomSheet from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
+import type { BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import MapboxGL from '@rnmapbox/maps';
 import { useCampusStore } from '../../src/stores/campusStore';
 import { supabase } from '../../src/lib/supabase';
@@ -447,10 +448,14 @@ export default function HazardsScreen() {
         onResolve={() => { if (selectedHazard) void handleResolve(selectedHazard); }}
         onDismiss={() => { detailRef.current?.close(); setSelectedHazard(null); }}
         onUpdateExpiry={async (hazardId, expiresAt) => {
-          await supabase
+          const { error } = await supabase
             .from('hazards')
             .update({ expires_at: expiresAt })
             .eq('id', hazardId);
+          if (error) {
+            Alert.alert('Update failed', error.message);
+            return;
+          }
           void fetchHazards();
         }}
       />
@@ -535,10 +540,6 @@ function HazardListItem({
 }
 
 // ── HazardDetailSheet ──────────────────────────────────────────────────────
-
-import { forwardRef } from 'react';
-import { BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
-import type { BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 
 const HazardDetailSheet = forwardRef<
   BottomSheet,
