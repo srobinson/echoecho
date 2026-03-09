@@ -99,7 +99,7 @@ export function useSttDestination(
     return clearTimers;
   }, [clearTimers]);
 
-  // ── Public API ─────────────────────────────────────────────────────────
+  // ── State reset (used by event handlers and public API) ──────────────
 
   const resetToIdle = useCallback(() => {
     clearTimers();
