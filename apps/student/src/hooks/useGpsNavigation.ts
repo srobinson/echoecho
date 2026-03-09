@@ -106,6 +106,7 @@ export function useGpsNavigation(): UseGpsNavigationResult {
   const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const offRouteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const offRouteFiredRef = useRef(false);
+  const activeRef = useRef(false);
 
   const emit = useCallback((event: NavEvent) => {
     handlerRef.current?.(event);
@@ -229,18 +230,21 @@ export function useGpsNavigation(): UseGpsNavigationResult {
     approachingFiredRef.current = false;
     degradedRef.current = false;
     offRouteFiredRef.current = false;
+    activeRef.current = true;
 
     const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') return;
+    if (status !== 'granted' || !activeRef.current) return;
 
     const bgPerm = await Location.getBackgroundPermissionsAsync();
+    if (!activeRef.current) return;
     if (bgPerm.status !== 'granted') {
       await Location.requestBackgroundPermissionsAsync();
+      if (!activeRef.current) return;
     }
 
     startWatchdog();
 
-    subscriptionRef.current = await Location.watchPositionAsync(
+    const sub = await Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.High,
         timeInterval: 1000,
@@ -275,11 +279,21 @@ export function useGpsNavigation(): UseGpsNavigationResult {
         });
       }
     );
+
+    // If stopTracking was called while awaiting watchPositionAsync,
+    // remove the subscription immediately to prevent a leaked GPS listener
+    if (!activeRef.current) {
+      sub.remove();
+      return;
+    }
+    subscriptionRef.current = sub;
   }, [processPosition, handleDegradedTimer, startWatchdog, emit]);
 
   const stopTracking = useCallback(() => {
+    activeRef.current = false;
     subscriptionRef.current?.remove();
     subscriptionRef.current = null;
+    handlerRef.current = null;
     stopWatchdog();
     if (degradedTimerRef.current) {
       clearTimeout(degradedTimerRef.current);
