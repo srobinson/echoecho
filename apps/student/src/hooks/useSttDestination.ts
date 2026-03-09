@@ -237,7 +237,6 @@ export function useSttDestination(
   const rejectDestination = useCallback(() => {
     clearTimers();
     setPendingMatch(null);
-    setSttState('listening');
     void startListening();
   }, [startListening, clearTimers]);
 
