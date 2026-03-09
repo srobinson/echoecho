@@ -72,6 +72,7 @@ export type {
 
 // STT session state (ALP-954 owns, ALP-958 consumes)
 export type { SttSessionState } from './types/stt';
+export { INACTIVE_STT_SESSION } from './types/stt';
 
 // Route matching (ALP-955)
 export type {

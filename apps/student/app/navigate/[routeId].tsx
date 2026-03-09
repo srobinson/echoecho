@@ -30,10 +30,9 @@ import { usePdrNavigation } from '../../src/hooks/usePdrNavigation';
 import { useHapticEngine } from '../../src/hooks/useHapticEngine';
 import { useAudioEngine } from '../../src/hooks/useAudioEngine';
 import { useOffRouteDetection } from '../../src/hooks/useOffRouteDetection';
-import { useSttDestination } from '../../src/hooks/useSttDestination';
 import { getOrderedWaypoints } from '../../src/lib/localDb';
 import type { NavEvent } from '../../src/types/navEvents';
-import type { NavigationStatus } from '@echoecho/shared';
+import { INACTIVE_STT_SESSION, type NavigationStatus } from '@echoecho/shared';
 
 export default function NavigateScreen() {
   const { routeId } = useLocalSearchParams<{ routeId: string }>();
@@ -44,20 +43,15 @@ export default function NavigateScreen() {
   const [waypointProgress, setWaypointProgress] = useState({ current: 0, total: 0 });
   const [positioningMode, setPositioningMode] = useState<'gps' | 'pdr'>('gps');
 
-  // STT session state for haptic mutex (not actively used during navigation,
-  // but the contract requires it so haptics can check before firing)
-  const { sttSessionState } = useSttDestination(() => {
-    // No-op during active navigation; destination is already selected
-  });
-
   // ALP-956: GPS position tracking
   const gps = useGpsNavigation();
 
   // ALP-957: PDR fallback
   const pdr = usePdrNavigation(gps.injectPosition);
 
-  // ALP-958: Haptic feedback engine (consumes SttSessionState)
-  const haptic = useHapticEngine(sttSessionState);
+  // ALP-958: Haptic feedback engine. STT is never active during navigation,
+  // so we pass the static inactive session to satisfy the haptic mutex contract.
+  const haptic = useHapticEngine(INACTIVE_STT_SESSION);
 
   // ALP-959: Audio announcement engine
   const audio = useAudioEngine();
