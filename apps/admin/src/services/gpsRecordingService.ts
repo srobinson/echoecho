@@ -160,22 +160,27 @@ TaskManager.defineTask(GPS_TASK_ID, async ({ data, error }: TaskManager.TaskMana
   const { locations } = data as { locations: Location.LocationObject[] };
   if (!locations?.length || _isPaused) return;
 
-  // useRecordingStore.getState() is safe in the same JS context (foreground + iOS background).
-  // In a truly-headless Android context the store resets to defaults — the file buffer
-  // is the durable fallback; foreground recovery (AppState 'active') merges it back.
-  const store = useRecordingStore.getState();
-  if (!store.session || store.session.state !== 'recording') return;
+  // Map incoming locations to TrackPoints
+  const points: TrackPoint[] = locations.map((loc) => mapLocation(loc, _sequenceIndex++));
 
-  for (const loc of locations) {
-    const point = mapLocation(loc, _sequenceIndex++);
-    store.appendTrackPoint(point);
-    _sampleCountSinceFlush++;
-  }
+  // Always persist to file buffer first. On Android headless restart the Zustand
+  // store resets to defaults (no session), but the file buffer survives. The
+  // foreground recovery handler (registerForegroundRecovery) merges these back.
+  const persisted = await loadPersistedBuffer();
+  persisted.push(...points);
+  _sampleCountSinceFlush += points.length;
 
   if (_sampleCountSinceFlush >= FLUSH_EVERY_N) {
     _sampleCountSinceFlush = 0;
-    const latest = useRecordingStore.getState().session?.trackPoints ?? [];
-    await flushBuffer(latest);
+    await flushBuffer(persisted);
+  }
+
+  // Update in-memory store when available (foreground + iOS background contexts)
+  const store = useRecordingStore.getState();
+  if (store.session?.state === 'recording') {
+    for (const point of points) {
+      store.appendTrackPoint(point);
+    }
   }
 });
 
