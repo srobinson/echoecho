@@ -119,13 +119,16 @@ export function useBuildingDraw(campusId: string | null) {
       Alert.alert('No campus', 'Select a campus before adding buildings.');
       return;
     }
-    if (state.vertices.length < 3) return;
+
+    // Snapshot vertices at call entry to prevent stale closure reads
+    // if state mutates during the async Supabase insert
+    const vertices = state.vertices;
+    if (vertices.length < 3) return;
 
     setIsSaving(true);
 
-    // Compute centroid as default main entrance
-    const centroid = computeCentroid(state.vertices);
-    const footprintRing = [...state.vertices, state.vertices[0]];
+    const centroid = computeCentroid(vertices);
+    const footprintRing = [...vertices, vertices[0]];
 
     const input: CreateBuildingInput = {
       campusId,
@@ -164,7 +167,7 @@ export function useBuildingDraw(campusId: string | null) {
       name: data.name,
       shortName: data.short_name ?? data.name,
       category: data.category ?? 'other',
-      footprint: state.vertices,
+      footprint: vertices,
       mainEntrance: { latitude: centroid[1], longitude: centroid[0] },
       entrances: [],
       floor: data.floors ?? null,
