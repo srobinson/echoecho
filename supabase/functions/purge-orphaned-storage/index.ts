@@ -3,7 +3,7 @@
 // Deletes route-audio and route-photos objects that have no corresponding waypoints row.
 //
 // Invocation: POST /functions/v1/purge-orphaned-storage
-// Auth: service-role key required (set SUPABASE_SERVICE_ROLE_KEY in function secrets).
+// Auth: PURGE_FUNCTION_SECRET required in Authorization header (set in function secrets).
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -16,9 +16,23 @@ const OBJECT_LIMIT = 500;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 Deno.serve(async (req: Request) => {
-  // Only allow POST; GET is used by health checks from the Supabase dashboard
+  // GET is used by health checks from the Supabase dashboard
   if (req.method === 'GET') {
     return new Response(JSON.stringify({ status: 'ok' }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Verify caller via dedicated secret. This function uses a service-role
+  // client to delete storage objects, so it must not be callable by
+  // arbitrary authenticated users. The CRON scheduler or admin CLI must
+  // provide this secret in the Authorization header.
+  const purgeSecret = Deno.env.get('PURGE_FUNCTION_SECRET');
+  const authHeader = req.headers.get('Authorization') ?? '';
+
+  if (!purgeSecret || authHeader !== `Bearer ${purgeSecret}`) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
       headers: { 'Content-Type': 'application/json' },
     });
   }
