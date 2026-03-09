@@ -19,9 +19,13 @@ export function useAuthListener() {
   const appState = useRef<AppStateStatus>(AppState.currentState);
 
   useEffect(() => {
-    // Bootstrap: restore persisted session before first render
+    // Bootstrap: restore persisted session before first render.
+    // The .catch() ensures initialized is always set even when AsyncStorage
+    // or the network is unavailable — without it the app hangs on the splash screen.
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+    }).catch(() => {
+      setSession(null);
     });
 
     // Listen for auth state changes (login, logout, token refresh, user updated)
@@ -36,12 +40,16 @@ export function useAuthListener() {
       appState.current = nextState;
 
       if (nextState === 'active' && wasBackground) {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          // Re-check profile (is_active may have changed while backgrounded)
-          await refreshProfile();
-        } else {
-          setSession(null);
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            // Re-check profile (is_active may have changed while backgrounded)
+            await refreshProfile();
+          } else {
+            setSession(null);
+          }
+        } catch {
+          // Network unavailable on foreground — leave auth state as-is.
         }
       }
     });
