@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  AccessibilityInfo,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/stores/authStore';
@@ -22,6 +23,12 @@ export default function LoginScreen() {
   const [resetSent, setResetSent] = useState(false);
 
   const { signIn, resetPassword, isLoading, error } = useAuthStore();
+
+  useEffect(() => {
+    if (error) {
+      AccessibilityInfo.announceForAccessibility(error);
+    }
+  }, [error]);
 
   async function handleSignIn() {
     if (!email || !password) return;
@@ -56,7 +63,11 @@ export default function LoginScreen() {
           {mode === 'signin' ? 'Sign in to continue' : 'Reset your password'}
         </Text>
 
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        {error ? (
+          <View accessibilityLiveRegion="assertive" accessibilityRole="alert">
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        ) : null}
 
         <TextInput
           style={styles.input}
@@ -108,7 +119,7 @@ export default function LoginScreen() {
               accessibilityLabel="Sign in"
             >
               {isLoading ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color="#fff" accessibilityLabel="Signing in" />
               ) : (
                 <Text style={styles.primaryButtonText}>Sign In</Text>
               )}
@@ -124,7 +135,7 @@ export default function LoginScreen() {
           </>
         ) : resetSent ? (
           <>
-            <Text style={styles.successText}>
+            <Text style={styles.successText} accessibilityLiveRegion="polite">
               Reset link sent. Check your email.
             </Text>
             <TouchableOpacity onPress={() => setMode('signin')} accessibilityRole="button">
