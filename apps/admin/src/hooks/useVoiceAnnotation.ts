@@ -187,7 +187,8 @@ export function useVoiceAnnotation(): UseVoiceAnnotationReturn {
 
       setState((s) => ({ ...s, phase: 'uploading' }));
 
-      const { transcript, audioUri } = state;
+      const transcript = state.transcript;
+      const audioUri = state.audioUri;
       let uploadedKey: string | null = null;
 
       if (audioUri) {

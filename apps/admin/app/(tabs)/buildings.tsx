@@ -61,7 +61,7 @@ export default function BuildingsScreen() {
       .from('v_buildings' as 'buildings')
       .select('*')
       .eq('campusId' as 'campus_id', activeCampus.id)
-      .order('name' as 'name', { ascending: true });
+      .order('name' as const, { ascending: true });
 
     if (category !== 'all') {
       query = query.eq('category', category);
