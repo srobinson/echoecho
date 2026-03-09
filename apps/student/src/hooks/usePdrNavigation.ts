@@ -21,6 +21,7 @@ import {
   Gyroscope,
   Magnetometer,
 } from 'expo-sensors';
+import { haversineM } from '@echoecho/shared';
 import type { NavEventHandler, TrackPositionUpdate } from '../types/navEvents';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -73,6 +74,7 @@ export function usePdrNavigation(
   const magSubRef = useRef<ReturnType<typeof Magnetometer.addListener> | null>(null);
 
   const magHeadingRef = useRef(0);
+  const reanchorTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stepForward = useCallback(() => {
     const headingRad = (headingRef.current * Math.PI) / 180;
@@ -100,9 +102,30 @@ export function usePdrNavigation(
     });
   }, [injectPosition]);
 
+  // Shared teardown: remove subscriptions first, then clear the active flag.
+  // Ordering matters: sensor callbacks check activeRef before processing, so
+  // removing subscriptions while activeRef is still true prevents the window
+  // where a callback fires between flag clear and subscription removal.
+  const teardownSensors = useCallback(() => {
+    accelSubRef.current?.remove();
+    gyroSubRef.current?.remove();
+    magSubRef.current?.remove();
+    accelSubRef.current = null;
+    gyroSubRef.current = null;
+    magSubRef.current = null;
+    if (reanchorTimerRef.current) {
+      clearInterval(reanchorTimerRef.current);
+      reanchorTimerRef.current = null;
+    }
+    activeRef.current = false;
+  }, []);
+
   const activate = useCallback((startLat: number, startLng: number, startHeading: number) => {
-    if (activeRef.current) return;
-    activeRef.current = true;
+    // Defensively tear down any prior session to prevent duplicate listeners
+    if (activeRef.current) {
+      teardownSensors();
+    }
+
     posRef.current = { lat: startLat, lng: startLng };
     headingRef.current = startHeading;
     traveledMRef.current = 0;
@@ -146,17 +169,15 @@ export function usePdrNavigation(
       // Simple atan2 heading from magnetometer X/Y
       magHeadingRef.current = (Math.atan2(y, x) * (180 / Math.PI) + 360) % 360;
     });
-  }, [stepForward]);
+
+    // Set active after subscriptions are assigned so teardownSensors() in a
+    // concurrent call always finds the subscription refs populated
+    activeRef.current = true;
+  }, [stepForward, teardownSensors]);
 
   const deactivate = useCallback(() => {
-    activeRef.current = false;
-    accelSubRef.current?.remove();
-    gyroSubRef.current?.remove();
-    magSubRef.current?.remove();
-    accelSubRef.current = null;
-    gyroSubRef.current = null;
-    magSubRef.current = null;
-  }, []);
+    teardownSensors();
+  }, [teardownSensors]);
 
   const onNavEvent = useCallback((handler: NavEventHandler) => {
     eventHandlerRef.current = handler;
@@ -165,25 +186,29 @@ export function usePdrNavigation(
   const reanchor = useCallback((gpsLat: number, gpsLng: number) => {
     const dLat = gpsLat - posRef.current.lat;
     const dLng = gpsLng - posRef.current.lng;
-    const deltaM = Math.sqrt(dLat ** 2 + dLng ** 2) * 111_320;
+    const deltaM = haversineM(posRef.current.lat, posRef.current.lng, gpsLat, gpsLng);
 
     if (deltaM >= 10) {
       // Immediate snap for large discrepancy; log for post-session drift analysis
       posRef.current = { lat: gpsLat, lng: gpsLng };
       console.log('[PDR] reanchor snap', { deltaM });
     } else if (deltaM > 0) {
-      // Smooth interpolation over 2s (10 steps × 200ms)
+      // Smooth interpolation over 2s (10 steps x 200ms)
+      if (reanchorTimerRef.current) clearInterval(reanchorTimerRef.current);
       const steps = 10;
       const stepLat = dLat / steps;
       const stepLng = dLng / steps;
       let step = 0;
-      const timer = setInterval(() => {
+      reanchorTimerRef.current = setInterval(() => {
         posRef.current = {
           lat: posRef.current.lat + stepLat,
           lng: posRef.current.lng + stepLng,
         };
         step += 1;
-        if (step >= steps) clearInterval(timer);
+        if (step >= steps) {
+          clearInterval(reanchorTimerRef.current!);
+          reanchorTimerRef.current = null;
+        }
       }, 200);
     }
   }, []);

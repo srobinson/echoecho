@@ -19,12 +19,12 @@
  * current GPS position snapshot (ALP-956's lastPositionRef), not at event
  * emission time, to account for 1Hz GPS update lag (~1.4m per update).
  */
-import { useCallback, useRef } from 'react';
-import { AccessibilityInfo, Platform } from 'react-native';
+import { useCallback, useEffect, useRef } from 'react';
+import { AccessibilityInfo } from 'react-native';
 import { Audio } from 'expo-av';
 import type { NavEvent } from '../types/navEvents';
 import type { TrackPositionUpdate } from '../types/navEvents';
-import { haversineM } from './useGpsNavigation';
+import { haversineM } from '@echoecho/shared';
 import type { LocalWaypoint } from '../lib/localDb';
 
 // ── Priority levels ───────────────────────────────────────────────────────────
@@ -69,14 +69,24 @@ export function useAudioEngine(): UseAudioEngineResult {
   const clipUrlResolverRef = useRef<((id: string) => string | undefined) | null>(null);
   const audioSessionConfiguredRef = useRef(false);
 
+  // Release native audio resources on unmount to prevent AVPlayer/MediaPlayer leaks
+  useEffect(() => {
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(() => undefined);
+        soundRef.current = null;
+      }
+    };
+  }, []);
+
   const configureAudioSession = useCallback(async () => {
     if (audioSessionConfiguredRef.current) return;
-    if (Platform.OS !== 'ios') return;
     try {
       await Audio.setAudioModeAsync({
         playsInSilentModeIOS: true,
         staysActiveInBackground: true,
-        shouldDuckAndroid: false,
+        shouldDuckAndroid: true,
+        allowsRecordingIOS: false,
       });
       audioSessionConfiguredRef.current = true;
     } catch {
@@ -207,8 +217,10 @@ export function useAudioEngine(): UseAudioEngineResult {
           clipUri: clipUri ?? undefined,
           enqueuedAt: Date.now(),
         });
-        // Follow-up turn instruction at higher priority
-        if (event.turnDirection !== 'arrived') {
+        // Follow-up text announcement only when a clip will play first.
+        // Without a clip, the first enqueue's text fallback already covers
+        // the direction. Enqueueing both produces duplicate speech.
+        if (clipUri && event.turnDirection !== 'arrived') {
           enqueue({
             priority: PRIORITY.turn,
             text,

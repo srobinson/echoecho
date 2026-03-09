@@ -1,5 +1,5 @@
 import { View, Text, FlatList, StyleSheet, useWindowDimensions } from 'react-native';
-import { CartesianChart, Line } from '@echoecho/ui';
+import { LineChart } from '@echoecho/ui';
 import type { TimeOfDayStat } from '@echoecho/shared';
 
 interface Props {
@@ -12,9 +12,6 @@ function formatHour(hour: number): string {
   return hour < 12 ? `${hour} AM` : `${hour - 12} PM`;
 }
 
-/**
- * Navigation frequency by hour (0-23). Line chart with accessible data table.
- */
 export function TimeOfDayChart({ data }: Props) {
   const { width } = useWindowDimensions();
   const chartWidth = width - 64;
@@ -38,22 +35,14 @@ export function TimeOfDayChart({ data }: Props) {
       <Text style={styles.title}>Navigation by Time of Day</Text>
       <Text style={styles.subtitle}>Aggregated across all routes</Text>
 
-      <View accessible={false} style={[styles.chartContainer, { width: chartWidth }]}>
-        <CartesianChart
+      <View accessible={false} style={styles.chartContainer}>
+        <LineChart
           data={chartData}
-          xKey="x"
-          yKeys={['y']}
-          domainPadding={{ left: 8, right: 8 }}
-        >
-          {({ points }) => (
-            <Line
-              points={points.y}
-              color="#38bdf8"
-              strokeWidth={2}
-              curveType="natural"
-            />
-          )}
-        </CartesianChart>
+          width={chartWidth}
+          height={200}
+          color="#38bdf8"
+          strokeWidth={2}
+        />
       </View>
 
       <FlatList

@@ -25,6 +25,7 @@ interface AnalyticsData {
   completionRates: CompletionRateRow[];
   isLoading: boolean;
   isRefreshing: boolean;
+  error: string | null;
   refresh: () => Promise<void>;
 }
 
@@ -36,6 +37,7 @@ export function useAnalytics(campusId: string | null): AnalyticsData {
   const [coverage, setCoverage] = useState<CampusCoverage>({ publishedPairs: 0, totalPairs: 0 });
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const loadAll = useCallback(async (refreshing = false) => {
     if (!campusId) return;
@@ -44,23 +46,28 @@ export function useAnalytics(campusId: string | null): AnalyticsData {
     } else {
       setIsLoading(true);
     }
+    setError(null);
 
-    const [usage, tod, heatmap, dests, cov] = await Promise.all([
-      fetchRouteUsage(campusId),
-      fetchTimeOfDay(campusId),
-      fetchOffRouteHeatmap(campusId),
-      fetchTopDestinations(campusId),
-      fetchCampusCoverage(campusId),
-    ]);
+    try {
+      const [usage, tod, heatmap, dests, cov] = await Promise.all([
+        fetchRouteUsage(campusId),
+        fetchTimeOfDay(campusId),
+        fetchOffRouteHeatmap(campusId),
+        fetchTopDestinations(campusId),
+        fetchCampusCoverage(campusId),
+      ]);
 
-    setRouteUsage(usage);
-    setTimeOfDay(tod);
-    setOffRoutePoints(heatmap);
-    setTopDestinations(dests);
-    setCoverage(cov);
-
-    setIsLoading(false);
-    setIsRefreshing(false);
+      setRouteUsage(usage);
+      setTimeOfDay(tod);
+      setOffRoutePoints(heatmap);
+      setTopDestinations(dests);
+      setCoverage(cov);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load analytics');
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
   }, [campusId]);
 
   useEffect(() => {
@@ -80,6 +87,7 @@ export function useAnalytics(campusId: string | null): AnalyticsData {
     completionRates,
     isLoading,
     isRefreshing,
+    error,
     refresh,
   };
 }

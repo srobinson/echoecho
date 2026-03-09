@@ -68,6 +68,44 @@ function perpendicularDistance(
   return computeDistance(point, nearest);
 }
 
+/**
+ * Haversine distance using scalar lat/lng pairs (meters).
+ * Thin wrapper over computeDistance for call sites that work with
+ * individual coordinates rather than Coordinate objects.
+ */
+export function haversineM(
+  lat1: number, lng1: number,
+  lat2: number, lng2: number,
+): number {
+  return computeDistance(
+    { latitude: lat1, longitude: lng1 },
+    { latitude: lat2, longitude: lng2 },
+  );
+}
+
+/**
+ * Initial bearing using scalar lat/lng pairs (degrees, 0=North, clockwise).
+ */
+export function bearingDeg(
+  lat1: number, lng1: number,
+  lat2: number, lng2: number,
+): number {
+  return computeBearing(
+    { latitude: lat1, longitude: lng1 },
+    { latitude: lat2, longitude: lng2 },
+  );
+}
+
+/**
+ * Normalizes a bearing difference to [-180, 180].
+ */
+export function normalizeAngle(degrees: number): number {
+  let d = degrees % 360;
+  if (d > 180) d -= 360;
+  if (d < -180) d += 360;
+  return d;
+}
+
 function rdp<T extends Coordinate>(points: T[], epsilon: number): T[] {
   let maxDist = 0;
   let maxIdx = 0;

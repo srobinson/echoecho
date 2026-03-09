@@ -41,8 +41,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      set({ session: data.session });
-      await get().refreshProfile();
+      get().setSession(data.session);
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'Sign in failed' });
       throw err;

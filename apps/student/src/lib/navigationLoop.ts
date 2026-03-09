@@ -12,6 +12,7 @@
  * correction. Single-reading spikes (GPS noise) are ignored.
  */
 
+import { haversineM, bearingDeg, normalizeAngle } from '@echoecho/shared';
 import { getOrderedWaypoints, type LocalWaypoint } from './localDb';
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -114,7 +115,7 @@ export function createNavigationLoop(
         ? waypoints[state.currentWaypointIndex - 1]
         : null;
       if (prev) {
-        state.pdrDistanceM += haversineDistanceM(prev.lat, prev.lng, update.lat, update.lng);
+        state.pdrDistanceM += haversineM(prev.lat, prev.lng, update.lat, update.lng);
         if (state.pdrDistanceM >= PDR_MAX_DISTANCE_M) {
           callbacks.onGpsReacquisitionNeeded();
           return;
@@ -122,7 +123,7 @@ export function createNavigationLoop(
       }
     }
 
-    const distToTarget = haversineDistanceM(update.lat, update.lng, target.lat, target.lng);
+    const distToTarget = haversineM(update.lat, update.lng, target.lat, target.lng);
 
     // Waypoint arrival.
     if (distToTarget < WAYPOINT_ARRIVAL_RADIUS_M) {
@@ -138,7 +139,7 @@ export function createNavigationLoop(
     }
 
     // Heading correction — 3 consecutive readings above threshold trigger haptic.
-    const bearing = bearingTo(update.lat, update.lng, target.lat, target.lng);
+    const bearing = bearingDeg(update.lat, update.lng, target.lat, target.lng);
     const headingError = normalizeAngle(bearing - update.heading);
 
     if (Math.abs(headingError) > HEADING_DEVIATION_THRESHOLD_DEG) {
@@ -162,44 +163,3 @@ export function createNavigationLoop(
       waypoints[state.currentWaypointIndex] ?? null,
   };
 }
-
-// ── Geo helpers ────────────────────────────────────────────────────────────
-
-const EARTH_RADIUS_M = 6_371_000;
-
-/** Great-circle distance between two WGS-84 points in metres (Haversine). */
-export function haversineDistanceM(
-  lat1: number, lng1: number,
-  lat2: number, lng2: number
-): number {
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(a));
-}
-
-/** Bearing from point A to point B in degrees (0° = north, clockwise). */
-export function bearingTo(
-  lat1: number, lng1: number,
-  lat2: number, lng2: number
-): number {
-  const dLng = toRad(lng2 - lng1);
-  const y = Math.sin(dLng) * Math.cos(toRad(lat2));
-  const x =
-    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
-    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLng);
-  return (toDeg(Math.atan2(y, x)) + 360) % 360;
-}
-
-/** Normalizes a bearing difference to the range [-180, 180]. */
-export function normalizeAngle(degrees: number): number {
-  let d = degrees % 360;
-  if (d > 180)  d -= 360;
-  if (d < -180) d += 360;
-  return d;
-}
-
-function toRad(deg: number): number { return (deg * Math.PI) / 180; }
-function toDeg(rad: number): number { return (rad * 180) / Math.PI; }

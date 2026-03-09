@@ -22,3 +22,14 @@ export interface SttSessionState {
   /** Resume STT after haptic completes. No-op if STT was never active. */
   resume: () => void;
 }
+
+/**
+ * Static SttSessionState for screens where STT is never active.
+ * Avoids instantiating the full speech recognition pipeline.
+ */
+export const INACTIVE_STT_SESSION: SttSessionState = {
+  isActive: false,
+  requestPause: async () => {},
+  confirmPaused: () => true,
+  resume: () => {},
+};

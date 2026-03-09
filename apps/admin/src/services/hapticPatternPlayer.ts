@@ -1,6 +1,12 @@
 /**
  * Haptic pattern player for the EchoEcho admin app (test harness).
  *
+ * SINGLETON: This module uses module-level mutable state intentionally.
+ * A device has one vibration motor; concurrent haptic patterns from multiple
+ * screens would produce garbled output. Callers must acquire/release
+ * ownership via acquire(owner)/release(owner) before using play functions.
+ * Calls to playPattern/startProximityLoop without ownership are no-ops.
+ *
  * Plays HapticTimingPattern arrays using expo-haptics + setTimeout chains.
  * On iOS, each vibration event fires an impactAsync call; amplitude is
  * approximated from event duration (short=Light, medium=Medium, long=Heavy).
@@ -57,6 +63,39 @@ let activeCancel: CancelFn | null = null;
 let loopIntervalId: ReturnType<typeof setInterval> | null = null;
 let sttActive = false;
 const cueQueue: QueuedCue[] = [];
+
+// Ownership guard: only the current owner can play/stop patterns.
+let currentOwner: string | null = null;
+
+/**
+ * Acquire exclusive ownership of the haptic player.
+ * Returns true if ownership was granted, false if another owner holds it.
+ * The caller must call release() when done (typically on unmount).
+ */
+export function acquire(owner: string): boolean {
+  if (currentOwner !== null && currentOwner !== owner) return false;
+  currentOwner = owner;
+  return true;
+}
+
+/**
+ * Release ownership. Stops any active pattern and clears the queue.
+ * Only the current owner can release. No-op if owner does not match.
+ */
+export function release(owner: string): void {
+  if (currentOwner !== owner) return;
+  stopProximityLoop();
+  stopCurrent();
+  cueQueue.length = 0;
+  sttActive = false;
+  sttDeactivatedAt = null;
+  currentOwner = null;
+}
+
+/** Returns the current owner, or null if unowned. */
+export function owner(): string | null {
+  return currentOwner;
+}
 
 // iOS: map event duration to the closest ImpactFeedbackStyle bucket.
 function durationToImpactStyle(
@@ -139,6 +178,9 @@ function firePattern(pattern: HapticTimingPattern): CancelFn {
  * Any currently playing pattern is cancelled before the new one starts.
  */
 export function playPattern(pattern: HapticTimingPattern): void {
+  if (currentOwner === null && __DEV__) {
+    console.warn('hapticPatternPlayer: playPattern called without ownership. Call acquire() first.');
+  }
   if (sttActive) {
     cueQueue.push({ pattern, enqueuedAt: Date.now() });
     return;

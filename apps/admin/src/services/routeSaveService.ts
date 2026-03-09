@@ -55,8 +55,8 @@ export type PublishResult = { ok: true } | { ok: false; error: string };
 // ── Internal types ────────────────────────────────────────────────────────────
 
 interface ResolvedMedia {
-  audioUrl: string | null;
-  photoUrl: string | null;
+  audioKey: string | null;
+  photoKey: string | null;
 }
 
 interface WaypointPayload {
@@ -79,17 +79,12 @@ function isLocalUri(uri: string): boolean {
   return uri.startsWith('file://') || uri.startsWith('content://');
 }
 
-function getPublicUrl(bucket: string, storageKey: string): string {
-  const { data } = supabase.storage.from(bucket).getPublicUrl(storageKey);
-  return data.publicUrl;
-}
-
 async function uploadLocalFile(
   localUri: string,
   bucket: string,
   storageKey: string,
   contentType: string,
-): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; storageKey: string } | { ok: false; error: string }> {
   try {
     const base64 = await FileSystem.readAsStringAsync(localUri, {
       encoding: FileSystem.EncodingType.Base64,
@@ -102,7 +97,7 @@ async function uploadLocalFile(
 
     if (error) return { ok: false, error: error.message };
 
-    return { ok: true, url: getPublicUrl(bucket, storageKey) };
+    return { ok: true, storageKey };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
@@ -111,14 +106,14 @@ async function uploadLocalFile(
 // ── Media resolution ──────────────────────────────────────────────────────────
 
 /**
- * Resolve Storage URLs for all pending waypoint media.
+ * Resolve storage keys for all pending waypoint media.
  *
  * Audio and photos uploaded during recording already have a storage key
- * (e.g. `pending/{localId}/audio.m4a`). Those that failed during recording
+ * (e.g. `pending/{localId}.m4a`). Those that failed during recording
  * have a local `file://` URI and are uploaded here.
  *
- * Returns an error at the first upload failure; the caller must surface the
- * error and abort before touching the database.
+ * The DB stores storage keys (not URLs) because the buckets are private.
+ * Consumers generate signed URLs at access time via createSignedUrl().
  */
 async function resolveWaypointMedia(
   waypoints: PendingWaypoint[],
@@ -129,9 +124,8 @@ async function resolveWaypointMedia(
 > {
   const mediaMap = new Map<string, ResolvedMedia>();
 
-  // Initialise entries so photo pass can update them without a Map.get check
   for (const wp of waypoints) {
-    mediaMap.set(wp.localId, { audioUrl: null, photoUrl: null });
+    mediaMap.set(wp.localId, { audioKey: null, photoKey: null });
   }
 
   // Step 1: audio
@@ -139,9 +133,9 @@ async function resolveWaypointMedia(
   for (const wp of waypoints) {
     if (!wp.audioAnnotationUri) continue;
 
-    let audioUrl: string;
+    let audioKey: string;
     if (isLocalUri(wp.audioAnnotationUri)) {
-      const storageKey = `pending/${wp.localId}/audio.m4a`;
+      const storageKey = `pending/${wp.localId}.m4a`;
       const upload = await uploadLocalFile(
         wp.audioAnnotationUri,
         AUDIO_BUCKET,
@@ -149,13 +143,12 @@ async function resolveWaypointMedia(
         'audio/mp4',
       );
       if (!upload.ok) return { ok: false, stage: 'upload_audio', error: upload.error };
-      audioUrl = upload.url;
+      audioKey = upload.storageKey;
     } else {
-      // Already a storage key from recording-time upload
-      audioUrl = getPublicUrl(AUDIO_BUCKET, wp.audioAnnotationUri);
+      audioKey = wp.audioAnnotationUri;
     }
 
-    mediaMap.set(wp.localId, { audioUrl, photoUrl: null });
+    mediaMap.set(wp.localId, { audioKey, photoKey: null });
   }
 
   // Step 2: photos
@@ -163,9 +156,9 @@ async function resolveWaypointMedia(
   for (const wp of waypoints) {
     if (!wp.photoUri) continue;
 
-    let photoUrl: string;
+    let photoKey: string;
     if (isLocalUri(wp.photoUri)) {
-      const storageKey = `pending/${wp.localId}/photo.jpg`;
+      const storageKey = `pending/${wp.localId}.jpg`;
       const upload = await uploadLocalFile(
         wp.photoUri,
         PHOTO_BUCKET,
@@ -173,13 +166,13 @@ async function resolveWaypointMedia(
         'image/jpeg',
       );
       if (!upload.ok) return { ok: false, stage: 'upload_photo', error: upload.error };
-      photoUrl = upload.url;
+      photoKey = upload.storageKey;
     } else {
-      photoUrl = getPublicUrl(PHOTO_BUCKET, wp.photoUri);
+      photoKey = wp.photoUri;
     }
 
     const existing = mediaMap.get(wp.localId)!;
-    mediaMap.set(wp.localId, { ...existing, photoUrl });
+    mediaMap.set(wp.localId, { ...existing, photoKey });
   }
 
   return { ok: true, mediaMap };
@@ -249,8 +242,8 @@ function buildWaypointPayloads(
       longitude:             wp.coordinate.longitude,
       heading:               null,
       annotation_text:       wp.audioLabel,
-      annotation_audio_url:  media?.audioUrl ?? null,
-      photo_url:             media?.photoUrl ?? null,
+      annotation_audio_url:  media?.audioKey ?? null,
+      photo_url:             media?.photoKey ?? null,
     };
   });
 }

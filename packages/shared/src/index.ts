@@ -72,6 +72,7 @@ export type {
 
 // STT session state (ALP-954 owns, ALP-958 consumes)
 export type { SttSessionState } from './types/stt';
+export { INACTIVE_STT_SESSION } from './types/stt';
 
 // Route matching (ALP-955)
 export type {
@@ -93,7 +94,7 @@ export type {
 } from './types/analytics';
 
 // Utilities
-export { computeDistance, computeBearing, simplifyTrack } from './utils/geo';
+export { computeDistance, computeBearing, haversineM, bearingDeg, normalizeAngle, simplifyTrack } from './utils/geo';
 export { bearingToHaptic, hapticPatternLabel } from './utils/haptic';
 
 // Haptic timing data (ALP-974, ALP-958)

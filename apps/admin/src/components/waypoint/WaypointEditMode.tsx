@@ -6,7 +6,7 @@
  * drag-and-drop via the `draggable` prop.
  */
 
-import { useCallback } from 'react';
+import { useCallback, memo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import MapboxGL from '@rnmapbox/maps';
 import type { Feature, FeatureCollection, LineString } from 'geojson';
@@ -38,7 +38,7 @@ const TYPE_EMOJI: Record<string, string> = {
   regular: '⬤',
 };
 
-export function WaypointEditMode({
+export const WaypointEditMode = memo(function WaypointEditMode({
   waypoints,
   selectedIndex,
   onWaypointPress,
@@ -134,7 +134,7 @@ export function WaypointEditMode({
       ))}
     </>
   );
-}
+});
 
 const styles = StyleSheet.create({
   marker: {

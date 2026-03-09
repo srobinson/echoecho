@@ -18,7 +18,7 @@
  *   - accessibilityViewIsModal={true} when sheet is open
  */
 
-import { useRef, useEffect, type ReactNode } from 'react';
+import { useRef, useEffect, memo, type ReactNode } from 'react';
 import {
   View,
   Text,
@@ -26,7 +26,6 @@ import {
   StyleSheet,
   ScrollView,
   AccessibilityInfo,
-  findNodeHandle,
 } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { Ionicons } from '@expo/vector-icons';
@@ -47,17 +46,19 @@ interface Props {
 
 const SNAP_POINTS = ['40%', '80%'];
 
-export function MapDetailPanel({ feature, detailContent, onClose }: Props) {
+export const MapDetailPanel = memo(function MapDetailPanel({ feature, detailContent, onClose }: Props) {
   const sheetRef = useRef<BottomSheet>(null);
   const headingRef = useRef<View>(null);
 
   useEffect(() => {
     if (feature) {
       sheetRef.current?.snapToIndex(0);
-      // Move focus to panel heading so screen readers enter the panel
       const timer = setTimeout(() => {
-        const node = headingRef.current ? findNodeHandle(headingRef.current) : null;
-        if (node != null) AccessibilityInfo.setAccessibilityFocus(node);
+        if (headingRef.current) {
+          AccessibilityInfo.setAccessibilityFocus(
+            headingRef.current as unknown as number,
+          );
+        }
       }, 350);
       return () => clearTimeout(timer);
     } else {
@@ -114,7 +115,7 @@ export function MapDetailPanel({ feature, detailContent, onClose }: Props) {
       </BottomSheetView>
     </BottomSheet>
   );
-}
+});
 
 const styles = StyleSheet.create({
   background: {

@@ -42,8 +42,7 @@ const mockStorageFrom    = supabase.storage.from as jest.Mock;
 const mockReadFile       = FileSystem.readAsStringAsync as jest.Mock;
 
 // Storage bucket sub-methods, recreated in beforeEach
-let mockUpload:       jest.Mock;
-let mockGetPublicUrl: jest.Mock;
+let mockUpload: jest.Mock;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -114,12 +113,10 @@ const METADATA: RouteSaveMetadata = {
 beforeEach(() => {
   jest.clearAllMocks();
 
-  mockUpload       = jest.fn().mockResolvedValue({ error: null });
-  mockGetPublicUrl = jest.fn().mockReturnValue({ data: { publicUrl: 'https://cdn.example.com/key' } });
+  mockUpload = jest.fn().mockResolvedValue({ error: null });
 
   mockStorageFrom.mockReturnValue({
-    upload:       mockUpload,
-    getPublicUrl: mockGetPublicUrl,
+    upload: mockUpload,
   });
 
   mockRpc.mockResolvedValue({ data: 'route-uuid-returned', error: null });
@@ -193,7 +190,7 @@ describe('saveRoute', () => {
 
     expect(mockReadFile).toHaveBeenCalledWith('file:///local/audio.m4a', expect.any(Object));
     expect(mockUpload).toHaveBeenCalledWith(
-      'pending/wp-1/audio.m4a',
+      'pending/wp-1.m4a',
       expect.any(Uint8Array),
       expect.objectContaining({ contentType: 'audio/mp4' }),
     );
@@ -208,22 +205,21 @@ describe('saveRoute', () => {
     await saveRoute(session, METADATA, jest.fn());
 
     expect(mockUpload).toHaveBeenCalledWith(
-      'pending/wp-1/photo.jpg',
+      'pending/wp-1.jpg',
       expect.any(Uint8Array),
       expect.objectContaining({ contentType: 'image/jpeg' }),
     );
     expect(mockRpc).toHaveBeenCalled();
   });
 
-  it('resolves existing storage key to public URL without re-uploading', async () => {
+  it('resolves existing storage key without re-uploading', async () => {
     const session = makeSession({
-      pendingWaypoints: [makeWaypoint({ audioAnnotationUri: 'pending/wp-1/audio.m4a' })],
+      pendingWaypoints: [makeWaypoint({ audioAnnotationUri: 'pending/wp-1.m4a' })],
     });
 
     await saveRoute(session, METADATA, jest.fn());
 
     expect(mockUpload).not.toHaveBeenCalled();
-    expect(mockGetPublicUrl).toHaveBeenCalledWith('pending/wp-1/audio.m4a');
     expect(mockRpc).toHaveBeenCalled();
   });
 

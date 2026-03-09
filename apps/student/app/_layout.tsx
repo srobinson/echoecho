@@ -27,10 +27,18 @@ export default function RootLayout() {
 
   useEffect(() => {
     ensureAnonymousSession()
-      .then(() => setAuthReady(true))
-      .catch(() => setAuthReady(true))
-      .finally(() => SplashScreen.hideAsync());
+      .then(({ ok }) => {
+        if (!ok) console.error('[auth] Could not establish session. Offline data only.');
+        setAuthReady(true);
+      })
+      .catch(() => setAuthReady(true));
   }, []);
+
+  useEffect(() => {
+    if (authReady) {
+      SplashScreen.hideAsync();
+    }
+  }, [authReady]);
 
   if (!authReady) return null;
 
@@ -50,7 +58,7 @@ export default function RootLayout() {
           >
             <Stack.Screen name="index" options={{ headerShown: false }} />
             <Stack.Screen
-              name="navigate/[routeId]"
+              name="navigate"
               options={{ title: 'Navigation', headerShown: false }}
             />
             <Stack.Screen

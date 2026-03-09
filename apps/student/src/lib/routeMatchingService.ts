@@ -106,15 +106,15 @@ export async function matchRoute(
  * two call sites (ALP-963 contract).
  */
 export async function preloadRoute(routeId: string): Promise<void> {
-  // Fetch route metadata.
   const { data: route, error: routeError } = await supabase
     .from('routes')
     .select('id, campus_id, name, difficulty, tags, status, total_distance_m, content_hash')
     .eq('id', routeId)
+    .eq('status', 'published')
     .single();
 
   if (routeError || !route) {
-    throw new Error(`Failed to fetch route ${routeId}: ${routeError?.message}`);
+    throw new Error(`Route ${routeId} not found or not published`);
   }
 
   // Fetch ordered waypoints.

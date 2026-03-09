@@ -2,7 +2,7 @@
  * Routes list tab: route management with server-side filtering and search.
  * ALP-968: Filter by status, search by name (debounced 300ms), sort by recency.
  */
-import { useEffect, useCallback, useState, useRef } from 'react';
+import { useEffect, useCallback, useState, useRef, memo } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Image,
+  AccessibilityInfo,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -67,7 +68,11 @@ export default function RoutesScreen() {
     const { data, error } = await query;
 
     if (!error) {
-      setRoutes((data ?? []) as Route[]);
+      const results = (data ?? []) as Route[];
+      setRoutes(results);
+      AccessibilityInfo.announceForAccessibility(
+        results.length === 0 ? 'No routes found' : `${results.length} route${results.length === 1 ? '' : 's'} found`,
+      );
     }
     setIsLoading(false);
   }, [activeCampus]);
@@ -77,6 +82,19 @@ export default function RoutesScreen() {
     void fetchRoutes(searchQuery, statusFilter);
   }, [fetchRoutes, statusFilter]);
   /* eslint-enable react-hooks/exhaustive-deps */
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  const renderRouteItem = useCallback(
+    ({ item }: { item: Route }) => (
+      <RouteCard route={item} onPress={() => router.push(`/route/${item.id}`)} />
+    ),
+    [],
+  );
 
   const handleSearch = useCallback((text: string) => {
     setSearchQuery(text);
@@ -133,8 +151,8 @@ export default function RoutesScreen() {
       </View>
 
       {isLoading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#6c63ff" />
+        <View style={styles.centered} accessibilityLiveRegion="polite">
+          <ActivityIndicator size="large" color="#6c63ff" accessibilityLabel="Loading routes" />
         </View>
       ) : (
         <FlatList
@@ -142,10 +160,8 @@ export default function RoutesScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           ListEmptyComponent={<EmptyState hasFilter={statusFilter !== 'all' || searchQuery.length > 0} />}
-          renderItem={({ item }) => (
-            <RouteCard route={item} onPress={() => router.push(`/route/${item.id}`)} />
-          )}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          renderItem={renderRouteItem}
+          ItemSeparatorComponent={ListSeparator}
           accessibilityRole="list"
         />
       )}
@@ -162,28 +178,39 @@ export default function RoutesScreen() {
   );
 }
 
+const MAX_STATIC_MAP_COORDS = 50;
+
 function staticMapUrl(route: Route): string | null {
   if (route.waypoints.length < 2) return null;
   const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
   if (!token) return null;
 
-  const coords = route.waypoints.map((w) =>
+  const wps = route.waypoints;
+  const step = wps.length <= MAX_STATIC_MAP_COORDS ? 1 : Math.ceil(wps.length / MAX_STATIC_MAP_COORDS);
+  const sampled = wps.filter((_, i) => i % step === 0 || i === wps.length - 1);
+
+  const coords = sampled.map((w) =>
     `${w.coordinate.longitude.toFixed(5)},${w.coordinate.latitude.toFixed(5)}`,
   );
   const path = `path-3+6c63ff-0.8(${encodeURIComponent(coords.join(','))})`;
-  const lngs = route.waypoints.map((w) => w.coordinate.longitude);
-  const lats = route.waypoints.map((w) => w.coordinate.latitude);
-  const bbox = [
-    Math.min(...lngs) - 0.001,
-    Math.min(...lats) - 0.001,
-    Math.max(...lngs) + 0.001,
-    Math.max(...lats) + 0.001,
-  ].join(',');
+
+  let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+  for (const w of wps) {
+    if (w.coordinate.longitude < minLng) minLng = w.coordinate.longitude;
+    if (w.coordinate.longitude > maxLng) maxLng = w.coordinate.longitude;
+    if (w.coordinate.latitude < minLat) minLat = w.coordinate.latitude;
+    if (w.coordinate.latitude > maxLat) maxLat = w.coordinate.latitude;
+  }
+  const bbox = `${minLng - 0.001},${minLat - 0.001},${maxLng + 0.001},${maxLat + 0.001}`;
 
   return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${path}/[${bbox}]/300x120@2x?access_token=${token}`;
 }
 
-function RouteCard({ route, onPress }: { route: Route; onPress: () => void }) {
+function ListSeparator() {
+  return <View style={styles.separator} />;
+}
+
+const RouteCard = memo(function RouteCard({ route, onPress }: { route: Route; onPress: () => void }) {
   const statusColor = STATUS_COLOR[route.status] ?? '#9CA3AF';
   const mapUrl = staticMapUrl(route);
   const dateStr = route.recordedAt
@@ -210,7 +237,7 @@ function RouteCard({ route, onPress }: { route: Route; onPress: () => void }) {
           <Text style={styles.cardTitle} numberOfLines={1}>
             {route.name}
           </Text>
-          <View style={[styles.statusBadge, { backgroundColor: `${statusColor}22` }]}>
+          <View style={[styles.statusBadge, { backgroundColor: `${statusColor}22` }]} accessibilityElementsHidden>
             <Text style={[styles.statusText, { color: statusColor }]}>
               {route.status}
             </Text>
@@ -237,11 +264,11 @@ function RouteCard({ route, onPress }: { route: Route; onPress: () => void }) {
       </View>
     </Pressable>
   );
-}
+});
 
 function EmptyState({ hasFilter }: { hasFilter: boolean }) {
   return (
-    <View style={styles.empty}>
+    <View style={styles.empty} accessible accessibilityRole="alert">
       <Ionicons name="navigate-outline" size={64} color="#2a2a3e" />
       <Text style={styles.emptyTitle}>
         {hasFilter ? 'No matching routes' : 'No routes yet'}

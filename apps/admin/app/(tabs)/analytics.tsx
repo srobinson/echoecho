@@ -6,7 +6,9 @@ import {
   RefreshControl,
   StyleSheet,
   ActivityIndicator,
+  Pressable,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCampusStore } from '../../src/stores/campusStore';
 import { useAnalytics } from '../../src/hooks/useAnalytics';
@@ -32,6 +34,7 @@ export default function AnalyticsDashboardScreen() {
     completionRates,
     isLoading,
     isRefreshing,
+    error,
     refresh,
   } = useAnalytics(campusId);
 
@@ -46,7 +49,7 @@ export default function AnalyticsDashboardScreen() {
   if (!activeCampus) {
     return (
       <SafeAreaView style={styles.container} edges={['bottom']}>
-        <View style={styles.centered}>
+        <View style={styles.centered} accessibilityRole="alert">
           <Text style={styles.emptyTitle}>No campus selected</Text>
           <Text style={styles.emptyBody}>
             Select a campus in Settings to view analytics.
@@ -59,9 +62,29 @@ export default function AnalyticsDashboardScreen() {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container} edges={['bottom']}>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#6c63ff" />
+        <View style={styles.centered} accessibilityLiveRegion="polite">
+          <ActivityIndicator size="large" color="#6c63ff" accessibilityLabel="Loading analytics" />
           <Text style={styles.loadingText}>Loading analytics...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container} edges={['bottom']}>
+        <View style={styles.centered} accessibilityRole="alert">
+          <Ionicons name="alert-circle" size={40} color="#F87171" />
+          <Text style={styles.emptyTitle}>Failed to load analytics</Text>
+          <Text style={styles.emptyBody}>{error}</Text>
+          <Pressable
+            onPress={handleRefresh}
+            style={styles.retryButton}
+            accessibilityLabel="Retry loading analytics"
+            accessibilityRole="button"
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </Pressable>
         </View>
       </SafeAreaView>
     );
@@ -79,7 +102,6 @@ export default function AnalyticsDashboardScreen() {
             colors={['#6c63ff']}
           />
         }
-        accessibilityRole="scrollbar"
       >
         <CoverageCard data={coverage} />
         <RouteUsageChart data={routeUsage} />
@@ -99,4 +121,12 @@ const styles = StyleSheet.create({
   emptyTitle: { color: '#8888aa', fontSize: 20, fontWeight: '700' },
   emptyBody: { color: '#5555aa', fontSize: 14, textAlign: 'center', maxWidth: 280 },
   loadingText: { color: '#8888aa', fontSize: 14, marginTop: 12 },
+  retryButton: {
+    marginTop: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    backgroundColor: '#6c63ff',
+    borderRadius: 8,
+  },
+  retryButtonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
 });

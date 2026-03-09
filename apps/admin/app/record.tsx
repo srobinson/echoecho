@@ -343,7 +343,7 @@ export default function RecordScreen() {
 
 // ── Map marker sub-components ─────────────────────────────────────────────────
 
-function WaypointDot({ color, label }: { color: string; label: string }) {
+const WaypointDot = React.memo(function WaypointDot({ color, label }: { color: string; label: string }) {
   return (
     <View
       style={[styles.markerDot, { backgroundColor: color, borderColor: '#fff' }]}
@@ -351,9 +351,9 @@ function WaypointDot({ color, label }: { color: string; label: string }) {
       accessibilityLabel={`Waypoint: ${label}`}
     />
   );
-}
+});
 
-function HazardDot({ color, label }: { color: string; label: string }) {
+const HazardDot = React.memo(function HazardDot({ color, label }: { color: string; label: string }) {
   return (
     <View
       style={[styles.markerDot, styles.hazardDot, { backgroundColor: color }]}
@@ -361,7 +361,7 @@ function HazardDot({ color, label }: { color: string; label: string }) {
       accessibilityLabel={`Hazard: ${label}`}
     />
   );
-}
+});
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

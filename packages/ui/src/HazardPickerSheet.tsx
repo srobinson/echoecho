@@ -5,7 +5,7 @@
  * Coordinate is captured at confirm time (not tap time) — the parent
  * reads currentPosition in its onConfirm handler.
  */
-import React, { forwardRef, useState, useCallback } from 'react';
+import React, { forwardRef, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -65,10 +65,12 @@ export const HazardPickerSheet = forwardRef<BottomSheet, HazardPickerSheetProps>
   ({ onConfirm, onDismiss }, ref) => {
     const [selectedType, setSelectedType] = useState<HazardType | null>(null);
     const [selectedExpiryIndex, setSelectedExpiryIndex] = useState(0);
+    const [openCount, setOpenCount] = useState(0);
 
     const handleOpen = useCallback(() => {
       setSelectedType(null);
       setSelectedExpiryIndex(0);
+      setOpenCount((c) => c + 1);
       AccessibilityInfo.announceForAccessibility('Hazard picker open. Select a hazard type.');
     }, []);
 
@@ -93,7 +95,8 @@ export const HazardPickerSheet = forwardRef<BottomSheet, HazardPickerSheetProps>
       [onDismiss],
     );
 
-    const expiryOpts = buildExpiryOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- openCount triggers fresh Date.now() on each sheet open
+    const expiryOpts = useMemo(() => buildExpiryOptions(), [openCount]);
 
     return (
       <BottomSheet

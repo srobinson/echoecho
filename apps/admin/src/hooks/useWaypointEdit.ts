@@ -21,6 +21,7 @@ interface EditState {
   originalWaypoints: Waypoint[];
   editBuffer: Waypoint[];
   selectedIndex: number | null;
+  isDirty: boolean;
 }
 
 const INITIAL: EditState = {
@@ -29,6 +30,7 @@ const INITIAL: EditState = {
   originalWaypoints: [],
   editBuffer: [],
   selectedIndex: null,
+  isDirty: false,
 };
 
 export function useWaypointEdit() {
@@ -45,6 +47,7 @@ export function useWaypointEdit() {
       originalWaypoints: route.waypoints,
       editBuffer: copy,
       selectedIndex: null,
+      isDirty: false,
     });
   }, []);
 
@@ -69,7 +72,7 @@ export function useWaypointEdit() {
           latitude: lat,
         },
       };
-      return { ...prev, editBuffer: buffer };
+      return { ...prev, editBuffer: buffer, isDirty: true };
     });
   }, []);
 
@@ -81,7 +84,7 @@ export function useWaypointEdit() {
       const buffer = [...prev.editBuffer];
       if (!buffer[index]) return prev;
       buffer[index] = { ...buffer[index], ...fields };
-      return { ...prev, editBuffer: buffer };
+      return { ...prev, editBuffer: buffer, isDirty: true };
     });
   }, []);
 
@@ -94,6 +97,7 @@ export function useWaypointEdit() {
         ...prev,
         editBuffer: reindexed,
         selectedIndex: null,
+        isDirty: true,
       };
     });
   }, []);
@@ -139,7 +143,7 @@ export function useWaypointEdit() {
       buffer.splice(insertIndex, 0, newWaypoint);
       const reindexed = buffer.map((w, i) => ({ ...w, sequenceIndex: i }));
 
-      return { ...prev, editBuffer: reindexed };
+      return { ...prev, editBuffer: reindexed, isDirty: true };
     });
   }, []);
 
@@ -154,7 +158,7 @@ export function useWaypointEdit() {
       buffer[toIndex] = temp;
       const reindexed = buffer.map((w, i) => ({ ...w, sequenceIndex: i }));
 
-      return { ...prev, editBuffer: reindexed };
+      return { ...prev, editBuffer: reindexed, isDirty: true };
     });
   }, []);
 

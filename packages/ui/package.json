@@ -9,8 +9,7 @@
   },
   "dependencies": {
     "@echoecho/shared": "*",
-    "react-native-svg": "^15.15.3",
-    "victory-native": "^41.20.2"
+    "react-native-svg": "^15.15.3"
   },
   "peerDependencies": {
     "@expo/vector-icons": ">=14",

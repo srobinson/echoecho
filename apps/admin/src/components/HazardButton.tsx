@@ -6,7 +6,7 @@
  * not at button-tap time (users take time to select a type).
  */
 import React, { useCallback, useRef } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { Pressable, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { HazardPickerSheet } from '@echoecho/ui';
@@ -69,8 +69,10 @@ export function HazardButton() {
         onPress={openSheet}
         accessibilityLabel="Mark hazard at current location"
         accessibilityRole="button"
+        accessibilityHint="Double tap to select a hazard type at your current GPS position"
       >
         <Ionicons name="warning" size={22} color="#fff" />
+        <Text style={styles.btnLabel}>Hazard</Text>
       </Pressable>
 
       <HazardPickerSheet
@@ -85,13 +87,19 @@ export function HazardButton() {
 const styles = StyleSheet.create({
   btn: {
     borderRadius: 12,
-    paddingVertical: 16,
+    paddingVertical: 10,
     paddingHorizontal: 16,
     backgroundColor: '#dd6b20',
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: 56,
     minHeight: 56,
+    gap: 4,
+  },
+  btnLabel: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
   },
   btnPressed: { opacity: 0.75 },
 });

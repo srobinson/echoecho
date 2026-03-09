@@ -22,7 +22,7 @@ import {
   Text,
   Pressable,
   StyleSheet,
-  FlatList,
+  SectionList,
   Alert,
   AccessibilityInfo,
   ActivityIndicator,
@@ -31,22 +31,27 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useRouteHistory } from '../src/hooks/useRouteHistory';
+import { useRouteHistory, type FavoriteEntry, type HistoryEntry } from '../src/hooks/useRouteHistory';
 import { useNavigationStore } from '../src/stores/navigationStore';
+
+type SectionItem = FavoriteEntry | HistoryEntry;
 
 export default function FavoritesScreen() {
   const { userId } = useNavigationStore();
   const { history, favorites, isLoading, toggleFavorite, isFavorite, clearHistory } =
     useRouteHistory(userId);
 
-  // Merged list built once per state change, not on every renderItem call
-  const listData = useMemo(
-    () => [
-      ...favorites.map((f) => ({ ...f, type: 'favorite' as const })),
-      ...history.map((h) => ({ ...h, type: 'history' as const })),
-    ],
-    [favorites, history],
-  );
+  const sections = useMemo(() => {
+    // A favorited route may also exist in history locally (before the next
+    // Supabase sync round-trip reconciles the is_favorite flag). Filter
+    // history to exclude any route already shown in favorites so the
+    // SectionList never renders duplicate routeId keys.
+    const favIds = new Set(favorites.map((f) => f.routeId));
+    return [
+      { key: 'favorites', data: favorites as SectionItem[] },
+      { key: 'history', data: history.filter((h) => !favIds.has(h.routeId)) as SectionItem[] },
+    ];
+  }, [favorites, history]);
 
   const handleReNavigate = useCallback((routeId: string, routeName: string) => {
     // Announce the confirmation immediately so screen reader users know what's happening
@@ -77,8 +82,8 @@ export default function FavoritesScreen() {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container} edges={['bottom']}>
-        <View style={styles.loadingState}>
-          <ActivityIndicator size="large" color="#6c63ff" />
+        <View style={styles.loadingState} accessibilityLiveRegion="polite">
+          <ActivityIndicator size="large" color="#6c63ff" accessibilityLabel="Loading your routes" />
           <Text style={styles.loadingText}>Loading your routes…</Text>
         </View>
       </SafeAreaView>
@@ -87,54 +92,50 @@ export default function FavoritesScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <FlatList
-        data={listData}
-        keyExtractor={(item) => `${item.type}-${item.routeId}`}
+      <SectionList<SectionItem>
+        sections={sections}
+        keyExtractor={(item) => item.routeId}
         contentContainerStyle={styles.listContent}
-        ListHeaderComponent={() => (
-          <>
-            <SectionHeader
-              title="Favorites"
-              count={favorites.length}
-              onClear={undefined}
-            />
-            {favorites.length === 0 ? <FavoritesEmpty /> : null}
-          </>
-        )}
-        renderItem={({ item, index }) => {
-          // The Recent header appears before the first history item, which is
-          // always at index === favorites.length in the merged list.
-          const showHistoryHeader = item.type === 'history' && index === favorites.length;
-
-          return (
-            <>
-              {showHistoryHeader ? (
+        renderSectionHeader={({ section }) => {
+          if (section.key === 'favorites') {
+            return (
+              <>
                 <SectionHeader
-                  title="Recent"
-                  count={history.length}
-                  onClear={history.length > 0 ? clearHistory : undefined}
+                  title="Favorites"
+                  count={favorites.length}
+                  onClear={undefined}
                 />
-              ) : null}
-              <RouteItem
-                routeId={item.routeId}
-                routeName={item.routeName}
-                fromLabel={item.fromLabel}
-                toLabel={item.toLabel}
-                isFavorite={isFavorite(item.routeId)}
-                onToggleFavorite={() => {
-                  const route = {
-                    id: item.routeId,
-                    name: item.routeName,
-                    fromLabel: item.fromLabel,
-                    toLabel: item.toLabel,
-                  };
-                  void toggleFavorite(route as Parameters<typeof toggleFavorite>[0]);
-                }}
-                onNavigate={() => handleReNavigate(item.routeId, item.routeName)}
-              />
-            </>
+                {favorites.length === 0 ? <FavoritesEmpty /> : null}
+              </>
+            );
+          }
+          return (
+            <SectionHeader
+              title="Recent"
+              count={history.length}
+              onClear={history.length > 0 ? clearHistory : undefined}
+            />
           );
         }}
+        renderItem={({ item }) => (
+          <RouteItem
+            routeId={item.routeId}
+            routeName={item.routeName}
+            fromLabel={item.fromLabel}
+            toLabel={item.toLabel}
+            isFavorite={isFavorite(item.routeId)}
+            onToggleFavorite={() => {
+              const route = {
+                id: item.routeId,
+                name: item.routeName,
+                fromLabel: item.fromLabel,
+                toLabel: item.toLabel,
+              };
+              void toggleFavorite(route as Parameters<typeof toggleFavorite>[0]);
+            }}
+            onNavigate={() => handleReNavigate(item.routeId, item.routeName)}
+          />
+        )}
         ListEmptyComponent={
           <View style={styles.emptyHistory}>
             <Text

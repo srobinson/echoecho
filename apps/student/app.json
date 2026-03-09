@@ -17,7 +17,7 @@
       "bundleIdentifier": "io.echoecho.student",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "EchoEcho needs your location to provide turn-by-turn navigation.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "EchoEcho needs background location to continue guiding you between buildings.",
+        "NSLocationAlwaysUsageDescription": "EchoEcho needs location access to navigate campus.",
         "NSMotionUsageDescription": "EchoEcho uses motion sensors for improved indoor positioning.",
         "NSMicrophoneUsageDescription": "EchoEcho uses the microphone to listen for your spoken destination.",
         "NSSpeechRecognitionUsageDescription": "EchoEcho uses speech recognition to understand your destination."
@@ -72,15 +72,6 @@
     },
     "accessibility": {
       "screenReaderMode": "default"
-    },
-    "autolinking": {
-      "exclude": [
-        "@rnmapbox/maps",
-        "expo-camera",
-        "expo-image-picker",
-        "expo-image-manipulator",
-        "expo-linear-gradient"
-      ]
     }
   }
 }

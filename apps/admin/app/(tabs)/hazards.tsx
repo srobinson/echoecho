@@ -2,7 +2,7 @@
  * Hazard management tab: list and map views for campus hazards.
  * ALP-970: Filter by type/route/expiry, resolve hazards, add from map.
  */
-import { useEffect, useCallback, useState, useRef, useMemo, forwardRef } from 'react';
+import { useEffect, useCallback, useState, useRef, useMemo, forwardRef, memo } from 'react';
 import {
   View,
   Text,
@@ -236,6 +236,18 @@ export default function HazardsScreen() {
     })),
   }), [filteredHazards]);
 
+  const renderHazardItem = useCallback(
+    ({ item }: { item: Hazard }) => (
+      <HazardListItem
+        hazard={item}
+        routes={routes}
+        onPress={() => handleSelectHazard(item)}
+        onResolve={() => void handleResolve(item)}
+      />
+    ),
+    [routes, handleSelectHazard, handleResolve],
+  );
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* View mode toggle */}
@@ -363,15 +375,8 @@ export default function HazardsScreen() {
               </Text>
             </View>
           }
-          renderItem={({ item }) => (
-            <HazardListItem
-              hazard={item}
-              routes={routes}
-              onPress={() => handleSelectHazard(item)}
-              onResolve={() => void handleResolve(item)}
-            />
-          )}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          renderItem={renderHazardItem}
+          ItemSeparatorComponent={HazardListSeparator}
         />
       ) : (
         <View style={styles.mapContainer}>
@@ -445,7 +450,8 @@ export default function HazardsScreen() {
         hazard={selectedHazard}
         routes={routes}
         onResolve={() => { if (selectedHazard) void handleResolve(selectedHazard); }}
-        onDismiss={() => { detailRef.current?.close(); setSelectedHazard(null); }}
+        onDismiss={() => { detailRef.current?.close(); }}
+        onAnimationComplete={() => { setSelectedHazard(null); }}
         onUpdateExpiry={async (hazardId, expiresAt) => {
           const { error } = await supabase
             .from('hazards')
@@ -469,9 +475,15 @@ export default function HazardsScreen() {
   );
 }
 
+// ── HazardListSeparator ───────────────────────────────────────────────────
+
+function HazardListSeparator() {
+  return <View style={styles.separator} />;
+}
+
 // ── HazardListItem ─────────────────────────────────────────────────────────
 
-function HazardListItem({
+const HazardListItem = memo(function HazardListItem({
   hazard,
   routes,
   onPress,
@@ -536,7 +548,7 @@ function HazardListItem({
       </View>
     </Pressable>
   );
-}
+});
 
 // ── HazardDetailSheet ──────────────────────────────────────────────────────
 
@@ -547,9 +559,10 @@ const HazardDetailSheet = forwardRef<
     routes: Route[];
     onResolve: () => void;
     onDismiss: () => void;
+    onAnimationComplete: () => void;
     onUpdateExpiry: (hazardId: string, expiresAt: string | null) => void;
   }
->(({ hazard, routes, onResolve, onDismiss, onUpdateExpiry }, ref) => {
+>(({ hazard, routes, onResolve, onDismiss, onAnimationComplete, onUpdateExpiry }, ref) => {
   const renderBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => (
       <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} onPress={onDismiss} />
@@ -557,13 +570,16 @@ const HazardDetailSheet = forwardRef<
     [onDismiss],
   );
 
-  if (!hazard) return null;
+  const handleClose = useCallback(() => {
+    onDismiss();
+    onAnimationComplete();
+  }, [onDismiss, onAnimationComplete]);
 
-  const routeName = hazard.routeId
+  const routeName = hazard?.routeId
     ? routes.find((r) => r.id === hazard.routeId)?.name ?? 'Unknown route'
     : 'Campus-wide';
 
-  const severityColor = SEVERITY_COLOR[hazard.severity] ?? '#F97316';
+  const severityColor = hazard ? (SEVERITY_COLOR[hazard.severity] ?? '#F97316') : '#F97316';
 
   const expiryOptions = [
     { label: 'Permanent', value: null },
@@ -578,11 +594,12 @@ const HazardDetailSheet = forwardRef<
       index={-1}
       snapPoints={['50%']}
       enablePanDownToClose
-      onClose={onDismiss}
+      onClose={handleClose}
       backdropComponent={renderBackdrop}
       handleIndicatorStyle={{ backgroundColor: '#4a4a6a' }}
       backgroundStyle={{ backgroundColor: '#1a1a2e' }}
     >
+      {hazard && (
       <BottomSheetView style={detailStyles.container}>
         <View style={detailStyles.headerRow}>
           <View style={[styles.iconCircle, { backgroundColor: `${severityColor}22` }]}>
@@ -648,6 +665,7 @@ const HazardDetailSheet = forwardRef<
           <Text style={detailStyles.resolveBtnText}>Resolve Hazard</Text>
         </Pressable>
       </BottomSheetView>
+      )}
     </BottomSheet>
   );
 });

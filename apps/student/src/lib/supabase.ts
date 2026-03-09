@@ -15,19 +15,29 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 /**
- * Ensures the student app has an active auth session. Uses anonymous sign-in
- * so the Supabase client gets a real auth.uid(). Without this, RLS policies
- * deny all queries because current_user_role() returns NULL for unauthenticated
- * requests.
+ * Ensures the student app has an active, validated auth session.
  *
- * Safe to call multiple times: if a session already exists it returns immediately.
+ * getSession() returns the cached session from local storage without network
+ * validation. An expired session whose refresh token has also expired still
+ * returns a non-null object. We call refreshSession() to validate it over the
+ * network, and fall back to a fresh anonymous sign-in if refresh fails.
+ *
+ * Returns { ok: true } when a valid session is established, { ok: false } when
+ * all attempts fail. Callers should gate network operations on the result.
  */
-export async function ensureAnonymousSession(): Promise<void> {
+export async function ensureAnonymousSession(): Promise<{ ok: boolean }> {
   const { data: { session } } = await supabase.auth.getSession();
-  if (session) return;
+
+  if (session) {
+    const { error: refreshError } = await supabase.auth.refreshSession();
+    if (!refreshError) return { ok: true };
+    console.warn('[supabase] Session refresh failed, re-authenticating:', refreshError.message);
+  }
 
   const { error } = await supabase.auth.signInAnonymously();
   if (error) {
     console.error('[supabase] Anonymous sign-in failed:', error.message);
+    return { ok: false };
   }
+  return { ok: true };
 }

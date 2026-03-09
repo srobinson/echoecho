@@ -13,7 +13,7 @@
  * closed. Visual elements are supplementary — VoiceOver/TalkBack must deliver all
  * navigation information.
  */
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -30,10 +30,9 @@ import { usePdrNavigation } from '../../src/hooks/usePdrNavigation';
 import { useHapticEngine } from '../../src/hooks/useHapticEngine';
 import { useAudioEngine } from '../../src/hooks/useAudioEngine';
 import { useOffRouteDetection } from '../../src/hooks/useOffRouteDetection';
-import { useSttDestination } from '../../src/hooks/useSttDestination';
 import { getOrderedWaypoints } from '../../src/lib/localDb';
 import type { NavEvent } from '../../src/types/navEvents';
-import type { NavigationStatus } from '@echoecho/shared';
+import { INACTIVE_STT_SESSION, type NavigationStatus } from '@echoecho/shared';
 
 export default function NavigateScreen() {
   const { routeId } = useLocalSearchParams<{ routeId: string }>();
@@ -44,20 +43,15 @@ export default function NavigateScreen() {
   const [waypointProgress, setWaypointProgress] = useState({ current: 0, total: 0 });
   const [positioningMode, setPositioningMode] = useState<'gps' | 'pdr'>('gps');
 
-  // STT session state for haptic mutex (not actively used during navigation,
-  // but the contract requires it so haptics can check before firing)
-  const { sttSessionState } = useSttDestination(() => {
-    // No-op during active navigation; destination is already selected
-  });
-
   // ALP-956: GPS position tracking
   const gps = useGpsNavigation();
 
   // ALP-957: PDR fallback
   const pdr = usePdrNavigation(gps.injectPosition);
 
-  // ALP-958: Haptic feedback engine (consumes SttSessionState)
-  const haptic = useHapticEngine(sttSessionState);
+  // ALP-958: Haptic feedback engine. STT is never active during navigation,
+  // so we pass the static inactive session to satisfy the haptic mutex contract.
+  const haptic = useHapticEngine(INACTIVE_STT_SESSION);
 
   // ALP-959: Audio announcement engine
   const audio = useAudioEngine();
@@ -134,6 +128,15 @@ export default function NavigateScreen() {
     }
   }, [haptic, audio, offRoute, pdr, gps.lastPositionRef, navStatus]);
 
+  // Stable ref that always points to the latest handleNavEvent.
+  // startTracking receives a wrapper that delegates through this ref,
+  // so the GPS callback always runs the current closure without
+  // needing to restart tracking when dependencies change.
+  const handleNavEventRef = useRef(handleNavEvent);
+  useEffect(() => {
+    handleNavEventRef.current = handleNavEvent;
+  }, [handleNavEvent]);
+
   // Wire PDR event handler (emits pdr_accuracy_warning through handleNavEvent)
   useEffect(() => {
     pdr.onNavEvent(handleNavEvent);
@@ -149,10 +152,14 @@ export default function NavigateScreen() {
     offRoute.setPositionRef(gps.lastPositionRef);
   }, [offRoute, gps.lastPositionRef]);
 
-  // Start navigation on mount: load waypoints from local DB, start GPS tracking
+  // Start navigation on mount: load waypoints from local DB, start GPS tracking.
+  // The stable ref wrapper ensures gps.startTracking always dispatches to
+  // the latest handleNavEvent without restarting the GPS subscription.
   useEffect(() => {
     if (!routeId) return;
     let cancelled = false;
+
+    const dispatchNavEvent = (event: NavEvent) => handleNavEventRef.current(event);
 
     const startNavigation = async () => {
       const waypoints = await getOrderedWaypoints(routeId);
@@ -162,7 +169,7 @@ export default function NavigateScreen() {
       audio.setWaypoints(waypoints);
       setNavStatus('navigating');
 
-      await gps.startTracking(waypoints, handleNavEvent);
+      await gps.startTracking(waypoints, dispatchNavEvent);
       AccessibilityInfo.announceForAccessibility(
         'Navigation started. Follow the audio instructions.'
       );
@@ -175,7 +182,7 @@ export default function NavigateScreen() {
       gps.stopTracking();
       pdr.deactivate();
     };
-  }, [routeId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [routeId, audio, gps, pdr]);
 
   // Announce haptic skip reasons to screen reader users
   useEffect(() => {
@@ -255,8 +262,8 @@ function StatusBar({
   const modeLabel = positioningMode === 'pdr' ? ' (estimated position)' : '';
 
   return (
-    <View style={[styles.statusBar, { borderColor: color }]}>
-      <View style={[styles.statusDot, { backgroundColor: color }]} />
+    <View style={[styles.statusBar, { borderColor: color }]} accessibilityLiveRegion="assertive">
+      <View style={[styles.statusDot, { backgroundColor: color }]} accessibilityElementsHidden />
       <Text
         style={[styles.statusLabel, { color }]}
         accessibilityRole="none"
@@ -317,12 +324,20 @@ function ProgressCard({
 }) {
   if (total === 0) return null;
   const progress = current / total;
+  const displayCurrent = Math.min(current + 1, total);
 
   return (
-    <View style={styles.progressCard}>
+    <View
+      style={styles.progressCard}
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel={`Progress: waypoint ${displayCurrent} of ${total}, heading to ${destination}`}
+      accessibilityValue={{ min: 0, max: total, now: displayCurrent }}
+      accessibilityLiveRegion="polite"
+    >
       <View style={styles.progressMeta}>
         <Text style={styles.progressLabel}>
-          Waypoint {current + 1} of {total}
+          Waypoint {displayCurrent} of {total}
         </Text>
         <Text style={styles.destinationLabel} numberOfLines={1}>
           {destination}
