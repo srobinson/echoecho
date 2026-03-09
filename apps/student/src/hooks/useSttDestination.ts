@@ -215,7 +215,7 @@ export function useSttDestination(
     } catch {
       setSttUnavailable(true);
     }
-  }, []);
+  }, [resetToIdle]);
 
   const stopListening = useCallback(() => {
     clearTimers();
@@ -228,7 +228,7 @@ export function useSttDestination(
       onDestinationSelected(pendingMatch.buildingId, pendingMatch.name);
       resetToIdle();
     }
-  }, [pendingMatch, onDestinationSelected, clearTimers]);
+  }, [pendingMatch, onDestinationSelected, clearTimers, resetToIdle]);
 
   const rejectDestination = useCallback(() => {
     clearTimers();
