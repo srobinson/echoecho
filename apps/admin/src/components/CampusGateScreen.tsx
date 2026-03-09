@@ -51,8 +51,8 @@ export function CampusGateScreen() {
 
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#6c63ff" />
+        <View style={styles.centered} accessibilityLiveRegion="polite">
+          <ActivityIndicator size="large" color="#6c63ff" accessibilityLabel={message} />
           <Text style={styles.statusText}>{message}</Text>
         </View>
       </SafeAreaView>
@@ -64,7 +64,7 @@ export function CampusGateScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
           <Ionicons name="location-outline" size={48} color="#8888aa" />
-          <Text style={styles.title}>Location Required</Text>
+          <Text style={styles.title} accessibilityRole="header">Location Required</Text>
           <Text style={styles.subtitle}>
             EchoEcho needs your location to find or create a campus.
             Please enable location access in your device settings.
@@ -88,9 +88,9 @@ export function CampusGateScreen() {
   if (state.phase === 'error') {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.centered}>
+        <View style={styles.centered} accessibilityRole="alert">
           <Ionicons name="alert-circle-outline" size={48} color="#e53e3e" />
-          <Text style={styles.title}>Something went wrong</Text>
+          <Text style={styles.title} accessibilityRole="header">Something went wrong</Text>
           <Text style={styles.subtitle}>{state.message}</Text>
           <Pressable
             style={styles.primaryBtn}
