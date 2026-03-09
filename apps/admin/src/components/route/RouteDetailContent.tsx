@@ -17,6 +17,7 @@ import type { Route } from '@echoecho/shared';
 interface Props {
   route: Route;
   onClose: () => void;
+  onEditWaypoints?: (route: Route) => void;
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -26,7 +27,7 @@ const STATUS_COLOR: Record<string, string> = {
   pending_save: '#9CA3AF',
 };
 
-export function RouteDetailContent({ route, onClose }: Props) {
+export function RouteDetailContent({ route, onClose, onEditWaypoints }: Props) {
   const handleViewDetail = useCallback(() => {
     onClose();
     router.push(`/route/${route.id}`);
@@ -82,6 +83,21 @@ export function RouteDetailContent({ route, onClose }: Props) {
           <Ionicons name="warning" size={14} color="#F59E0B" />
           <Text style={styles.hazardText}>{route.hazards.length} active hazard{route.hazards.length !== 1 ? 's' : ''}</Text>
         </View>
+      )}
+
+      {onEditWaypoints && (
+        <Pressable
+          style={({ pressed }) => [styles.editWpBtn, pressed && styles.viewBtnPressed]}
+          onPress={() => {
+            onClose();
+            onEditWaypoints(route);
+          }}
+          accessibilityLabel={`Edit waypoints for ${route.name}`}
+          accessibilityRole="button"
+        >
+          <Ionicons name="create-outline" size={16} color="#22C55E" />
+          <Text style={styles.editWpLabel}>Edit Waypoints</Text>
+        </Pressable>
       )}
 
       <Pressable
@@ -170,4 +186,18 @@ const styles = StyleSheet.create({
   },
   viewBtnPressed: { opacity: 0.75 },
   viewBtnLabel: { color: '#6c63ff', fontSize: 15, fontWeight: '600' },
+  editWpBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#22C55E22',
+    borderWidth: 1,
+    borderColor: '#22C55E44',
+    borderRadius: 10,
+    paddingVertical: 14,
+    marginTop: 4,
+    minHeight: 44,
+  },
+  editWpLabel: { color: '#22C55E', fontSize: 15, fontWeight: '600' },
 });

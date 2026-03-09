@@ -1,12 +1,13 @@
 /**
- * Map tab: primary admin view with 4 progressive layers + building draw mode.
+ * Map tab: primary admin view with 4 progressive layers.
  *
  * ALP-965: Four composable layers (satellite, buildings, routes, waypoints).
  * ALP-966: Building creation flow (draw polygon > metadata > entrances).
+ * ALP-967: Waypoint editor (drag, edit, reorder, insert, delete).
  *
  * MapDetailPanel's `detailContent` slot is the extension point for ALP-966/967/968.
  */
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useMemo } from 'react';
 import { View, StyleSheet, Pressable, Text, Platform } from 'react-native';
 import MapboxGL from '@rnmapbox/maps';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,10 +29,16 @@ import { BuildingCreateMetadataSheet } from '../../src/components/building/Build
 import { CoordinateListInput } from '../../src/components/building/CoordinateListInput';
 import { EntranceMarkingTool } from '../../src/components/building/EntranceMarkingTool';
 import { EntrancePrompt } from '../../src/components/building/EntrancePrompt';
+import { WaypointEditMode } from '../../src/components/waypoint/WaypointEditMode';
+import { WaypointEditToolbar } from '../../src/components/waypoint/WaypointEditToolbar';
+import { WaypointEditSheet } from '../../src/components/waypoint/WaypointEditSheet';
+import { WaypointReorderList } from '../../src/components/waypoint/WaypointReorderList';
+import { WaypointBeforeAfterModal } from '../../src/components/waypoint/WaypointBeforeAfterModal';
 import { useCampusStore } from '../../src/stores/campusStore';
 import { MAPBOX_STYLE_SATELLITE } from '../../src/lib/mapbox';
 import { useAdminMapData } from '../../src/hooks/useAdminMapData';
 import { useBuildingDraw } from '../../src/hooks/useBuildingDraw';
+import { useWaypointEdit } from '../../src/hooks/useWaypointEdit';
 import type { MapLayers } from '../../src/components/MapLayerControl';
 import type { Building, Route, Waypoint } from '@echoecho/shared';
 
@@ -62,6 +69,7 @@ export default function MapScreen() {
   );
 
   const draw = useBuildingDraw(activeCampus?.id ?? null);
+  const wpEdit = useWaypointEdit();
 
   const center: [number, number] = activeCampus?.center
     ? [activeCampus.center.longitude, activeCampus.center.latitude]
@@ -70,6 +78,14 @@ export default function MapScreen() {
   const handleClose = useCallback(() => setSelected(null), []);
 
   const isDrawing = draw.phase !== 'idle';
+  const isEditingWaypoints = wpEdit.phase !== 'idle';
+  const isModalActive = isDrawing || isEditingWaypoints;
+
+  // Detect if waypoint edit has changes vs original
+  const wpHasChanges = useMemo(() => {
+    if (!wpEdit.route) return false;
+    return JSON.stringify(wpEdit.originalWaypoints) !== JSON.stringify(wpEdit.editBuffer);
+  }, [wpEdit.originalWaypoints, wpEdit.editBuffer, wpEdit.route]);
 
   // Handle map press depending on current mode
   const handleMapPress = useCallback((feature: GeoJSON.Feature) => {
@@ -95,13 +111,20 @@ export default function MapScreen() {
     void refresh();
   }, [draw, refresh]);
 
+  const handleEditWaypoints = useCallback((route: Route) => {
+    wpEdit.startEditing(route);
+  }, [wpEdit]);
+
+  const handleWpSaveConfirm = useCallback(async () => {
+    await wpEdit.confirmSave();
+    void refresh();
+  }, [wpEdit, refresh]);
+
   // DetailFeature for MapDetailPanel header
   const detailFeature: DetailFeature | null = selected
     ? {
         type: selected.kind,
-        id: selected.kind === 'building' ? selected.data.id
-           : selected.kind === 'route' ? selected.data.id
-           : selected.data.id,
+        id: selected.data.id,
         name: selected.kind === 'building' ? selected.data.name
             : selected.kind === 'route' ? selected.data.name
             : selected.data.audioLabel ?? `Waypoint ${selected.data.sequenceIndex + 1}`,
@@ -113,10 +136,18 @@ export default function MapScreen() {
     selected?.kind === 'building' ? (
       <BuildingEditPanel building={selected.data} onClose={handleClose} />
     ) : selected?.kind === 'route' ? (
-      <RouteDetailContent route={selected.data} onClose={handleClose} />
+      <RouteDetailContent
+        route={selected.data}
+        onClose={handleClose}
+        onEditWaypoints={handleEditWaypoints}
+      />
     ) : selected?.kind === 'waypoint' ? (
       <WaypointDetailContent waypoint={selected.data} />
     ) : null;
+
+  const selectedWaypoint = wpEdit.selectedIndex !== null
+    ? wpEdit.editBuffer[wpEdit.selectedIndex] ?? null
+    : null;
 
   return (
     <GestureHandlerRootView style={styles.root}>
@@ -144,26 +175,26 @@ export default function MapScreen() {
             <BuildingLayer
               buildings={buildings}
               onBuildingPress={(b) => {
-                if (!isDrawing) setSelected({ kind: 'building', data: b });
+                if (!isModalActive) setSelected({ kind: 'building', data: b });
               }}
             />
           )}
 
-          {activeLayers.routes && !isDrawing && (
+          {activeLayers.routes && !isModalActive && (
             <RouteLayer
               routes={routes}
               onRoutePress={(r) => setSelected({ kind: 'route', data: r })}
             />
           )}
 
-          {activeLayers.waypoints && !isDrawing && (
+          {activeLayers.waypoints && !isModalActive && (
             <PoiLayer
               waypoints={annotationWaypoints}
               onWaypointPress={(w) => setSelected({ kind: 'waypoint', data: w })}
             />
           )}
 
-          {/* Drawing overlay */}
+          {/* Building draw overlay */}
           {(draw.phase === 'drawing' || draw.phase === 'closed' || draw.phase === 'metadata') && (
             <BuildingDrawTool vertices={draw.vertices} isClosed={draw.isClosed} />
           )}
@@ -177,16 +208,27 @@ export default function MapScreen() {
               active
             />
           )}
+
+          {/* Waypoint edit overlay */}
+          {isEditingWaypoints && wpEdit.phase === 'editing' && (
+            <WaypointEditMode
+              waypoints={wpEdit.editBuffer}
+              selectedIndex={wpEdit.selectedIndex}
+              onWaypointPress={wpEdit.selectWaypoint}
+              onWaypointDragEnd={wpEdit.updateWaypointCoordinate}
+              onSegmentPress={wpEdit.insertWaypointAtSegment}
+            />
+          )}
         </MapboxGL.MapView>
 
-        {/* Layer controls (hidden during draw mode) */}
-        {!isDrawing && (
+        {/* Layer controls (hidden during modal modes) */}
+        {!isModalActive && (
           <View style={styles.layerControlContainer}>
             <MapLayerControl layers={activeLayers} onChange={setActiveLayers} />
           </View>
         )}
 
-        {/* Draw toolbar */}
+        {/* Building draw toolbar */}
         {draw.phase === 'drawing' && (
           <View style={styles.drawToolbarContainer}>
             <BuildingDrawToolbar
@@ -233,8 +275,52 @@ export default function MapScreen() {
           </View>
         )}
 
+        {/* Waypoint edit toolbar */}
+        {wpEdit.phase === 'editing' && (
+          <View style={styles.drawToolbarContainer}>
+            <WaypointEditToolbar
+              waypointCount={wpEdit.editBuffer.length}
+              hasChanges={wpHasChanges}
+              onSave={wpEdit.requestSave}
+              onReorder={wpEdit.showReorderList}
+              onCancel={wpEdit.cancel}
+            />
+          </View>
+        )}
+
+        {/* Waypoint edit sheet (single waypoint) */}
+        {wpEdit.phase === 'editing' && wpEdit.selectedIndex !== null && (
+          <WaypointEditSheet
+            waypoint={selectedWaypoint}
+            index={wpEdit.selectedIndex}
+            onUpdate={wpEdit.updateWaypointFields}
+            onDelete={wpEdit.deleteWaypoint}
+            onClose={() => wpEdit.selectWaypoint(null)}
+          />
+        )}
+
+        {/* Waypoint reorder list */}
+        {wpEdit.phase === 'reorder' && (
+          <WaypointReorderList
+            waypoints={wpEdit.editBuffer}
+            onMove={wpEdit.moveWaypoint}
+            onClose={wpEdit.hideReorderList}
+          />
+        )}
+
+        {/* Before/after diff modal */}
+        {wpEdit.phase === 'confirm' && (
+          <WaypointBeforeAfterModal
+            originalWaypoints={wpEdit.originalWaypoints}
+            editedWaypoints={wpEdit.editBuffer}
+            isSaving={wpEdit.isSaving}
+            onConfirm={() => void handleWpSaveConfirm()}
+            onDiscard={wpEdit.discardSave}
+          />
+        )}
+
         {/* FABs */}
-        {!isDrawing && (
+        {!isModalActive && (
           <>
             <Pressable
               style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
@@ -258,7 +344,7 @@ export default function MapScreen() {
           </>
         )}
 
-        {!isDrawing && (
+        {!isModalActive && (
           <MapDetailPanel
             feature={detailFeature}
             detailContent={detailContent}
