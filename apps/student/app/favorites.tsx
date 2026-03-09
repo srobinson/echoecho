@@ -82,8 +82,8 @@ export default function FavoritesScreen() {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container} edges={['bottom']}>
-        <View style={styles.loadingState}>
-          <ActivityIndicator size="large" color="#6c63ff" />
+        <View style={styles.loadingState} accessibilityLiveRegion="polite">
+          <ActivityIndicator size="large" color="#6c63ff" accessibilityLabel="Loading your routes" />
           <Text style={styles.loadingText}>Loading your routes…</Text>
         </View>
       </SafeAreaView>
