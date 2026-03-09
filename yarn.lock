@@ -1232,6 +1232,7 @@ __metadata:
   dependencies:
     "@babel/core": "npm:^7.24.0"
     "@echoecho/shared": "npm:*"
+    "@expo/vector-icons": "npm:^15.1.1"
     "@react-native-async-storage/async-storage": "npm:1.23.1"
     "@supabase/supabase-js": "npm:^2.43.4"
     "@types/react": "npm:~18.3.0"
@@ -1729,6 +1730,17 @@ __metadata:
     react: "*"
     react-native: "*"
   checksum: 10c0/f1dcea2c43c0808f48d1953395c6f8025ae5e811648e86b79158492c9ef8af7a40781e42844dfb1434242a08fcf6ab14886825eb2c79bad2a792aebd1eb5077c
+  languageName: node
+  linkType: hard
+
+"@expo/vector-icons@npm:^15.1.1":
+  version: 15.1.1
+  resolution: "@expo/vector-icons@npm:15.1.1"
+  peerDependencies:
+    expo-font: ">=14.0.4"
+    react: "*"
+    react-native: "*"
+  checksum: 10c0/fdd50c90484934204b90d345904fa69ca788a5de704d62b3cb580c52aa4cf4bffe1c05c509d043cf2b6842f1bdad6b78585524f3c6ae5f77e36385d83c0aa577
   languageName: node
   linkType: hard
 
