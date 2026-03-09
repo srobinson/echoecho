@@ -8,8 +8,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const BUCKETS = ['route-audio', 'route-photos'] as const;
-// Maximum objects to remove per invocation to bound execution time
-const BATCH_SIZE = 200;
+// Maximum objects to inspect per route folder per invocation
+const FOLDER_LIMIT = 200;
+const OBJECT_LIMIT = 500;
 
 Deno.serve(async (req: Request) => {
   // Only allow POST; GET is used by health checks from the Supabase dashboard
@@ -31,49 +32,55 @@ Deno.serve(async (req: Request) => {
     const removed: string[] = [];
     const errors: string[] = [];
 
-    // List all objects in the bucket (paginated at BATCH_SIZE)
-    const { data: objects, error: listError } = await supabase.storage
+    // Objects are stored as {route_id}/{waypoint_id}.{ext}.
+    // list('') returns virtual folder entries (one per route_id), not actual files.
+    // We must list each route folder to reach the actual objects.
+    const { data: folders, error: folderListError } = await supabase.storage
       .from(bucket)
-      .list('', { limit: BATCH_SIZE });
+      .list('', { limit: FOLDER_LIMIT });
 
-    if (listError) {
-      errors.push(`list error: ${listError.message}`);
+    if (folderListError) {
+      errors.push(`folder list error: ${folderListError.message}`);
       results[bucket] = { removed: 0, errors };
       continue;
     }
 
-    if (!objects || objects.length === 0) {
-      results[bucket] = { removed: 0, errors };
-      continue;
-    }
+    for (const folder of (folders ?? [])) {
+      const { data: objects, error: objListError } = await supabase.storage
+        .from(bucket)
+        .list(folder.name, { limit: OBJECT_LIMIT });
 
-    for (const obj of objects) {
-      // Path convention: {route_id}/{waypoint_id}.{ext}
-      // Extract the URL as stored in waypoints rows
-      const objectUrl = `${Deno.env.get('SUPABASE_URL')}/storage/v1/object/public/${bucket}/${obj.name}`;
-
-      const column =
-        bucket === 'route-audio' ? 'annotation_audio_url' : 'photo_url';
-
-      const { count, error: queryError } = await supabase
-        .from('waypoints')
-        .select('id', { count: 'exact', head: true })
-        .eq(column, objectUrl);
-
-      if (queryError) {
-        errors.push(`query error for ${obj.name}: ${queryError.message}`);
+      if (objListError) {
+        errors.push(`list error in ${folder.name}: ${objListError.message}`);
         continue;
       }
 
-      if (count === 0) {
-        const { error: removeError } = await supabase.storage
-          .from(bucket)
-          .remove([obj.name]);
+      for (const obj of (objects ?? [])) {
+        // Strip the file extension to recover the waypoint UUID.
+        // Path: {route_id}/{waypoint_id}.{ext} — obj.name is just the filename part.
+        const waypointId = obj.name.replace(/\.[^.]+$/, '');
 
-        if (removeError) {
-          errors.push(`remove error for ${obj.name}: ${removeError.message}`);
-        } else {
-          removed.push(obj.name);
+        const { count, error: queryError } = await supabase
+          .from('waypoints')
+          .select('id', { count: 'exact', head: true })
+          .eq('id', waypointId);
+
+        if (queryError) {
+          errors.push(`query error for ${folder.name}/${obj.name}: ${queryError.message}`);
+          continue;
+        }
+
+        if (count === 0) {
+          const objectPath = `${folder.name}/${obj.name}`;
+          const { error: removeError } = await supabase.storage
+            .from(bucket)
+            .remove([objectPath]);
+
+          if (removeError) {
+            errors.push(`remove error for ${objectPath}: ${removeError.message}`);
+          } else {
+            removed.push(objectPath);
+          }
         }
       }
     }

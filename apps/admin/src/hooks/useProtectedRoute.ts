@@ -13,9 +13,13 @@ export function useProtectedRoute() {
   const session = useAuthStore((s) => s.session);
   const profile = useAuthStore((s) => s.profile);
   const isLoading = useAuthStore((s) => s.isLoading);
+  const initialized = useAuthStore((s) => s.initialized);
 
   useEffect(() => {
-    if (isLoading) return;
+    // Wait until the persisted session has been resolved from AsyncStorage.
+    // Without this guard, unauthenticated initial state briefly triggers a
+    // redirect to login even for users who have a valid persisted session.
+    if (!initialized || isLoading) return;
 
     const inAuthGroup = segments[0] === '(auth)';
 
@@ -24,7 +28,7 @@ export function useProtectedRoute() {
     } else if (session && profile && inAuthGroup) {
       router.replace('/(tabs)');
     }
-  }, [session, profile, isLoading, segments, router]);
+  }, [session, profile, isLoading, initialized, segments, router]);
 }
 
 /**

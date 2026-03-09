@@ -6,16 +6,21 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet } from 'react-native';
 import { useAuthListener } from '../src/hooks/useAuth';
 import { useProtectedRoute } from '../src/hooks/useProtectedRoute';
+import { useAuthStore } from '../src/stores/authStore';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
+  const initialized = useAuthStore((s) => s.initialized);
+
   useAuthListener();
   useProtectedRoute();
 
   useEffect(() => {
-    SplashScreen.hideAsync();
-  }, []);
+    if (initialized) {
+      SplashScreen.hideAsync();
+    }
+  }, [initialized]);
 
   return (
     <GestureHandlerRootView style={styles.root}>

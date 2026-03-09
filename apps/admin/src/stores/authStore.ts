@@ -7,6 +7,9 @@ interface AuthState {
   session: Session | null;
   profile: AdminUser | null;
   isLoading: boolean;
+  // True after the initial getSession() call resolves. Guards useProtectedRoute
+  // from redirecting before the persisted session is known.
+  initialized: boolean;
   error: string | null;
 
   // Actions
@@ -21,10 +24,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
   profile: null,
   isLoading: false,
+  initialized: false,
   error: null,
 
   setSession: (session) => {
-    set({ session });
+    set({ session, initialized: true });
     if (session) {
       get().refreshProfile();
     } else {
