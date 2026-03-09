@@ -19,12 +19,15 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   useCallback,
   type ReactNode,
 } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
+import { syncCampus } from '../lib/syncEngine';
 import type { Entrance, Waypoint } from '@echoecho/shared';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -223,6 +226,20 @@ export function CampusProvider({ children }: CampusProviderProps) {
   useEffect(() => {
     void restoreFromCache();
   }, [restoreFromCache]);
+
+  // Sync route data when the app returns to the foreground (ALP-1087).
+  // syncCampus has its own 15-minute throttle, so rapid foreground/background
+  // cycles do not cause redundant network requests.
+  const prevAppState = useRef<AppStateStatus>(AppState.currentState);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (prevAppState.current !== 'active' && nextState === 'active' && campus?.id) {
+        void syncCampus(campus.id);
+      }
+      prevAppState.current = nextState;
+    });
+    return () => sub.remove();
+  }, [campus?.id]);
 
   const refresh = useCallback(async () => {
     const success = await fetchFromNetwork();
