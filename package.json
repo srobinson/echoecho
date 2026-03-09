@@ -9,9 +9,9 @@
   "scripts": {
     "admin": "yarn workspace @echoecho/admin start",
     "student": "yarn workspace @echoecho/student start",
-    "typecheck": "yarn workspaces run typecheck",
-    "lint": "yarn workspaces run lint",
-    "test": "yarn workspaces run test --passWithNoTests",
+    "typecheck": "yarn workspaces foreach --all run typecheck",
+    "lint": "yarn workspaces foreach --all run lint",
+    "test": "yarn workspaces foreach --all run test",
     "format": "prettier --write \"apps/**/*.{ts,tsx}\" \"packages/**/*.{ts,tsx}\"",
     "format:check": "prettier --check \"apps/**/*.{ts,tsx}\" \"packages/**/*.{ts,tsx}\"",
     "android": "expo run:android",

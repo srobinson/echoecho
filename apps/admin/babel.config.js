@@ -9,6 +9,7 @@ module.exports = function (api) {
         {
           alias: {
             '@echoecho/shared': '../../packages/shared/src/index.ts',
+            '@echoecho/ui': '../../packages/ui/src/index.ts',
           },
         },
       ],

@@ -63,7 +63,7 @@ export function MapDetailPanel({ feature, detailContent, onClose }: Props) {
     } else {
       sheetRef.current?.close();
     }
-  }, [feature?.id]);
+  }, [feature]);
 
   const featureTypeLabel =
     feature?.type === 'building'

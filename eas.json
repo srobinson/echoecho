@@ -7,12 +7,20 @@
       "distribution": "internal",
       "env": {
         "APP_VARIANT": "admin"
+      },
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
       }
     },
     "preview-student": {
       "distribution": "internal",
       "env": {
         "APP_VARIANT": "student"
+      },
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
       }
     },
     "production-admin": {

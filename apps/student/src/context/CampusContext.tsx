@@ -77,33 +77,6 @@ export function CampusProvider({ children }: CampusProviderProps) {
   const [securityWaypoints, setSecurityWaypoints] = useState<Waypoint[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // ── Restore from AsyncStorage on mount (instant, offline-first) ──────────
-  useEffect(() => {
-    void restoreFromCache();
-  }, []);
-
-  async function restoreFromCache() {
-    try {
-      const [campusJson, entrancesJson, secJson] = await Promise.all([
-        AsyncStorage.getItem(STORAGE_KEY_CAMPUS),
-        AsyncStorage.getItem(STORAGE_KEY_ENTRANCES),
-        AsyncStorage.getItem(STORAGE_KEY_SECURITY_WPS),
-      ]);
-
-      if (campusJson) setCampus(JSON.parse(campusJson) as CampusInfo);
-      if (entrancesJson) setEntrances(JSON.parse(entrancesJson) as Entrance[]);
-      if (secJson) setSecurityWaypoints(JSON.parse(secJson) as Waypoint[]);
-    } catch {
-      // Cache miss is non-fatal — network fetch will populate it
-    } finally {
-      // Mark loaded after cache restore so emergency routing can run
-      // even if network fetch hasn't completed yet
-      setIsLoaded(true);
-      // Then try to refresh from network in background
-      void fetchFromNetwork();
-    }
-  }
-
   const fetchFromNetwork = useCallback(async () => {
     try {
       // Fetch active campus — for TSBVI there is exactly one campus
@@ -197,6 +170,29 @@ export function CampusProvider({ children }: CampusProviderProps) {
       // Network failure is non-fatal — cached data remains available
     }
   }, []);
+
+  const restoreFromCache = useCallback(async () => {
+    try {
+      const [campusJson, entrancesJson, secJson] = await Promise.all([
+        AsyncStorage.getItem(STORAGE_KEY_CAMPUS),
+        AsyncStorage.getItem(STORAGE_KEY_ENTRANCES),
+        AsyncStorage.getItem(STORAGE_KEY_SECURITY_WPS),
+      ]);
+
+      if (campusJson) setCampus(JSON.parse(campusJson) as CampusInfo);
+      if (entrancesJson) setEntrances(JSON.parse(entrancesJson) as Entrance[]);
+      if (secJson) setSecurityWaypoints(JSON.parse(secJson) as Waypoint[]);
+    } catch {
+      // Cache miss is non-fatal — network fetch will populate it
+    } finally {
+      setIsLoaded(true);
+      void fetchFromNetwork();
+    }
+  }, [fetchFromNetwork]);
+
+  useEffect(() => {
+    void restoreFromCache();
+  }, [restoreFromCache]);
 
   const refresh = useCallback(async () => {
     await fetchFromNetwork();

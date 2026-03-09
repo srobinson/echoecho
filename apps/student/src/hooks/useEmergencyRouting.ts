@@ -93,8 +93,7 @@ export function useEmergencyRouting(input: EmergencyRoutingInput): NearestExit |
 
     return nearest;
   }, [
-    currentPosition?.latitude,
-    currentPosition?.longitude,
+    currentPosition,
     entrances,
     securityWaypoints,
   ]);

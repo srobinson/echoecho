@@ -75,7 +75,7 @@ export default function EmergencyScreen() {
         `Nearest exit found. ${nearestExit.instruction}`,
       );
     }
-  }, [nearestExit?.instruction]);
+  }, [nearestExit]);
 
   // ── Actions ───────────────────────────────────────────────────────────────
 

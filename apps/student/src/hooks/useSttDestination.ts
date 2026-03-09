@@ -129,6 +129,17 @@ export function useSttDestination(
     pauseResolverRef.current = null;
   });
 
+  // ── Public API ─────────────────────────────────────────────────────────
+
+  const resetToIdle = useCallback(() => {
+    clearTimers();
+    setSttState('idle');
+    setTranscript(null);
+    setMatches([]);
+    setPendingMatch(null);
+    setError(null);
+  }, [clearTimers]);
+
   // ── Match processing ───────────────────────────────────────────────────
 
   const processTranscript = useCallback((text: string) => {
@@ -170,7 +181,7 @@ export function useSttDestination(
         resetToIdle();
       }, CONFIRMATION_TIMEOUT_MS);
     }
-  }, []);
+  }, [resetToIdle]);
 
   // ── Public API ─────────────────────────────────────────────────────────
 
@@ -225,15 +236,6 @@ export function useSttDestination(
     setSttState('listening');
     void startListening();
   }, [startListening, clearTimers]);
-
-  const resetToIdle = useCallback(() => {
-    clearTimers();
-    setSttState('idle');
-    setTranscript(null);
-    setMatches([]);
-    setPendingMatch(null);
-    setError(null);
-  }, [clearTimers]);
 
   // ── SttSessionState (ALP-958 contract) ────────────────────────────────
 
