@@ -25,8 +25,8 @@
 [X]    ↳ ALP-952  Implement hazard marking during recording                  High      Worker Done  frontend-engineer
 [X]  ALP-983      Walk-and-Record Route Capture [backend-engineer]           High      Worker Done  backend-engineer
 [X]    ↳ ALP-953  Build route save flow with metadata                        High      Worker Done  backend-engineer
-[ ]  ALP-984      Student Navigation App [ux-designer]                       High      Todo         ux-designer
-[ ]    ↳ ALP-961  Build navigation UI (accessible, screen-reader-first)      High      Todo         ux-designer
+[X]  ALP-984      Student Navigation App [ux-designer]                       High      Worker Done  ux-designer
+[X]    ↳ ALP-961  Build navigation UI (accessible, screen-reader-first)      High      Worker Done  ux-designer
 [ ]  ALP-985      Student Navigation App [backend-engineer]                  High      Todo         backend-engineer
 [ ]    ↳ ALP-955  Build route matching and selection engine                  High      Todo         backend-engineer
 [ ]    ↳ ALP-963  Implement offline route storage and navigation             High      Todo         backend-engineer
