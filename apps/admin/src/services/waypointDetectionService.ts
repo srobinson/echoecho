@@ -107,7 +107,7 @@ export function processTrackPoint(
   state: WaypointDetectionState,
   config: Required<WaypointDetectionConfig> = DEFAULT_CONFIG,
 ): { waypoint: DetectedWaypoint | null; state: WaypointDetectionState } {
-  let s = { ...state, headingWindow: [...state.headingWindow] };
+  const s = { ...state, headingWindow: [...state.headingWindow] };
   let candidate: DetectedWaypoint | null = null;
 
   // ── Distance accumulation (non-flagged points only) ──────────────────────
@@ -197,7 +197,6 @@ export function processTrackPoint(
               s.distanceSinceLastWaypoint = 0;
               s.referenceHeading = smoothed;
               s.aboveThresholdCount = 0;
-      s.consecutiveStraightCount = 0;
               s.consecutiveStraightCount = 0;
             }
           }
@@ -206,10 +205,13 @@ export function processTrackPoint(
           // Advance reference heading only after sustainedSamples consecutive
           // straight readings — prevents reference drift during gradual turns.
           s.aboveThresholdCount = 0;
-      s.consecutiveStraightCount = 0;
           s.consecutiveStraightCount++;
           if (s.consecutiveStraightCount >= config.sustainedSamples) {
             s.referenceHeading = smoothed;
+            // Reset so the next advance requires another full sustainedSamples run.
+            // Without this, a large accumulated count lets the reference track a
+            // gradual turn on every sample, defeating the hysteresis entirely.
+            s.consecutiveStraightCount = 0;
           }
         }
       }

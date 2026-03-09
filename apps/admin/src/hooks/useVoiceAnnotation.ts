@@ -204,11 +204,14 @@ export function useVoiceAnnotation(): UseVoiceAnnotationReturn {
   }, [state.phase, doStop, reset]);
 
   const reRecord = useCallback((): void => {
-    if (state.phase === 'recording') {
-      void doStop();
-    }
-    reset();
-    void startRecording();
+    const doReRecord = async () => {
+      if (state.phase === 'recording') {
+        await doStop();
+      }
+      reset();
+      await startRecording();
+    };
+    void doReRecord();
   }, [state.phase, doStop, reset, startRecording]);
 
   const openMicSettings = useCallback((): void => {
