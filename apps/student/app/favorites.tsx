@@ -22,7 +22,7 @@ import {
   Text,
   Pressable,
   StyleSheet,
-  FlatList,
+  SectionList,
   Alert,
   AccessibilityInfo,
   ActivityIndicator,
@@ -39,14 +39,13 @@ export default function FavoritesScreen() {
   const { history, favorites, isLoading, toggleFavorite, isFavorite, clearHistory } =
     useRouteHistory(userId);
 
-  // Merged list built once per state change, not on every renderItem call
-  const listData = useMemo(
-    () => [
-      ...favorites.map((f) => ({ ...f, type: 'favorite' as const })),
-      ...history.map((h) => ({ ...h, type: 'history' as const })),
-    ],
-    [favorites, history],
-  );
+  const sections = useMemo(() => {
+    const result = [
+      { key: 'favorites', data: favorites },
+      { key: 'history', data: history },
+    ];
+    return result;
+  }, [favorites, history]);
 
   const handleReNavigate = useCallback((routeId: string, routeName: string) => {
     // Announce the confirmation immediately so screen reader users know what's happening
@@ -87,54 +86,50 @@ export default function FavoritesScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <FlatList
-        data={listData}
-        keyExtractor={(item) => `${item.type}-${item.routeId}`}
+      <SectionList
+        sections={sections}
+        keyExtractor={(item) => item.routeId}
         contentContainerStyle={styles.listContent}
-        ListHeaderComponent={() => (
-          <>
-            <SectionHeader
-              title="Favorites"
-              count={favorites.length}
-              onClear={undefined}
-            />
-            {favorites.length === 0 ? <FavoritesEmpty /> : null}
-          </>
-        )}
-        renderItem={({ item, index }) => {
-          // The Recent header appears before the first history item, which is
-          // always at index === favorites.length in the merged list.
-          const showHistoryHeader = item.type === 'history' && index === favorites.length;
-
-          return (
-            <>
-              {showHistoryHeader ? (
+        renderSectionHeader={({ section }) => {
+          if (section.key === 'favorites') {
+            return (
+              <>
                 <SectionHeader
-                  title="Recent"
-                  count={history.length}
-                  onClear={history.length > 0 ? clearHistory : undefined}
+                  title="Favorites"
+                  count={favorites.length}
+                  onClear={undefined}
                 />
-              ) : null}
-              <RouteItem
-                routeId={item.routeId}
-                routeName={item.routeName}
-                fromLabel={item.fromLabel}
-                toLabel={item.toLabel}
-                isFavorite={isFavorite(item.routeId)}
-                onToggleFavorite={() => {
-                  const route = {
-                    id: item.routeId,
-                    name: item.routeName,
-                    fromLabel: item.fromLabel,
-                    toLabel: item.toLabel,
-                  };
-                  void toggleFavorite(route as Parameters<typeof toggleFavorite>[0]);
-                }}
-                onNavigate={() => handleReNavigate(item.routeId, item.routeName)}
-              />
-            </>
+                {favorites.length === 0 ? <FavoritesEmpty /> : null}
+              </>
+            );
+          }
+          return (
+            <SectionHeader
+              title="Recent"
+              count={history.length}
+              onClear={history.length > 0 ? clearHistory : undefined}
+            />
           );
         }}
+        renderItem={({ item }) => (
+          <RouteItem
+            routeId={item.routeId}
+            routeName={item.routeName}
+            fromLabel={item.fromLabel}
+            toLabel={item.toLabel}
+            isFavorite={isFavorite(item.routeId)}
+            onToggleFavorite={() => {
+              const route = {
+                id: item.routeId,
+                name: item.routeName,
+                fromLabel: item.fromLabel,
+                toLabel: item.toLabel,
+              };
+              void toggleFavorite(route as Parameters<typeof toggleFavorite>[0]);
+            }}
+            onNavigate={() => handleReNavigate(item.routeId, item.routeName)}
+          />
+        )}
         ListEmptyComponent={
           <View style={styles.emptyHistory}>
             <Text
