@@ -8,6 +8,10 @@ import { useAuthListener } from '../src/hooks/useAuth';
 import { useProtectedRoute } from '../src/hooks/useProtectedRoute';
 import { useAuthStore } from '../src/stores/authStore';
 
+// Import GPS recording service at root level to ensure the expo-task-manager
+// background task is defined before any component renders (required by expo-task-manager).
+import '../src/services/gpsRecordingService';
+
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {

@@ -4,6 +4,7 @@
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
+    "types": ["jest"],
     "paths": {
       "@echoecho/shared": ["../../packages/shared/src/index.ts"]
     }

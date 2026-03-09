@@ -19,7 +19,8 @@
         "NSLocationWhenInUseUsageDescription": "EchoEcho Admin needs your location to record campus routes.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "EchoEcho Admin needs background location to record complete routes.",
         "NSCameraUsageDescription": "EchoEcho Admin captures waypoint photos during route recording.",
-        "NSMicrophoneUsageDescription": "EchoEcho Admin records voice annotations at waypoints."
+        "NSMicrophoneUsageDescription": "EchoEcho Admin records voice annotations at waypoints.",
+        "NSSpeechRecognitionUsageDescription": "EchoEcho Admin transcribes spoken waypoint annotations."
       },
       "config": {
         "googleMapsApiKey": ""
@@ -35,6 +36,8 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
         "CAMERA",
         "RECORD_AUDIO",
         "READ_EXTERNAL_STORAGE",
@@ -52,7 +55,22 @@
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "EchoEcho Admin needs location access to record campus routes.",
-          "isAndroidBackgroundLocationEnabled": true
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "EchoEcho Admin records voice annotations at waypoints.",
+          "speechRecognitionPermission": "EchoEcho Admin transcribes spoken waypoint annotations."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "EchoEcho Admin captures waypoint photos during route recording.",
+          "photosPermission": "Not used."
         }
       ],
       [

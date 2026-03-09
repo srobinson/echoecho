@@ -7,8 +7,11 @@ interface RecordingStore {
   pauseRecording: () => void;
   resumeRecording: () => void;
   stopRecording: () => void;
+  clearSession: () => void;
   appendTrackPoint: (point: TrackPoint) => void;
   addPendingWaypoint: (waypoint: PendingWaypoint) => void;
+  updatePendingWaypoint: (localId: string, updates: Partial<PendingWaypoint>) => void;
+  removePendingWaypoint: (localId: string) => void;
   addPendingHazard: (hazard: PendingHazard) => void;
   updateSessionMeta: (fromLabel: string, toLabel: string, campusId: string) => void;
 }
@@ -67,6 +70,10 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
     set({ session: { ...s, state: 'complete' } });
   },
 
+  clearSession: () => {
+    set({ session: null });
+  },
+
   appendTrackPoint: (point) => {
     const s = get().session;
     if (!s || s.state !== 'recording') return;
@@ -78,6 +85,30 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
     if (!s) return;
     set({
       session: { ...s, pendingWaypoints: [...s.pendingWaypoints, waypoint] },
+    });
+  },
+
+  updatePendingWaypoint: (localId, updates) => {
+    const s = get().session;
+    if (!s) return;
+    set({
+      session: {
+        ...s,
+        pendingWaypoints: s.pendingWaypoints.map((w) =>
+          w.localId === localId ? { ...w, ...updates } : w,
+        ),
+      },
+    });
+  },
+
+  removePendingWaypoint: (localId) => {
+    const s = get().session;
+    if (!s) return;
+    set({
+      session: {
+        ...s,
+        pendingWaypoints: s.pendingWaypoints.filter((w) => w.localId !== localId),
+      },
     });
   },
 

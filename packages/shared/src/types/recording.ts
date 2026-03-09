@@ -5,9 +5,15 @@ export type RecordingState = 'idle' | 'recording' | 'paused' | 'processing' | 'c
 
 /**
  * Live track point captured during walk-and-record. Raw data, pre-simplification.
+ *
+ * flagged=true when accuracy > 20m. ALP-948 skips flagged/null-heading points
+ * in turn detection but retains them in the raw buffer.
+ * heading is null when speed < 0.5 m/s (GPS heading is unreliable at low speed).
  */
 export interface TrackPoint extends GeoPoint {
   sequenceIndex: number;
+  /** True when GPS accuracy > 20m. Retained in buffer but skipped by ALP-948. */
+  flagged?: boolean;
 }
 
 /**
