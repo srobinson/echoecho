@@ -21,6 +21,7 @@ import {
   Gyroscope,
   Magnetometer,
 } from 'expo-sensors';
+import { haversineM } from '@echoecho/shared';
 import type { NavEventHandler, TrackPositionUpdate } from '../types/navEvents';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -165,7 +166,7 @@ export function usePdrNavigation(
   const reanchor = useCallback((gpsLat: number, gpsLng: number) => {
     const dLat = gpsLat - posRef.current.lat;
     const dLng = gpsLng - posRef.current.lng;
-    const deltaM = Math.sqrt(dLat ** 2 + dLng ** 2) * 111_320;
+    const deltaM = haversineM(posRef.current.lat, posRef.current.lng, gpsLat, gpsLng);
 
     if (deltaM >= 10) {
       // Immediate snap for large discrepancy; log for post-session drift analysis
