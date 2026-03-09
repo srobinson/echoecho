@@ -90,6 +90,12 @@ export default function HomeScreen() {
     setKeyboardQuery('');
   }, [handleDestinationConfirmed]);
 
+  useEffect(() => {
+    if (sttState === 'transcribing') {
+      AccessibilityInfo.announceForAccessibility('Processing your speech');
+    }
+  }, [sttState]);
+
   const topFavorites = favorites.slice(0, HOME_FAVORITES_LIMIT);
 
   const renderFavoriteItem = useCallback(
@@ -132,10 +138,13 @@ export default function HomeScreen() {
         accessibilityLabel={
           sttState === 'listening'
             ? 'Listening. Tap to stop.'
-            : 'Start voice destination input'
+            : sttState === 'transcribing'
+              ? 'Processing your speech. Please wait.'
+              : 'Start voice destination input'
         }
         accessibilityRole="button"
         accessibilityHint="Double tap to speak your destination"
+        accessibilityState={{ busy: sttState === 'transcribing' }}
       >
         <Ionicons
           name={sttState === 'listening' ? 'mic' : 'mic-outline'}
