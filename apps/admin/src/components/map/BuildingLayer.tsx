@@ -1,0 +1,117 @@
+/**
+ * BuildingLayer — Layer 2 of the admin map view.
+ *
+ * Renders building footprints as GeoJSON polygons with name labels.
+ * Each building is tappable to open MapDetailPanel with building info.
+ *
+ * ALP-965 spec:
+ *   - FillLayer: semi-transparent fill over polygon
+ *   - LineLayer: outline (2pt line)
+ *   - SymbolLayer: building name label at polygon centroid
+ *   - Tap opens MapDetailPanel with feature type discriminant 'building'
+ */
+
+import MapboxGL from '@rnmapbox/maps';
+import type { Feature, FeatureCollection, Polygon, Point } from 'geojson';
+import type { Building } from '@echoecho/shared';
+
+interface Props {
+  buildings: Building[];
+  onBuildingPress: (building: Building) => void;
+}
+
+const SOURCE_ID = 'admin-buildings';
+const FILL_LAYER_ID = 'admin-buildings-fill';
+const LINE_LAYER_ID = 'admin-buildings-line';
+const LABEL_LAYER_ID = 'admin-buildings-labels';
+
+export function BuildingLayer({ buildings, onBuildingPress }: Props) {
+  const featureCollection: FeatureCollection<Polygon> = {
+    type: 'FeatureCollection',
+    features: buildings.map((b): Feature<Polygon> => ({
+      type: 'Feature',
+      id: b.id,
+      properties: {
+        id: b.id,
+        name: b.name,
+        category: b.category,
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [b.footprint],
+      },
+    })),
+  };
+
+  // Label centroids — approximate centroid via averaging footprint vertices
+  const labelCollection: FeatureCollection<Point> = {
+    type: 'FeatureCollection',
+    features: buildings.map((b): Feature<Point> => ({
+      type: 'Feature',
+      id: `label-${b.id}`,
+      properties: { name: b.name },
+      geometry: {
+        type: 'Point',
+        coordinates: buildingCentroid(b.footprint),
+      },
+    })),
+  };
+
+  function handlePress(event: { features?: Feature[] }) {
+    const feature = event.features?.[0];
+    if (!feature?.properties?.id) return;
+    const building = buildings.find((b) => b.id === feature.properties!.id);
+    if (building) onBuildingPress(building);
+  }
+
+  return (
+    <>
+      <MapboxGL.ShapeSource
+        id={SOURCE_ID}
+        shape={featureCollection}
+        onPress={handlePress}
+      >
+        <MapboxGL.FillLayer
+          id={FILL_LAYER_ID}
+          style={{
+            fillColor: '#6c63ff',
+            fillOpacity: 0.15,
+          }}
+        />
+        <MapboxGL.LineLayer
+          id={LINE_LAYER_ID}
+          style={{
+            lineColor: '#6c63ff',
+            lineWidth: 2,
+            lineOpacity: 0.7,
+          }}
+        />
+      </MapboxGL.ShapeSource>
+
+      <MapboxGL.ShapeSource id={`${SOURCE_ID}-labels`} shape={labelCollection}>
+        <MapboxGL.SymbolLayer
+          id={LABEL_LAYER_ID}
+          style={{
+            textField: ['get', 'name'],
+            textSize: 12,
+            textColor: '#e8e8f0',
+            textHaloColor: '#0f0f1a',
+            textHaloWidth: 1.5,
+            textAnchor: 'center',
+            textMaxWidth: 8,
+          }}
+        />
+      </MapboxGL.ShapeSource>
+    </>
+  );
+}
+
+/** Approximate centroid by averaging polygon ring vertices */
+function buildingCentroid(footprint: [number, number][]): [number, number] {
+  if (footprint.length === 0) return [0, 0];
+  const sum = footprint.reduce(
+    (acc, [lng, lat]) => [acc[0] + lng, acc[1] + lat] as [number, number],
+    [0, 0] as [number, number],
+  );
+  return [sum[0] / footprint.length, sum[1] / footprint.length];
+}

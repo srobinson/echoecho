@@ -1,0 +1,86 @@
+{
+  "expo": {
+    "name": "EchoEcho",
+    "slug": "echoecho-student",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "echoecho",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a0a14"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "io.echoecho.student",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "EchoEcho needs your location to provide turn-by-turn navigation.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "EchoEcho needs background location to continue guiding you between buildings.",
+        "NSMotionUsageDescription": "EchoEcho uses motion sensors for improved indoor positioning.",
+        "NSMicrophoneUsageDescription": "EchoEcho uses the microphone to listen for your spoken destination.",
+        "NSSpeechRecognitionUsageDescription": "EchoEcho uses speech recognition to understand your destination."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0a0a14"
+      },
+      "package": "io.echoecho.student",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "VIBRATE",
+        "BODY_SENSORS",
+        "android.permission.HIGH_SAMPLING_RATE_SENSORS",
+        "RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "EchoEcho needs location access to navigate campus.",
+          "isAndroidBackgroundLocationEnabled": true
+        }
+      ],
+      [
+        "expo-dev-client",
+        {
+          "addGeneratedScheme": false
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "EchoEcho uses the microphone to listen for your spoken destination.",
+          "speechRecognitionPermission": "EchoEcho uses speech recognition to understand your destination."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "accessibility": {
+      "screenReaderMode": "default"
+    },
+    "autolinking": {
+      "exclude": [
+        "@rnmapbox/maps",
+        "expo-camera",
+        "expo-image-picker",
+        "expo-image-manipulator",
+        "expo-linear-gradient"
+      ]
+    }
+  }
+}
