@@ -1,11 +1,8 @@
 /**
- * Map tab — primary admin view with 4 progressive layers.
+ * Map tab: primary admin view with 4 progressive layers + building draw mode.
  *
- * ALP-965: Four composable layers:
- *   1. Satellite base (always on, non-toggleable)
- *   2. Building footprints — tappable, opens MapDetailPanel with BuildingEditPanel
- *   3. Route polylines — color-coded by status, opens MapDetailPanel with RoutePanel
- *   4. Waypoints / POIs — opens MapDetailPanel with waypoint info
+ * ALP-965: Four composable layers (satellite, buildings, routes, waypoints).
+ * ALP-966: Building creation flow (draw polygon > metadata > entrances).
  *
  * MapDetailPanel's `detailContent` slot is the extension point for ALP-966/967/968.
  */
@@ -25,9 +22,16 @@ import { MapDetailPanel, type DetailFeature } from '../../src/components/map/Map
 import { BuildingEditPanel } from '../../src/components/building/BuildingEditPanel';
 import { RouteDetailContent } from '../../src/components/route/RouteDetailContent';
 import { WaypointDetailContent } from '../../src/components/waypoint/WaypointDetailContent';
+import { BuildingDrawTool } from '../../src/components/building/BuildingDrawTool';
+import { BuildingDrawToolbar } from '../../src/components/building/BuildingDrawToolbar';
+import { BuildingCreateMetadataSheet } from '../../src/components/building/BuildingCreateMetadataSheet';
+import { CoordinateListInput } from '../../src/components/building/CoordinateListInput';
+import { EntranceMarkingTool } from '../../src/components/building/EntranceMarkingTool';
+import { EntrancePrompt } from '../../src/components/building/EntrancePrompt';
 import { useCampusStore } from '../../src/stores/campusStore';
 import { MAPBOX_STYLE_SATELLITE } from '../../src/lib/mapbox';
 import { useAdminMapData } from '../../src/hooks/useAdminMapData';
+import { useBuildingDraw } from '../../src/hooks/useBuildingDraw';
 import type { MapLayers } from '../../src/components/MapLayerControl';
 import type { Building, Route, Waypoint } from '@echoecho/shared';
 
@@ -50,17 +54,46 @@ export default function MapScreen() {
     waypoints: true,
   });
   const [selected, setSelected] = useState<SelectedFeature>(null);
+  const [pendingEntranceCoord, setPendingEntranceCoord] = useState<[number, number] | null>(null);
   const { activeCampus } = useCampusStore();
 
-  const { buildings, routes, annotationWaypoints } = useAdminMapData(
+  const { buildings, routes, annotationWaypoints, refresh } = useAdminMapData(
     activeCampus?.id ?? null,
   );
+
+  const draw = useBuildingDraw(activeCampus?.id ?? null);
 
   const center: [number, number] = activeCampus?.center
     ? [activeCampus.center.longitude, activeCampus.center.latitude]
     : TSBVI_CENTER;
 
   const handleClose = useCallback(() => setSelected(null), []);
+
+  const isDrawing = draw.phase !== 'idle';
+
+  // Handle map press depending on current mode
+  const handleMapPress = useCallback((feature: GeoJSON.Feature) => {
+    if (feature.geometry.type !== 'Point') return;
+    const coord = feature.geometry.coordinates.slice(0, 2) as [number, number];
+
+    if (draw.phase === 'drawing') {
+      draw.addVertex(coord);
+    } else if (draw.phase === 'entrances') {
+      setPendingEntranceCoord(coord);
+    }
+  }, [draw]);
+
+  const handleEntranceConfirm = useCallback((name: string, isMain: boolean) => {
+    if (pendingEntranceCoord) {
+      void draw.addEntrance(pendingEntranceCoord, name, isMain);
+      setPendingEntranceCoord(null);
+    }
+  }, [pendingEntranceCoord, draw]);
+
+  const handleEntranceDone = useCallback(() => {
+    draw.finishEntrances();
+    void refresh();
+  }, [draw, refresh]);
 
   // DetailFeature for MapDetailPanel header
   const detailFeature: DetailFeature | null = selected
@@ -75,7 +108,7 @@ export default function MapScreen() {
       }
     : null;
 
-  // Content slot — extension point for ALP-966, 967, 968
+  // Content slot for MapDetailPanel
   const detailContent =
     selected?.kind === 'building' ? (
       <BuildingEditPanel building={selected.data} onClose={handleClose} />
@@ -97,6 +130,7 @@ export default function MapScreen() {
           compassFadeWhenNorth
           scaleBarEnabled={false}
           accessible={false}
+          onPress={isDrawing ? handleMapPress : undefined}
         >
           <MapboxGL.Camera
             ref={cameraRef}
@@ -109,44 +143,128 @@ export default function MapScreen() {
           {activeLayers.buildings && (
             <BuildingLayer
               buildings={buildings}
-              onBuildingPress={(b) => setSelected({ kind: 'building', data: b })}
+              onBuildingPress={(b) => {
+                if (!isDrawing) setSelected({ kind: 'building', data: b });
+              }}
             />
           )}
 
-          {activeLayers.routes && (
+          {activeLayers.routes && !isDrawing && (
             <RouteLayer
               routes={routes}
               onRoutePress={(r) => setSelected({ kind: 'route', data: r })}
             />
           )}
 
-          {activeLayers.waypoints && (
+          {activeLayers.waypoints && !isDrawing && (
             <PoiLayer
               waypoints={annotationWaypoints}
               onWaypointPress={(w) => setSelected({ kind: 'waypoint', data: w })}
             />
           )}
+
+          {/* Drawing overlay */}
+          {(draw.phase === 'drawing' || draw.phase === 'closed' || draw.phase === 'metadata') && (
+            <BuildingDrawTool vertices={draw.vertices} isClosed={draw.isClosed} />
+          )}
+
+          {/* Entrance markers during entrance phase */}
+          {draw.phase === 'entrances' && draw.savedBuilding && (
+            <EntranceMarkingTool
+              polygonRing={draw.savedBuilding.footprint}
+              entrances={draw.pendingEntrances}
+              onAddEntrance={() => {}}
+              active
+            />
+          )}
         </MapboxGL.MapView>
 
-        <View style={styles.layerControlContainer}>
-          <MapLayerControl layers={activeLayers} onChange={setActiveLayers} />
-        </View>
+        {/* Layer controls (hidden during draw mode) */}
+        {!isDrawing && (
+          <View style={styles.layerControlContainer}>
+            <MapLayerControl layers={activeLayers} onChange={setActiveLayers} />
+          </View>
+        )}
 
-        <Pressable
-          style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
-          onPress={() => router.push('/record')}
-          accessibilityLabel="Record a new route"
-          accessibilityRole="button"
-        >
-          <Ionicons name="radio-button-on" size={28} color="#fff" />
-          <Text style={styles.fabLabel}>Record</Text>
-        </Pressable>
+        {/* Draw toolbar */}
+        {draw.phase === 'drawing' && (
+          <View style={styles.drawToolbarContainer}>
+            <BuildingDrawToolbar
+              phase={draw.phase}
+              vertexCount={draw.vertices.length}
+              onUndo={draw.undoVertex}
+              onClosePolygon={draw.closePolygon}
+              onCancel={draw.cancel}
+              onToggleCoordinateInput={draw.toggleCoordinateInput}
+            />
+          </View>
+        )}
 
-        <MapDetailPanel
-          feature={detailFeature}
-          detailContent={detailContent}
-          onClose={handleClose}
+        {/* Coordinate input overlay */}
+        {draw.showCoordinateInput && (
+          <View style={styles.coordinateInputOverlay}>
+            <CoordinateListInput
+              onSubmit={draw.setVerticesFromCoordinates}
+              onCancel={draw.toggleCoordinateInput}
+            />
+          </View>
+        )}
+
+        {/* Metadata form after polygon close */}
+        <BuildingCreateMetadataSheet
+          visible={draw.phase === 'closed' || draw.phase === 'metadata'}
+          isSaving={draw.isSaving}
+          onSave={(meta) => void draw.saveBuilding(meta)}
+          onDiscard={draw.cancel}
         />
+
+        {/* Entrance marking prompt */}
+        {draw.phase === 'entrances' && draw.savedBuilding && (
+          <View style={styles.entrancePromptContainer}>
+            <EntrancePrompt
+              buildingName={draw.savedBuilding.name}
+              entrances={draw.pendingEntrances}
+              onTapEntrance={() => {}}
+              onDone={handleEntranceDone}
+              pendingCoordinate={pendingEntranceCoord}
+              onConfirmEntrance={handleEntranceConfirm}
+              onCancelEntrance={() => setPendingEntranceCoord(null)}
+            />
+          </View>
+        )}
+
+        {/* FABs */}
+        {!isDrawing && (
+          <>
+            <Pressable
+              style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
+              onPress={() => router.push('/record')}
+              accessibilityLabel="Record a new route"
+              accessibilityRole="button"
+            >
+              <Ionicons name="radio-button-on" size={28} color="#fff" />
+              <Text style={styles.fabLabel}>Record</Text>
+            </Pressable>
+
+            <Pressable
+              style={({ pressed }) => [styles.addBuildingFab, pressed && styles.fabPressed]}
+              onPress={draw.startDrawing}
+              accessibilityLabel="Add a new building"
+              accessibilityRole="button"
+            >
+              <Ionicons name="business" size={22} color="#fff" />
+              <Text style={styles.fabLabel}>Add Building</Text>
+            </Pressable>
+          </>
+        )}
+
+        {!isDrawing && (
+          <MapDetailPanel
+            feature={detailFeature}
+            detailContent={detailContent}
+            onClose={handleClose}
+          />
+        )}
       </SafeAreaView>
     </GestureHandlerRootView>
   );
@@ -164,11 +282,46 @@ const styles = StyleSheet.create({
     top: 12,
     right: 12,
   },
+  drawToolbarContainer: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    right: 12,
+  },
+  coordinateInputOverlay: {
+    position: 'absolute',
+    top: 100,
+    left: 0,
+    right: 0,
+  },
+  entrancePromptContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
   fab: {
     position: 'absolute',
     bottom: Platform.OS === 'ios' ? 24 : 16,
     right: 16,
     backgroundColor: '#e53e3e',
+    borderRadius: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
+    gap: 8,
+  },
+  addBuildingFab: {
+    position: 'absolute',
+    bottom: Platform.OS === 'ios' ? 24 : 16,
+    left: 16,
+    backgroundColor: '#6c63ff',
     borderRadius: 32,
     flexDirection: 'row',
     alignItems: 'center',
