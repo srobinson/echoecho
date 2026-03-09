@@ -19,7 +19,7 @@
  * current GPS position snapshot (ALP-956's lastPositionRef), not at event
  * emission time, to account for 1Hz GPS update lag (~1.4m per update).
  */
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { AccessibilityInfo, Platform } from 'react-native';
 import { Audio } from 'expo-av';
 import type { NavEvent } from '../types/navEvents';
@@ -68,6 +68,16 @@ export function useAudioEngine(): UseAudioEngineResult {
   const waypointsRef = useRef<LocalWaypoint[]>([]);
   const clipUrlResolverRef = useRef<((id: string) => string | undefined) | null>(null);
   const audioSessionConfiguredRef = useRef(false);
+
+  // Release native audio resources on unmount to prevent AVPlayer/MediaPlayer leaks
+  useEffect(() => {
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(() => undefined);
+        soundRef.current = null;
+      }
+    };
+  }, []);
 
   const configureAudioSession = useCallback(async () => {
     if (audioSessionConfiguredRef.current) return;
