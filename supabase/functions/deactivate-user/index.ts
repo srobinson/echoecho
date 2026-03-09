@@ -1,7 +1,7 @@
 // Edge Function: deactivate-user
 // Admin-only. Immediate two-step deactivation:
-//   1. auth.admin.updateUserById({ banned: true })  — blocks new token issuance
-//   2. profiles.is_active = false                   — invalidates existing JWTs via RLS
+//   1. auth.admin.updateUserById({ ban_duration: '876600h' }) — blocks new token issuance
+//   2. profiles.is_active = false                             — invalidates existing JWTs via RLS
 //
 // current_user_role() in ALP-942 queries profiles WHERE is_active = true.
 // A deactivated user's role resolves to null, failing all RLS policies on the
@@ -66,9 +66,11 @@ Deno.serve(async (req: Request) => {
   }
 
   // Step 1: ban the auth user to block new token issuance.
+  // '876600h' = 100 years (GoTrue's closest approximation to a permanent ban).
+  // ban_duration: 'none' would *remove* a ban — do not use it here.
   const { error: banError } = await adminClient.auth.admin.updateUserById(
     targetUserId,
-    { ban_duration: 'none' }  // permanent ban; use 'none' = no duration = indefinite
+    { ban_duration: '876600h' }
   );
   if (banError) {
     console.error('[deactivate-user] Auth ban failed:', banError);

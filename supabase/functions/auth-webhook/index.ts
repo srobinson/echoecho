@@ -18,11 +18,11 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { status: 405 });
   }
 
-  // Verify the webhook secret to prevent spoofed events.
-  const webhookSecret = Deno.env.get('AUTH_WEBHOOK_SECRET') ?? '';
+  // Reject if AUTH_WEBHOOK_SECRET is not configured — fail closed, not open.
+  const webhookSecret = Deno.env.get('AUTH_WEBHOOK_SECRET');
   const authHeader = req.headers.get('Authorization') ?? '';
 
-  if (webhookSecret && authHeader !== `Bearer ${webhookSecret}`) {
+  if (!webhookSecret || authHeader !== `Bearer ${webhookSecret}`) {
     return new Response('Unauthorized', { status: 401 });
   }
 
