@@ -6,7 +6,7 @@
   "build": {
     "preview-admin": {
       "distribution": "internal",
-      "channel": "preview",
+
       "env": {
         "APP_VARIANT": "admin"
       },
@@ -16,7 +16,7 @@
     },
     "production-admin": {
       "distribution": "store",
-      "channel": "production",
+
       "env": {
         "APP_VARIANT": "admin"
       }

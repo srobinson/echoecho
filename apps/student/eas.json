@@ -6,7 +6,7 @@
   "build": {
     "preview-student": {
       "distribution": "internal",
-      "channel": "preview",
+
       "env": {
         "APP_VARIANT": "student"
       },
@@ -16,7 +16,7 @@
     },
     "production-student": {
       "distribution": "store",
-      "channel": "production",
+
       "env": {
         "APP_VARIANT": "student"
       }
