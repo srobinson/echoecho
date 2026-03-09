@@ -34,6 +34,19 @@ test:
 # Full CI gate: typecheck + lint + test
 ci: check lint test
 
+# Reproduce the exact CI pipeline locally (immutable install, deno lint)
+ci-local:
+    yarn install --immutable
+    yarn workspace @echoecho/shared run typecheck
+    yarn workspace @echoecho/admin run typecheck
+    yarn workspace @echoecho/student run typecheck
+    yarn workspace @echoecho/admin run lint
+    yarn workspace @echoecho/student run lint
+    yarn workspace @echoecho/shared run test
+    yarn workspace @echoecho/admin run test
+    yarn workspace @echoecho/student run test
+    deno lint supabase/functions/
+
 # ── Supabase ───────────────────────────────────────────────
 
 # Start local Supabase stack (requires supabase CLI)
