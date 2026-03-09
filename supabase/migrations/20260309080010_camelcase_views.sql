@@ -34,6 +34,10 @@ ALTER TABLE waypoints
       'crossing', 'regular'
     ));
 
+ALTER TABLE hazards
+  ADD COLUMN IF NOT EXISTS resolved_at timestamptz,
+  ADD COLUMN IF NOT EXISTS resolved_by uuid REFERENCES auth.users(id);
+
 -- ============================================================
 -- v_campuses
 -- ============================================================
@@ -145,9 +149,11 @@ SELECT
   h.title,
   h.description,
   h.expires_at AS "expiresAt",
+  h.resolved_at AS "resolvedAt",
   h.created_at AS "createdAt",
   h.updated_at AS "updatedAt"
-FROM hazards h;
+FROM hazards h
+WHERE h.resolved_at IS NULL;
 
 -- ============================================================
 -- v_routes (waypoints + hazards embedded as JSONB arrays)
@@ -208,7 +214,7 @@ SELECT
        'updatedAt',   h.updated_at
      ))
      FROM hazards h
-     WHERE h.route_id = r.id),
+     WHERE h.route_id = r.id AND h.resolved_at IS NULL),
     '[]'::jsonb
   ) AS hazards
 FROM routes r
