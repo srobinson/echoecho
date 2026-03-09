@@ -127,8 +127,14 @@ export default function SaveRouteScreen() {
   const handleCreateBuilding = useCallback(async () => {
     if (!newBuildingName.trim() || !session?.campusId) return;
 
-    const firstPoint = session.trackPoints[0];
-    if (!firstPoint) {
+    // Use the track point closest to where the building is: first point for
+    // the start building, last point for the end building.
+    const locationPoint =
+      showNewBuilding === 'end'
+        ? session.trackPoints[session.trackPoints.length - 1]
+        : session.trackPoints[0];
+
+    if (!locationPoint) {
       Alert.alert('No GPS data', 'Cannot create a building without a recorded location.');
       return;
     }
@@ -137,8 +143,8 @@ export default function SaveRouteScreen() {
     const result = await createBuildingStub(
       session.campusId,
       newBuildingName.trim(),
-      firstPoint.latitude,
-      firstPoint.longitude,
+      locationPoint.latitude,
+      locationPoint.longitude,
     );
     setBuildingCreating(false);
 
@@ -317,7 +323,7 @@ export default function SaveRouteScreen() {
                 <Text style={styles.chipButtonSecondaryText}>Cancel</Text>
               </Pressable>
               <Pressable
-                style={[styles.chipButton, buildingCreating && styles.chipButtonDisabled]}
+                style={[styles.chipButton, (buildingCreating || !newBuildingName.trim()) && styles.chipButtonDisabled]}
                 onPress={handleCreateBuilding}
                 disabled={buildingCreating || !newBuildingName.trim()}
                 accessibilityRole="button"

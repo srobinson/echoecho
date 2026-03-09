@@ -180,6 +180,8 @@ $$;
 CREATE OR REPLACE FUNCTION publish_route(route_id uuid)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_count integer;
 BEGIN
   IF NOT (current_user_role() IN ('admin', 'om_specialist')) THEN
     RAISE EXCEPTION 'permission_denied';
@@ -191,6 +193,11 @@ BEGIN
     published_at = now(),
     updated_at   = now()
   WHERE id = route_id AND status = 'draft';
+
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  IF v_count = 0 THEN
+    RAISE EXCEPTION 'route_not_found_or_not_draft';
+  END IF;
 END;
 $$;
 
@@ -198,6 +205,8 @@ $$;
 CREATE OR REPLACE FUNCTION retract_route(route_id uuid)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_count integer;
 BEGIN
   IF NOT (current_user_role() IN ('admin', 'om_specialist')) THEN
     RAISE EXCEPTION 'permission_denied';
@@ -207,5 +216,10 @@ BEGIN
     status     = 'retracted',
     updated_at = now()
   WHERE id = route_id AND status = 'published';
+
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  IF v_count = 0 THEN
+    RAISE EXCEPTION 'route_not_found_or_not_published';
+  END IF;
 END;
 $$;

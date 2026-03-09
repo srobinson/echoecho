@@ -99,8 +99,9 @@ function smoothHeadings(headings: number[]): number {
  * Process a single incoming TrackPoint through the waypoint detection state machine.
  *
  * Returns the (possibly updated) state and an optional detected waypoint.
- * If a turn waypoint and a distance waypoint would coincide within 5 m, the
- * distance waypoint is suppressed in favour of the turn waypoint.
+ * At most one waypoint is emitted per call. When the fixed-distance threshold
+ * fires, the heading window is reset, so a turn cannot also fire for the same
+ * point — only one candidate is ever set per invocation.
  */
 export function processTrackPoint(
   point: TrackPoint,
@@ -168,21 +169,6 @@ export function processTrackPoint(
               computeDistance(s.lastWaypointCoord, point) < config.minWaypointSpacingMeters;
 
             if (!tooClose) {
-              const suppressDistanceCandidate =
-                candidate !== null &&
-                candidate.reason === 'distance' &&
-                computeDistance(
-                  {
-                    latitude: candidate.coordinate.latitude,
-                    longitude: candidate.coordinate.longitude,
-                  },
-                  point,
-                ) < 5;
-
-              if (suppressDistanceCandidate) {
-                candidate = null;
-              }
-
               candidate = {
                 trackPointIndex: point.sequenceIndex,
                 reason: 'turn',
