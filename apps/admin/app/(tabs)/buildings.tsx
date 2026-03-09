@@ -2,7 +2,7 @@
  * Buildings tab: list campus buildings with category filter and search.
  * ALP-1046: Replace non-functional stub with a proper building list.
  */
-import { useEffect, useCallback, useState, useRef } from 'react';
+import { useEffect, useCallback, useState, useRef, memo } from 'react';
 import {
   View,
   Text,
@@ -99,6 +99,11 @@ export default function BuildingsScreen() {
     }, 300);
   }, [fetchBuildings, categoryFilter]);
 
+  const renderBuildingItem = useCallback(
+    ({ item }: { item: Building }) => <BuildingCard building={item} />,
+    [],
+  );
+
   if (!activeCampus) {
     return (
       <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -189,7 +194,7 @@ export default function BuildingsScreen() {
           ListEmptyComponent={
             <EmptyState hasFilter={categoryFilter !== 'all' || searchQuery.length > 0} />
           }
-          renderItem={({ item }) => <BuildingCard building={item} />}
+          renderItem={renderBuildingItem}
           ItemSeparatorComponent={Separator}
           accessibilityRole="list"
         />
@@ -202,7 +207,7 @@ function Separator() {
   return <View style={styles.separator} />;
 }
 
-function BuildingCard({ building }: { building: Building }) {
+const BuildingCard = memo(function BuildingCard({ building }: { building: Building }) {
   const icon = CATEGORY_ICON[building.category] ?? 'business-outline';
   const entranceCount = building.entrances?.length ?? 0;
 
@@ -247,7 +252,7 @@ function BuildingCard({ building }: { building: Building }) {
       </View>
     </View>
   );
-}
+});
 
 function EmptyState({ hasFilter }: { hasFilter: boolean }) {
   return (

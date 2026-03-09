@@ -2,7 +2,7 @@
  * Hazard management tab: list and map views for campus hazards.
  * ALP-970: Filter by type/route/expiry, resolve hazards, add from map.
  */
-import { useEffect, useCallback, useState, useRef, useMemo, forwardRef } from 'react';
+import { useEffect, useCallback, useState, useRef, useMemo, forwardRef, memo } from 'react';
 import {
   View,
   Text,
@@ -483,7 +483,7 @@ function HazardListSeparator() {
 
 // ── HazardListItem ─────────────────────────────────────────────────────────
 
-function HazardListItem({
+const HazardListItem = memo(function HazardListItem({
   hazard,
   routes,
   onPress,
@@ -548,7 +548,7 @@ function HazardListItem({
       </View>
     </Pressable>
   );
-}
+});
 
 // ── HazardDetailSheet ──────────────────────────────────────────────────────
 
