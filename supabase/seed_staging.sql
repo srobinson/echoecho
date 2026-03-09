@@ -8,33 +8,56 @@
 --
 -- Prerequisites:
 --   1. All migrations applied
---   2. A test admin user created with a well-known UUID:
---        supabase auth admin create-user \
---          --user-id 00000000-0000-0000-0000-000000000099 \
---          --email seed-admin@echoecho.test \
---          --password test1234
---      The seed will abort if this user does not exist.
 --
 -- This script is idempotent (uses ON CONFLICT DO NOTHING).
 
 SET search_path TO public, extensions;
 
 -- ============================================================
--- PREREQUISITE: verify the well-known test user exists
+-- TEST USER: create the well-known seed admin directly in auth.users
 -- ============================================================
 
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM auth.users
-    WHERE id = '00000000-0000-0000-0000-000000000099'
-  ) THEN
-    RAISE EXCEPTION
-      'Seed prerequisite failed: test user 00000000-0000-0000-0000-000000000099 '
-      'does not exist. Create it first with: supabase auth admin create-user '
-      '--user-id 00000000-0000-0000-0000-000000000099 --email seed-admin@echoecho.test --password test1234';
-  END IF;
-END $$;
+INSERT INTO auth.users (
+  id,
+  instance_id,
+  aud,
+  role,
+  email,
+  encrypted_password,
+  email_confirmed_at,
+  created_at,
+  updated_at,
+  confirmation_token,
+  raw_app_meta_data,
+  raw_user_meta_data
+)
+VALUES (
+  '00000000-0000-0000-0000-000000000099',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated',
+  'authenticated',
+  'seed-admin@echoecho.test',
+  crypt('test1234', gen_salt('bf')),
+  now(),
+  now(),
+  now(),
+  '',
+  '{"provider": "email", "providers": ["email"]}',
+  '{}'
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================
+-- CLEANUP: delete previous seed data (dependency order)
+-- ============================================================
+
+DELETE FROM hazards    WHERE id IN ('00000000-0000-0000-0000-000000000300');
+DELETE FROM waypoints  WHERE route_id IN ('00000000-0000-0000-0000-000000000100', '00000000-0000-0000-0000-000000000200');
+DELETE FROM routes     WHERE id IN ('00000000-0000-0000-0000-000000000100', '00000000-0000-0000-0000-000000000200');
+DELETE FROM pois       WHERE id IN ('00000000-0000-0000-0000-000000000030');
+DELETE FROM building_entrances WHERE id IN ('00000000-0000-0000-0000-000000000020', '00000000-0000-0000-0000-000000000021', '00000000-0000-0000-0000-000000000022', '00000000-0000-0000-0000-000000000023');
+DELETE FROM buildings  WHERE id IN ('00000000-0000-0000-0000-000000000010', '00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000012');
+DELETE FROM campuses   WHERE id IN ('00000000-0000-0000-0000-000000000001');
 
 -- ============================================================
 -- CAMPUS: TSBVI (Texas School for the Blind and Visually Impaired)
@@ -247,7 +270,7 @@ UPDATE routes SET
 WHERE id = '00000000-0000-0000-0000-000000000100';
 
 -- Force content_hash recompute
-SELECT recompute_route_content_hash('00000000-0000-0000-0000-000000000100');
+DO $$ BEGIN PERFORM recompute_route_content_hash('00000000-0000-0000-0000-000000000100'); END $$;
 
 
 -- Route 2: Main Building → Student Center
@@ -317,7 +340,7 @@ UPDATE routes SET
   published_at = now()
 WHERE id = '00000000-0000-0000-0000-000000000200';
 
-SELECT recompute_route_content_hash('00000000-0000-0000-0000-000000000200');
+DO $$ BEGIN PERFORM recompute_route_content_hash('00000000-0000-0000-0000-000000000200'); END $$;
 
 -- ============================================================
 -- HAZARDS: One test hazard on Route 1
