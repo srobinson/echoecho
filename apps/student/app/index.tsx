@@ -28,7 +28,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigationStore } from '../src/stores/navigationStore';
 import { useRouteHistory } from '../src/hooks/useRouteHistory';
 import { useSttDestination } from '../src/hooks/useSttDestination';
-import { loadBuildingIndex } from '../src/lib/buildingIndex';
+import { loadBuildingIndex, fuzzySearch } from '../src/lib/buildingIndex';
 
 // Show at most 5 favorites on the home screen; remainder accessible via "See all"
 const HOME_FAVORITES_LIMIT = 5;
@@ -77,6 +77,18 @@ export default function HomeScreen() {
     }
     void startListening();
   }, [sttUnavailable, startListening]);
+
+  const handleKeyboardSearch = useCallback((query: string) => {
+    const results = fuzzySearch(query);
+    if (results.length === 0) {
+      AccessibilityInfo.announceForAccessibility(`No destination found for ${query}.`);
+      return;
+    }
+    const best = results[0];
+    handleDestinationConfirmed(best.item.id, best.item.name);
+    setShowKeyboardFallback(false);
+    setKeyboardQuery('');
+  }, [handleDestinationConfirmed]);
 
   const topFavorites = favorites.slice(0, HOME_FAVORITES_LIMIT);
 
@@ -238,6 +250,10 @@ export default function HomeScreen() {
             autoFocus
             accessibilityLabel="Type your destination"
             returnKeyType="search"
+            onSubmitEditing={() => {
+              const q = keyboardQuery.trim();
+              if (q) handleKeyboardSearch(q);
+            }}
           />
           <Pressable
             style={({ pressed }) => [styles.sttRejectBtn, pressed && { opacity: 0.7 }]}
