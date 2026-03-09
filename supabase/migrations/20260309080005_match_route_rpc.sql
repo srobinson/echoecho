@@ -3,13 +3,13 @@
 -- Reversible via: supabase/migrations/down/20260309_005_match_route_rpc_down.sql
 --
 -- Dependencies (all present from migration 001):
-
-SET search_path TO public, extensions;
 --   - pg_trgm extension
 --   - GIN trigram index on buildings.name
 --   - GiST index on buildings.outline
 --   - GiST index on routes.path
 --   - routes.content_hash, routes.path, routes.total_distance_m
+
+SET search_path TO public, extensions;
 
 -- ============================================================
 -- match_route
