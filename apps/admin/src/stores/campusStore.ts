@@ -8,6 +8,7 @@ interface CampusStore {
   error: string | null;
   setActiveCampus: (campus: Campus | null) => void;
   setCampuses: (campuses: Campus[]) => void;
+  addCampus: (campus: Campus) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
 }
@@ -20,6 +21,7 @@ export const useCampusStore = create<CampusStore>((set) => ({
 
   setActiveCampus: (campus) => set({ activeCampus: campus }),
   setCampuses: (campuses) => set({ campuses }),
+  addCampus: (campus) => set((s) => ({ campuses: [...s.campuses, campus] })),
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error }),
 }));

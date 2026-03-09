@@ -19,6 +19,7 @@ type DetectionState =
 export function useCampusDetection() {
   const [state, setState] = useState<DetectionState>({ phase: 'idle' });
   const setCampuses = useCampusStore((s) => s.setCampuses);
+  const addCampus = useCampusStore((s) => s.addCampus);
   const setActiveCampus = useCampusStore((s) => s.setActiveCampus);
 
   const detect = useCallback(async () => {
@@ -104,13 +105,12 @@ export function useCampusDetection() {
     }
 
     const campus = created as unknown as Campus;
-    const existing = useCampusStore.getState().campuses;
-    setCampuses([...existing, campus]);
+    addCampus(campus);
     setActiveCampus(campus);
     setState({ phase: 'found', campus });
 
     return campus;
-  }, [setCampuses, setActiveCampus]);
+  }, [addCampus, setActiveCampus]);
 
   return { state, detect, selectCampus, createCampus };
 }
