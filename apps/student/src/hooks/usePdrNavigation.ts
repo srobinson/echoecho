@@ -74,6 +74,7 @@ export function usePdrNavigation(
   const magSubRef = useRef<ReturnType<typeof Magnetometer.addListener> | null>(null);
 
   const magHeadingRef = useRef(0);
+  const reanchorTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stepForward = useCallback(() => {
     const headingRad = (headingRef.current * Math.PI) / 180;
@@ -112,6 +113,10 @@ export function usePdrNavigation(
     accelSubRef.current = null;
     gyroSubRef.current = null;
     magSubRef.current = null;
+    if (reanchorTimerRef.current) {
+      clearInterval(reanchorTimerRef.current);
+      reanchorTimerRef.current = null;
+    }
     activeRef.current = false;
   }, []);
 
@@ -188,18 +193,22 @@ export function usePdrNavigation(
       posRef.current = { lat: gpsLat, lng: gpsLng };
       console.log('[PDR] reanchor snap', { deltaM });
     } else if (deltaM > 0) {
-      // Smooth interpolation over 2s (10 steps × 200ms)
+      // Smooth interpolation over 2s (10 steps x 200ms)
+      if (reanchorTimerRef.current) clearInterval(reanchorTimerRef.current);
       const steps = 10;
       const stepLat = dLat / steps;
       const stepLng = dLng / steps;
       let step = 0;
-      const timer = setInterval(() => {
+      reanchorTimerRef.current = setInterval(() => {
         posRef.current = {
           lat: posRef.current.lat + stepLat,
           lng: posRef.current.lng + stepLng,
         };
         step += 1;
-        if (step >= steps) clearInterval(timer);
+        if (step >= steps) {
+          clearInterval(reanchorTimerRef.current!);
+          reanchorTimerRef.current = null;
+        }
       }, 200);
     }
   }, []);
