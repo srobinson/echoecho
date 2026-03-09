@@ -33,7 +33,7 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EAS_TOKEN }}
 
-      - run: eas build --profile preview-admin --platform all --non-interactive --config ../../eas.json
+      - run: eas build --profile preview-admin --platform all --non-interactive
         working-directory: apps/admin
 
   eas-preview-student:
@@ -61,7 +61,7 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EAS_TOKEN }}
 
-      - run: eas build --profile preview-student --platform all --non-interactive --config ../../eas.json
+      - run: eas build --profile preview-student --platform all --non-interactive
         working-directory: apps/student
 
   deploy-edge-functions:
