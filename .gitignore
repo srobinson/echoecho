@@ -24,5 +24,4 @@ yarn-error.log*
 .yarn/build-state.yml
 .pnp.*
 .nancy/
-.yarnrc.yml
 supabase/.temp/
