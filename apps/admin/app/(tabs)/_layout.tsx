@@ -62,6 +62,15 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="hazards"
+        options={{
+          title: 'Hazards',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name="warning" focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',
