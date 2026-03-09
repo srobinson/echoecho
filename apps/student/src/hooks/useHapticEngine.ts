@@ -132,7 +132,6 @@ const DEFAULT_PATTERN_MAP: PatternMap =
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const MAX_QUEUE_DEPTH = 2;
-const STT_PAUSE_TIMEOUT_MS = 200;
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
@@ -197,13 +196,11 @@ export function useHapticEngine(
 
     const pattern = patternMapRef.current[key];
 
-    // STT mutex — iOS Taptic Engine is silenced during active dictation
+    // STT mutex — iOS Taptic Engine is silenced during active dictation.
+    // requestPause() resolves when the STT session confirms its pause
+    // (via pauseResolverRef in useSttDestination), so no polling needed.
     if (sttState?.isActive) {
       await sttState.requestPause();
-      const startWait = Date.now();
-      while (!sttState.confirmPaused() && Date.now() - startWait < STT_PAUSE_TIMEOUT_MS) {
-        await new Promise(r => setTimeout(r, 10));
-      }
     }
 
     try {
