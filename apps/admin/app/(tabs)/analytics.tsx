@@ -49,7 +49,7 @@ export default function AnalyticsDashboardScreen() {
   if (!activeCampus) {
     return (
       <SafeAreaView style={styles.container} edges={['bottom']}>
-        <View style={styles.centered}>
+        <View style={styles.centered} accessibilityRole="alert">
           <Text style={styles.emptyTitle}>No campus selected</Text>
           <Text style={styles.emptyBody}>
             Select a campus in Settings to view analytics.
@@ -62,8 +62,8 @@ export default function AnalyticsDashboardScreen() {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container} edges={['bottom']}>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#6c63ff" />
+        <View style={styles.centered} accessibilityLiveRegion="polite">
+          <ActivityIndicator size="large" color="#6c63ff" accessibilityLabel="Loading analytics" />
           <Text style={styles.loadingText}>Loading analytics...</Text>
         </View>
       </SafeAreaView>
