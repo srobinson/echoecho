@@ -1,6 +1,17 @@
 /**
- * Mapbox configuration constants.
+ * Mapbox configuration constants and initialisation.
  */
+
+import MapboxGL from '@rnmapbox/maps';
+
+let initialized = false;
+
+/** Call once during app startup (e.g. _layout.tsx) to set the Mapbox access token. */
+export function initMapbox(): void {
+  if (initialized) return;
+  MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '');
+  initialized = true;
+}
 
 /**
  * Mapbox Satellite Streets style — aerial imagery with road and label overlays.

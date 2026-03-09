@@ -8,8 +8,10 @@ import { useAuthListener } from '../src/hooks/useAuth';
 import { useProtectedRoute } from '../src/hooks/useProtectedRoute';
 import { useAuthStore } from '../src/stores/authStore';
 
+import { initMapbox } from '../src/lib/mapbox';
 import '../src/services/gpsRecordingService';
 
+initMapbox();
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {

@@ -42,8 +42,6 @@ import { useWaypointEdit } from '../../src/hooks/useWaypointEdit';
 import type { MapLayers } from '../../src/components/MapLayerControl';
 import type { Building, Route, Waypoint } from '@echoecho/shared';
 
-MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '');
-
 const TSBVI_CENTER: [number, number] = [-97.7468, 30.3495];
 const DEFAULT_ZOOM = 16;
 
