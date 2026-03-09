@@ -49,10 +49,10 @@ export default function RoutesScreen() {
     setIsLoading(true);
 
     let query = supabase
-      .from('routes')
-      .select('*, waypoints(*)')
-      .eq('campus_id', activeCampus.id)
-      .order('updated_at', { ascending: false });
+      .from('v_routes' as 'routes')
+      .select('*')
+      .eq('campusId' as 'campus_id', activeCampus.id)
+      .order('updatedAt' as 'updated_at', { ascending: false });
 
     if (status !== 'all') {
       query = query.eq('status', status);
@@ -67,7 +67,7 @@ export default function RoutesScreen() {
     const { data, error } = await query;
 
     if (!error) {
-      setRoutes((data ?? []) as unknown as Route[]);
+      setRoutes((data ?? []) as Route[]);
     }
     setIsLoading(false);
   }, [activeCampus]);

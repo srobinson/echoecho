@@ -137,6 +137,7 @@ export function useBuildingDraw(campusId: string | null) {
       description: metadata.description || undefined,
     };
 
+    const wkt = `SRID=4326;POLYGON((${footprintRing.map(([lng, lat]) => `${lng} ${lat}`).join(', ')}))`;
     const { data, error } = await supabase
       .from('buildings')
       .insert({
@@ -144,8 +145,7 @@ export function useBuildingDraw(campusId: string | null) {
         name: input.name,
         short_name: input.shortName ?? null,
         category: input.category,
-        footprint: `POLYGON((${footprintRing.map(([lng, lat]) => `${lng} ${lat}`).join(', ')}))`,
-        main_entrance: `POINT(${centroid[0]} ${centroid[1]})`,
+        outline: wkt,
         description: input.description ?? null,
       })
       .select('*')
@@ -162,12 +162,12 @@ export function useBuildingDraw(campusId: string | null) {
       id: data.id,
       campusId: data.campus_id,
       name: data.name,
-      shortName: data.short_name,
-      category: data.category,
+      shortName: data.short_name ?? data.name,
+      category: data.category ?? 'other',
       footprint: state.vertices,
       mainEntrance: { latitude: centroid[1], longitude: centroid[0] },
       entrances: [],
-      floor: data.floor_count ?? null,
+      floor: data.floors ?? null,
       description: data.description,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
@@ -196,7 +196,7 @@ export function useBuildingDraw(campusId: string | null) {
       .insert({
         building_id: building.id,
         name,
-        location: `POINT(${snapped[0]} ${snapped[1]})`,
+        coordinate: { longitude: snapped[0], latitude: snapped[1] },
         is_main: isMain,
       })
       .select('*')

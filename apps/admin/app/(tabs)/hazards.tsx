@@ -81,22 +81,21 @@ export default function HazardsScreen() {
     setIsLoading(true);
 
     let query = supabase
-      .from('hazards')
+      .from('v_hazards' as 'hazards')
       .select('*')
-      .eq('campus_id', activeCampus.id)
-      .is('resolved_at', null)
-      .order('created_at', { ascending: false });
+      .eq('campusId' as 'campus_id', activeCampus.id)
+      .order('createdAt' as 'created_at', { ascending: false });
 
     if (typeFilter) {
       query = query.eq('type', typeFilter);
     }
     if (routeFilter) {
-      query = query.eq('route_id', routeFilter);
+      query = query.eq('routeId' as 'route_id', routeFilter);
     }
 
     const { data, error } = await query;
     if (!error && data) {
-      setHazards(data as unknown as Hazard[]);
+      setHazards(data as Hazard[]);
     }
     setIsLoading(false);
   }, [activeCampus, typeFilter, routeFilter]);
@@ -104,11 +103,11 @@ export default function HazardsScreen() {
   const fetchRoutes = useCallback(async () => {
     if (!activeCampus) return;
     const { data } = await supabase
-      .from('routes')
+      .from('v_routes' as 'routes')
       .select('id, name')
-      .eq('campus_id', activeCampus.id)
+      .eq('campusId' as 'campus_id', activeCampus.id)
       .in('status', ['draft', 'published']);
-    if (data) setRoutes(data as unknown as Route[]);
+    if (data) setRoutes(data as Route[]);
   }, [activeCampus]);
 
   useEffect(() => {
@@ -206,7 +205,7 @@ export default function HazardsScreen() {
       campus_id: activeCampus.id,
       type: params.type,
       severity: 'medium',
-      coordinate: `POINT(${addCoordinate[0]} ${addCoordinate[1]})`,
+      coordinate: { longitude: addCoordinate[0], latitude: addCoordinate[1] },
       title: HAZARD_LABELS[params.type],
       expires_at: params.expiresAt,
     });

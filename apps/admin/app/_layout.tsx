@@ -36,51 +36,21 @@ export default function RootLayout() {
     if (!session) return;
 
     supabase
-      .from('campuses')
-      .select('id, name, location, bounds, security_phone, created_at, updated_at')
-      .is('deleted_at', null)
+      .from('v_campuses' as 'campuses')
+      .select('*')
       .order('name')
       .then(({ data, error }) => {
-        if (error || !data || data.length === 0) return;
+        if (error || !data || data.length === 0) {
+          useCampusStore.getState().setLoading(false);
+          return;
+        }
 
-        const campuses = data.map((c: {
-          id: string;
-          name: string;
-          location: { coordinates: [number, number] } | null;
-          bounds: { coordinates: [number[][]] } | null;
-          created_at: string;
-          updated_at: string;
-        }): Campus => {
-          const coords = c.location?.coordinates;
-          const center = coords
-            ? { latitude: coords[1], longitude: coords[0] }
-            : { latitude: 0, longitude: 0 };
-
-          const ring = c.bounds?.coordinates?.[0] ?? [];
-          const lats = ring.map((p: number[]) => p[1]);
-          const lngs = ring.map((p: number[]) => p[0]);
-
-          return {
-            id: c.id,
-            name: c.name,
-            shortName: c.name,
-            center,
-            bounds: lats.length > 0
-              ? {
-                  northEast: { latitude: Math.max(...lats), longitude: Math.max(...lngs) },
-                  southWest: { latitude: Math.min(...lats), longitude: Math.min(...lngs) },
-                }
-              : { northEast: center, southWest: center },
-            defaultZoom: 16,
-            createdAt: c.created_at,
-            updatedAt: c.updated_at,
-          };
-        });
-
+        const campuses = data as unknown as Campus[];
         useCampusStore.getState().setCampuses(campuses);
         if (!useCampusStore.getState().activeCampus) {
           useCampusStore.getState().setActiveCampus(campuses[0]);
         }
+        useCampusStore.getState().setLoading(false);
       });
   }, [session]);
 

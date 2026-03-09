@@ -34,21 +34,21 @@ export function useAdminMapData(campusId: string | null): AdminMapData {
     try {
       const [buildingsResult, routesResult] = await Promise.all([
         supabase
-          .from('buildings')
-          .select('*, entrances:building_entrances(*)')
-          .eq('campus_id', campusId),
+          .from('v_buildings' as 'buildings')
+          .select('*')
+          .eq('campusId' as 'campus_id', campusId),
         supabase
-          .from('routes')
-          .select('*, waypoints(*), hazards(*)')
-          .eq('campus_id', campusId)
+          .from('v_routes' as 'routes')
+          .select('*')
+          .eq('campusId' as 'campus_id', campusId)
           .in('status', ['draft', 'published']),
       ]);
 
       if (buildingsResult.error) throw new Error(buildingsResult.error.message);
       if (routesResult.error) throw new Error(routesResult.error.message);
 
-      setBuildings((buildingsResult.data ?? []) as unknown as Building[]);
-      setRoutes((routesResult.data ?? []) as unknown as Route[]);
+      setBuildings((buildingsResult.data ?? []) as Building[]);
+      setRoutes((routesResult.data ?? []) as Route[]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load map data');
     } finally {

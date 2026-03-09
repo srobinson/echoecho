@@ -367,6 +367,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 12,
     right: 12,
+    zIndex: 10,
+    elevation: 10,
   },
   drawToolbarContainer: {
     position: 'absolute',

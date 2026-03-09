@@ -198,14 +198,14 @@ export function useWaypointEdit() {
 
       // Update existing
       for (const w of existingWaypoints) {
+        const geomWkt = `SRID=4326;POINT(${w.coordinate.longitude} ${w.coordinate.latitude})`;
         const { error } = await supabase
           .from('waypoints')
           .update({
-            sequence_index: w.sequenceIndex,
-            location: `POINT(${w.coordinate.longitude} ${w.coordinate.latitude})`,
+            position: w.sequenceIndex,
+            geom: geomWkt,
             type: w.type,
-            audio_label: w.audioLabel,
-            description: w.description,
+            annotation_text: w.audioLabel,
           })
           .eq('id', w.id);
         if (error) throw error;
@@ -217,11 +217,11 @@ export function useWaypointEdit() {
           .from('waypoints')
           .insert(newWaypoints.map((w) => ({
             route_id: route.id,
-            sequence_index: w.sequenceIndex,
-            location: `POINT(${w.coordinate.longitude} ${w.coordinate.latitude})`,
+            position: w.sequenceIndex,
+            recorded_at: new Date().toISOString(),
+            geom: `SRID=4326;POINT(${w.coordinate.longitude} ${w.coordinate.latitude})`,
             type: w.type,
-            audio_label: w.audioLabel,
-            description: w.description,
+            annotation_text: w.audioLabel,
           })));
         if (error) throw error;
       }
