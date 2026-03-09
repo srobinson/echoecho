@@ -1,73 +1,153 @@
 /**
- * Routes list tab — shows all recorded routes for the active campus.
- * ALP-968: Full route management (implemented in ALP-990 sprint)
+ * Routes list tab: route management with server-side filtering and search.
+ * ALP-968: Filter by status, search by name (debounced 300ms), sort by recency.
  */
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import {
   View,
   Text,
   FlatList,
   Pressable,
+  TextInput,
   StyleSheet,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouteStore } from '../../src/stores/routeStore';
 import { useCampusStore } from '../../src/stores/campusStore';
 import { supabase } from '../../src/lib/supabase';
-import type { Route } from '@echoecho/shared';
+import type { Route, RouteStatus } from '@echoecho/shared';
+
+type FilterStatus = 'all' | RouteStatus;
+
+const STATUS_FILTERS: { value: FilterStatus; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'draft', label: 'Draft' },
+  { value: 'published', label: 'Published' },
+  { value: 'retracted', label: 'Archived' },
+];
+
+const STATUS_COLOR: Record<string, string> = {
+  draft: '#F59E0B',
+  published: '#22C55E',
+  retracted: '#9CA3AF',
+  pending_save: '#9CA3AF',
+};
 
 export default function RoutesScreen() {
-  const { routes, isLoading, setRoutes, setLoading, setError } = useRouteStore();
+  const [routes, setRoutes] = useState<Route[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const activeCampus = useCampusStore((s) => s.activeCampus);
 
-  const fetchRoutes = useCallback(async () => {
+  const fetchRoutes = useCallback(async (search: string, status: FilterStatus) => {
     if (!activeCampus) return;
-    setLoading(true);
-    setError(null);
+    setIsLoading(true);
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('routes')
       .select('*, waypoints(*)')
       .eq('campus_id', activeCampus.id)
-      .in('status', ['draft', 'published'])
-      .is('deleted_at', null)
       .order('updated_at', { ascending: false });
 
-    if (error) {
-      setError(error.message);
+    if (status !== 'all') {
+      query = query.eq('status', status);
     } else {
+      query = query.in('status', ['draft', 'published', 'retracted']);
+    }
+
+    if (search.trim()) {
+      query = query.ilike('name', `%${search.trim()}%`);
+    }
+
+    const { data, error } = await query;
+
+    if (!error) {
       setRoutes((data ?? []) as unknown as Route[]);
     }
-    setLoading(false);
-  }, [activeCampus, setRoutes, setLoading, setError]);
+    setIsLoading(false);
+  }, [activeCampus]);
 
   useEffect(() => {
-    void fetchRoutes();
-  }, [fetchRoutes]);
+    void fetchRoutes(searchQuery, statusFilter);
+  }, [fetchRoutes, statusFilter]);
 
-  if (isLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#6c63ff" />
-      </View>
-    );
-  }
+  const handleSearch = useCallback((text: string) => {
+    setSearchQuery(text);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      void fetchRoutes(text, statusFilter);
+    }, 300);
+  }, [fetchRoutes, statusFilter]);
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <FlatList
-        data={routes}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-        ListEmptyComponent={<EmptyState />}
-        renderItem={({ item }) => (
-          <RouteCard route={item} onPress={() => router.push(`/route/${item.id}`)} />
+      <View style={styles.searchContainer}>
+        <Ionicons name="search" size={18} color="#8888aa" style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          value={searchQuery}
+          onChangeText={handleSearch}
+          placeholder="Search routes..."
+          placeholderTextColor="#5555aa"
+          accessibilityLabel="Search routes by name"
+          accessibilityHint="Results update as you type"
+          returnKeyType="search"
+        />
+        {searchQuery.length > 0 && (
+          <Pressable
+            onPress={() => handleSearch('')}
+            accessibilityLabel="Clear search"
+            accessibilityRole="button"
+            style={styles.clearBtn}
+          >
+            <Ionicons name="close-circle" size={18} color="#8888aa" />
+          </Pressable>
         )}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-      />
+      </View>
+
+      <View style={styles.filterRow}>
+        {STATUS_FILTERS.map((f) => (
+          <Pressable
+            key={f.value}
+            style={[styles.filterChip, statusFilter === f.value && styles.filterChipActive]}
+            onPress={() => setStatusFilter(f.value)}
+            accessibilityLabel={`Filter: ${f.label}`}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: statusFilter === f.value }}
+          >
+            <Text style={[
+              styles.filterLabel,
+              statusFilter === f.value && styles.filterLabelActive,
+            ]}>
+              {f.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {isLoading ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#6c63ff" />
+        </View>
+      ) : (
+        <FlatList
+          data={routes}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          ListEmptyComponent={<EmptyState hasFilter={statusFilter !== 'all' || searchQuery.length > 0} />}
+          renderItem={({ item }) => (
+            <RouteCard route={item} onPress={() => router.push(`/route/${item.id}`)} />
+          )}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          accessibilityRole="list"
+        />
+      )}
+
       <Pressable
         style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
         onPress={() => router.push('/record')}
@@ -80,67 +160,94 @@ export default function RoutesScreen() {
   );
 }
 
+function staticMapUrl(route: Route): string | null {
+  if (route.waypoints.length < 2) return null;
+  const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
+  if (!token) return null;
+
+  const coords = route.waypoints.map((w) =>
+    `${w.coordinate.longitude.toFixed(5)},${w.coordinate.latitude.toFixed(5)}`,
+  );
+  const path = `path-3+6c63ff-0.8(${encodeURIComponent(coords.join(','))})`;
+  const lngs = route.waypoints.map((w) => w.coordinate.longitude);
+  const lats = route.waypoints.map((w) => w.coordinate.latitude);
+  const bbox = [
+    Math.min(...lngs) - 0.001,
+    Math.min(...lats) - 0.001,
+    Math.max(...lngs) + 0.001,
+    Math.max(...lats) + 0.001,
+  ].join(',');
+
+  return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${path}/[${bbox}]/300x120@2x?access_token=${token}`;
+}
+
 function RouteCard({ route, onPress }: { route: Route; onPress: () => void }) {
-  const statusColor =
-    route.status === 'published'
-      ? '#48bb78'
-      : route.status === 'draft'
-      ? '#ed8936'
-      : '#8888aa';
+  const statusColor = STATUS_COLOR[route.status] ?? '#9CA3AF';
+  const mapUrl = staticMapUrl(route);
+  const dateStr = route.recordedAt
+    ? new Date(route.recordedAt).toLocaleDateString()
+    : new Date(route.createdAt).toLocaleDateString();
 
   return (
     <Pressable
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
       onPress={onPress}
-      accessibilityLabel={`Route: ${route.name}. Status: ${route.status}. ${route.waypoints.length} waypoints.`}
+      accessibilityLabel={`${route.name}, ${route.status}, from ${route.fromLabel} to ${route.toLabel}, recorded ${dateStr}`}
       accessibilityRole="button"
     >
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle} numberOfLines={1}>
-          {route.name}
-        </Text>
-        <View style={[styles.statusBadge, { backgroundColor: `${statusColor}22` }]}>
-          <Text style={[styles.statusText, { color: statusColor }]}>
-            {route.status}
+      {mapUrl && (
+        <Image
+          source={{ uri: mapUrl }}
+          style={styles.mapPreview}
+          accessible
+          accessibilityLabel={`Route map: ${route.name}`}
+        />
+      )}
+      <View style={styles.cardContent}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle} numberOfLines={1}>
+            {route.name}
           </Text>
-        </View>
-      </View>
-      <View style={styles.cardMeta}>
-        <View style={styles.metaItem}>
-          <Ionicons name="location-outline" size={14} color="#8888aa" />
-          <Text style={styles.metaText}>{route.waypoints.length} waypoints</Text>
-        </View>
-        {route.distanceMeters != null && (
-          <View style={styles.metaItem}>
-            <Ionicons name="arrow-forward-outline" size={14} color="#8888aa" />
-            <Text style={styles.metaText}>
-              {(route.distanceMeters / 1000).toFixed(2)} km
+          <View style={[styles.statusBadge, { backgroundColor: `${statusColor}22` }]}>
+            <Text style={[styles.statusText, { color: statusColor }]}>
+              {route.status}
             </Text>
           </View>
-        )}
-        {route.recordedDurationSec != null && (
+        </View>
+        <View style={styles.cardMeta}>
           <View style={styles.metaItem}>
-            <Ionicons name="time-outline" size={14} color="#8888aa" />
-            <Text style={styles.metaText}>
-              {Math.round(route.recordedDurationSec / 60)} min
-            </Text>
+            <Ionicons name="location-outline" size={14} color="#8888aa" />
+            <Text style={styles.metaText}>{route.waypoints.length} wp</Text>
           </View>
-        )}
+          {route.distanceMeters != null && (
+            <View style={styles.metaItem}>
+              <Ionicons name="arrow-forward-outline" size={14} color="#8888aa" />
+              <Text style={styles.metaText}>
+                {(route.distanceMeters / 1000).toFixed(2)} km
+              </Text>
+            </View>
+          )}
+          <Text style={styles.dateText}>{dateStr}</Text>
+        </View>
+        <Text style={styles.routeLabels} numberOfLines={1}>
+          {route.fromLabel} → {route.toLabel}
+        </Text>
       </View>
-      <Text style={styles.routeLabels} numberOfLines={1}>
-        {route.fromLabel} → {route.toLabel}
-      </Text>
     </Pressable>
   );
 }
 
-function EmptyState() {
+function EmptyState({ hasFilter }: { hasFilter: boolean }) {
   return (
     <View style={styles.empty}>
       <Ionicons name="navigate-outline" size={64} color="#2a2a3e" />
-      <Text style={styles.emptyTitle}>No routes yet</Text>
+      <Text style={styles.emptyTitle}>
+        {hasFilter ? 'No matching routes' : 'No routes yet'}
+      </Text>
       <Text style={styles.emptyBody}>
-        Tap the record button to walk and capture your first route.
+        {hasFilter
+          ? 'Try adjusting your search or filter.'
+          : 'Tap the record button to walk and capture your first route.'}
       </Text>
     </View>
   );
@@ -149,21 +256,68 @@ function EmptyState() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f0f1a' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a2e',
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#2a2a3e',
+    minHeight: 44,
+  },
+  searchIcon: { marginRight: 8 },
+  searchInput: {
+    flex: 1,
+    color: '#e8e8f0',
+    fontSize: 15,
+    paddingVertical: 10,
+  },
+  clearBtn: { padding: 4 },
+  filterRow: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#1a1a2e',
+    borderWidth: 1,
+    borderColor: '#2a2a3e',
+    minHeight: 36,
+    justifyContent: 'center',
+  },
+  filterChipActive: {
+    backgroundColor: '#6c63ff22',
+    borderColor: '#6c63ff',
+  },
+  filterLabel: { color: '#8888aa', fontSize: 13, fontWeight: '600' },
+  filterLabelActive: { color: '#6c63ff' },
   list: { padding: 16, paddingBottom: 80 },
   separator: { height: 8 },
   card: {
     backgroundColor: '#1a1a2e',
     borderRadius: 12,
-    padding: 16,
     borderWidth: 1,
     borderColor: '#2a2a3e',
+    overflow: 'hidden',
   },
   cardPressed: { opacity: 0.8 },
+  mapPreview: {
+    width: '100%',
+    height: 100,
+    backgroundColor: '#14142a',
+  },
+  cardContent: { padding: 14, gap: 6 },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
   },
   cardTitle: {
     color: '#e8e8f0',
@@ -178,9 +332,10 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   statusText: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
-  cardMeta: { flexDirection: 'row', gap: 12, marginBottom: 6 },
+  cardMeta: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   metaText: { color: '#8888aa', fontSize: 12 },
+  dateText: { color: '#5555aa', fontSize: 11, marginLeft: 'auto' },
   routeLabels: { color: '#6888aa', fontSize: 13 },
   fab: {
     position: 'absolute',
