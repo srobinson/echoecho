@@ -40,8 +40,8 @@
 [ ]    ↳ ALP-958  Implement turn-by-turn haptic feedback engine              High      Todo         mobile-engineer
 [ ]    ↳ ALP-959  Implement audio announcements via TTS                      High      Todo         mobile-engineer
 [ ]    ↳ ALP-960  Build off-route detection and re-guidance                  High      Todo         mobile-engineer
-[ ]  ALP-988      Admin Panel [ux-designer]                                  Medium    Todo         ux-designer
-[ ]    ↳ ALP-969  Build route simulation mode                                Medium    Todo         ux-designer
+[X]  ALP-988      Admin Panel [ux-designer]                                  Medium    Worker Done  ux-designer
+[X]    ↳ ALP-969  Build route simulation mode                                Medium    Worker Done  ux-designer
 [ ]  ALP-989      Admin Panel [backend-engineer]                             Medium    Todo         backend-engineer
 [ ]    ↳ ALP-971  Build user management and roles                            Medium    Todo         backend-engineer
 [ ]  ALP-990      Admin Panel [frontend-engineer]                            Medium    Todo         frontend-engineer
