@@ -193,7 +193,7 @@ export function useVoiceAnnotation(): UseVoiceAnnotationReturn {
 
       return { transcript, audioUri, uploadedKey };
     },
-    [state],
+    [state.phase, state.transcript, state.audioUri],
   );
 
   const discard = useCallback((): void => {
