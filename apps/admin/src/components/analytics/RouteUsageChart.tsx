@@ -1,14 +1,11 @@
 import { View, Text, FlatList, StyleSheet, useWindowDimensions } from 'react-native';
-import { CartesianChart, Bar } from '@echoecho/ui';
+import { BarChart } from '@echoecho/ui';
 import type { RouteUsageStat } from '@echoecho/shared';
 
 interface Props {
   data: RouteUsageStat[];
 }
 
-/**
- * Top 10 routes by navigation count. Bar chart with accessible data table.
- */
 export function RouteUsageChart({ data }: Props) {
   const { width } = useWindowDimensions();
   const chartWidth = width - 64;
@@ -33,25 +30,16 @@ export function RouteUsageChart({ data }: Props) {
       <Text style={styles.title}>Route Usage</Text>
       <Text style={styles.subtitle}>Top {data.length} routes by navigation count</Text>
 
-      <View accessible={false} style={[styles.chartContainer, { width: chartWidth }]}>
-        <CartesianChart
+      <View accessible={false} style={styles.chartContainer}>
+        <BarChart
           data={chartData}
-          xKey="x"
-          yKeys={['y']}
-          domainPadding={{ left: 12, right: 12 }}
-        >
-          {({ points, chartBounds }) => (
-            <Bar
-              points={points.y}
-              chartBounds={chartBounds}
-              color="#6c63ff"
-              roundedCorners={{ topLeft: 4, topRight: 4 }}
-            />
-          )}
-        </CartesianChart>
+          width={chartWidth}
+          height={200}
+          color="#6c63ff"
+          barRadius={4}
+        />
       </View>
 
-      {/* Screen reader accessible data table */}
       <FlatList
         data={data}
         keyExtractor={(item) => item.routeId}

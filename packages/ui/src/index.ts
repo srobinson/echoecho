@@ -3,9 +3,7 @@ export type { HazardPickerSheetProps } from './HazardPickerSheet';
 export { colors, spacing, radii, fontSizes } from './tokens';
 export type { ColorToken } from './tokens';
 
-export {
-  Bar,
-  CartesianChart,
-  Line,
-  useChartPressState,
-} from 'victory-native';
+export { BarChart } from './BarChart';
+export type { BarChartProps, BarChartDatum } from './BarChart';
+export { LineChart } from './LineChart';
+export type { LineChartProps, LineChartDatum } from './LineChart';
