@@ -14,7 +14,7 @@
  * Re-route suggestion fires at > 50m only when network is available.
  * Re-route recalculation is out of scope — this issue detects and announces.
  */
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { AccessibilityInfo } from 'react-native';
 import type { NavEvent } from '../types/navEvents';
 import type { TrackPositionUpdate } from '../types/navEvents';
@@ -50,6 +50,15 @@ export function useOffRouteDetection(
   const inHysteresisRef = useRef(false);
   const stationaryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suppressCorrectiveRef = useRef(false);
+
+  // Clear all timers on unmount to prevent stale closures and phantom announcements
+  useEffect(() => {
+    return () => {
+      if (correctiveTimerRef.current) clearInterval(correctiveTimerRef.current);
+      if (hysteresisTimerRef.current) clearTimeout(hysteresisTimerRef.current);
+      if (stationaryTimerRef.current) clearTimeout(stationaryTimerRef.current);
+    };
+  }, []);
 
   const stopCorrectiveGuidance = useCallback(() => {
     if (correctiveTimerRef.current) {
