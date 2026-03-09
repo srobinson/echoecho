@@ -127,9 +127,7 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 1. Go to the Settings tab
 2. Tap "Sign Out"
 
-**Expected**: App redirects to the login screen. The session is cleared from AsyncStorage.
-
-**Known issue (pre-fix)**: The sign-out button in `settings.tsx` currently shows a placeholder Alert instead of calling `signOut()`. This needs to be wired up. See the "Code fixes needed" section below.
+**Expected**: Confirmation dialog appears. After confirming, the app redirects to the login screen. The session is cleared from AsyncStorage.
 
 ---
 
@@ -156,9 +154,8 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 - If colored polylines appear: routes query works
 - If POI markers appear at waypoint locations: waypoints query works
 
-**If nothing loads and map is empty**: Open adb logcat and filter for "supabase" or JavaScript errors. Common causes:
-- `campusStore.activeCampus` is null (no campus selected). The map tab filters by `activeCampus?.id` and won't query if null.
-- Solution: The campus store needs to be initialized. Currently there is no campus selector UI. You may need to manually set it by adding a temporary `useEffect` that calls `useCampusStore.getState().setActiveCampus(...)`.
+**If nothing loads and map is empty**: Open adb logcat and filter for "supabase" or JavaScript errors. Common cause:
+- The campus store auto-initializes from Supabase after auth (see `_layout.tsx`). If the campuses query returns no rows, `activeCampus` stays null and data queries return nothing. Verify seed data exists.
 
 ### Test 2: Routes List Tab
 
@@ -324,66 +321,24 @@ The sync engine queries `routes` and `waypoints` tables. To verify:
 
 ---
 
-## Code Fixes Needed Before Device Verification
+## Remaining Gaps for Device Verification
 
-These issues were identified during code review and will prevent certain tests from passing.
+Items 1, 2, and 4 from the original code review were resolved in this commit. Two gaps remain.
 
-### 1. Sign-out button is a placeholder (ALP-1000 Test 5)
-
-**File**: `apps/admin/app/(tabs)/settings.tsx` line 46
-
-The sign-out button shows `Alert.alert('Sign out', 'Sign out will be implemented...')` instead of calling `signOut()`. Fix:
-
-```typescript
-import { useAuthStore } from '../../src/stores/authStore';
-// In the component:
-const { signOut } = useAuthStore();
-// Replace the Alert.alert onPress with:
-onPress={() => signOut()}
-```
-
-### 2. Campus store never initialized (ALP-1001 Test 1, ALP-1002 Test 2)
-
-The admin app's `campusStore` is never populated from Supabase. The map tab depends on `activeCampus?.id` to fetch data. Without initialization, the map shows no custom layers.
-
-**Fix needed**: Add a hook or effect in the root layout that fetches campuses and sets the first one as active:
-
-```typescript
-useEffect(() => {
-  supabase.from('campuses').select('*').then(({ data }) => {
-    if (data?.[0]) {
-      useCampusStore.getState().setCampuses(data);
-      useCampusStore.getState().setActiveCampus(data[0]);
-    }
-  });
-}, []);
-```
-
-### 3. Route store never populated (ALP-1001 Test 2)
+### 1. Route store never populated (ALP-1001 Test 2)
 
 The routes list tab reads from `routeStore.routes`, but no hook or effect fetches routes from Supabase and writes them into the store.
 
 **Fix needed**: The routes tab or a parent component needs to fetch routes on mount.
 
-### 4. Missing tables (All tests)
+### 2. Student app has no auth gate (ALP-1003 blocker)
 
-Migration 007 (`20260309080007_missing_tables.sql`) adds `building_entrances`, `hazards`, `pois`, and `campuses.security_phone`. This migration must be applied to staging before the data queries will succeed. Without it:
-
-- Admin map data query fails on `building_entrances` join
-- Admin map data query fails on `hazards` join
-- Student CampusContext fails on `pois` query
-- Student CampusContext fails on `campuses.security_phone` column
-
-### 5. Student app has no auth gate
-
-The student app does not require sign-in. The Supabase client uses the anon key. RLS policies allow students to read published routes scoped to their campus. For the student queries to work, the `anon` role needs read access. Verify RLS policies allow anon for published routes, or add a student auth flow.
-
-**Current behavior**: The student Supabase client is initialized with the anon key and no session. RLS policies require `current_user_role()` which queries `profiles` using `auth.uid()`. Without a session, `auth.uid()` returns NULL, so `current_user_role()` returns NULL, and all RLS policies deny access.
+The student app does not require sign-in. The Supabase client uses the anon key. RLS policies require `current_user_role()` which queries `profiles` using `auth.uid()`. Without a session, `auth.uid()` returns NULL, so `current_user_role()` returns NULL, and all RLS policies deny access.
 
 **Fix options**:
 - Add an anonymous sign-in flow: `await supabase.auth.signInAnonymously()`
-- Or add RLS policies that allow anon reads on published data
-- Or add a student auth screen (mirror the admin login)
+- Add RLS policies that allow anon reads on published data
+- Add a student auth screen (mirror the admin login)
 
 This is a significant blocker for ALP-1003.
 
