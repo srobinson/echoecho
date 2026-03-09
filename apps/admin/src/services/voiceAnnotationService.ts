@@ -214,6 +214,12 @@ export async function stopVoiceAnnotationRecording(
 
 // ── Upload ────────────────────────────────────────────────────────────────────
 
+/** Convert a local file URI to a Blob via fetch, avoiding base64 materialization in JS heap. */
+async function uriToBlob(uri: string): Promise<Blob> {
+  const response = await fetch(uri);
+  return response.blob();
+}
+
 const RETRY_QUEUE_PATH = `${FileSystem.documentDirectory}audio-upload-queue.json`;
 
 interface AudioRetryItem {
@@ -255,14 +261,11 @@ export async function uploadVoiceAnnotation(
   const storageKey = `pending/${waypointLocalId}.m4a`;
 
   try {
-    const base64 = await FileSystem.readAsStringAsync(localUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    const blob = await uriToBlob(localUri);
 
     const { error } = await supabase.storage
       .from(STORAGE_BUCKET)
-      .upload(storageKey, bytes, { contentType: 'audio/mp4', upsert: true });
+      .upload(storageKey, blob, { contentType: 'audio/mp4', upsert: true });
 
     if (error) throw error;
 
@@ -282,14 +285,11 @@ export async function processAudioUploadRetryQueue(): Promise<void> {
 
   for (const item of queue) {
     try {
-      const base64 = await FileSystem.readAsStringAsync(item.localUri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      const blob = await uriToBlob(item.localUri);
 
       const { error } = await supabase.storage
         .from(STORAGE_BUCKET)
-        .upload(item.storageKey, bytes, { contentType: 'audio/mp4', upsert: true });
+        .upload(item.storageKey, blob, { contentType: 'audio/mp4', upsert: true });
 
       if (error) throw error;
     } catch {
