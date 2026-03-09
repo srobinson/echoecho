@@ -27,22 +27,64 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import * as Location from 'expo-location';
 
 import { useCampus } from '../src/context/CampusContext';
 import { useEmergencyRouting } from '../src/hooks/useEmergencyRouting';
 import { useNavigationStore } from '../src/stores/navigationStore';
 
+/**
+ * Acquire a GPS position independent of navigation session state.
+ * Uses the navigation store position as an immediate seed (if available),
+ * then requests a fresh one-shot fix so the emergency screen works from
+ * any context (home screen, post-navigation, mid-navigation).
+ */
+function useEmergencyPosition() {
+  const { currentSession } = useNavigationStore();
+
+  const sessionPos = currentSession?.currentPosition;
+  const [position, setPosition] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(
+    sessionPos
+      ? { latitude: sessionPos.latitude, longitude: sessionPos.longitude }
+      : null,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (status !== 'granted') return;
+
+        const loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        });
+
+        if (!cancelled) {
+          setPosition({
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+          });
+        }
+      } catch {
+        // One-shot fix failed; keep whatever seed we had (or null)
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, []);
+
+  return position;
+}
+
 export default function EmergencyScreen() {
   const { campus, entrances, securityWaypoints } = useCampus();
-  const { currentSession } = useNavigationStore();
+  const currentPosition = useEmergencyPosition();
   const instructionRef = useRef<View>(null);
-
-  const currentPosition = currentSession?.currentPosition
-    ? {
-        latitude: currentSession.currentPosition.latitude,
-        longitude: currentSession.currentPosition.longitude,
-      }
-    : null;
 
   const nearestExit = useEmergencyRouting({
     currentPosition,
