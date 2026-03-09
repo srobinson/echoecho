@@ -1,28 +1,65 @@
 // Edge Function: auth-webhook
 // Receives Supabase Auth events and writes to activity_log.
-// Configure in Supabase dashboard: Authentication → Webhooks → Add webhook
+// Configure in Supabase dashboard: Authentication > Webhooks > Add webhook
 //   URL:    https://<project>.supabase.co/functions/v1/auth-webhook
 //   Events: LOGIN
 //   Secret: set AUTH_WEBHOOK_SECRET in function secrets
 //
-// POST /functions/v1/auth-webhook
-// Auth: Supabase HMAC-signed webhook header (Authorization: Bearer <secret>)
-//
-// Event payload shape (Supabase Auth):
-//   { type: 'LOGIN', event: { user: { id, email } }, created_at: string }
+// Supabase Auth signs webhook payloads with HMAC-SHA256 using the shared
+// secret. The signature is sent in the x-supabase-signature header as hex.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+function hexToBytes(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  }
+  return bytes;
+}
+
+async function verifyHmacSignature(
+  secret: string,
+  signature: string,
+  body: string,
+): Promise<boolean> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['verify'],
+  );
+  return crypto.subtle.verify(
+    'HMAC',
+    key,
+    hexToBytes(signature),
+    encoder.encode(body),
+  );
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') {
     return new Response(null, { status: 405 });
   }
 
-  // Reject if AUTH_WEBHOOK_SECRET is not configured — fail closed, not open.
   const webhookSecret = Deno.env.get('AUTH_WEBHOOK_SECRET');
-  const authHeader = req.headers.get('Authorization') ?? '';
+  if (!webhookSecret) {
+    console.error('[auth-webhook] AUTH_WEBHOOK_SECRET not configured');
+    return new Response('Unauthorized', { status: 401 });
+  }
 
-  if (!webhookSecret || authHeader !== `Bearer ${webhookSecret}`) {
+  const rawBody = await req.text();
+  const signature = req.headers.get('x-supabase-signature') ?? '';
+
+  if (!signature) {
+    return new Response('Unauthorized', { status: 401 });
+  }
+
+  const valid = await verifyHmacSignature(webhookSecret, signature, rawBody);
+  if (!valid) {
+    console.error('[auth-webhook] HMAC signature verification failed');
     return new Response('Unauthorized', { status: 401 });
   }
 
@@ -32,12 +69,11 @@ Deno.serve(async (req: Request) => {
   };
 
   try {
-    payload = await req.json();
+    payload = JSON.parse(rawBody);
   } catch {
     return new Response('Invalid JSON', { status: 400 });
   }
 
-  // Only handle LOGIN events; ignore others silently.
   if (payload.type !== 'LOGIN') {
     return new Response(null, { status: 204 });
   }
