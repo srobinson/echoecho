@@ -21,9 +21,6 @@
         "NSCameraUsageDescription": "EchoEcho Admin captures waypoint photos during route recording.",
         "NSMicrophoneUsageDescription": "EchoEcho Admin records voice annotations at waypoints.",
         "NSSpeechRecognitionUsageDescription": "EchoEcho Admin transcribes spoken waypoint annotations."
-      },
-      "config": {
-        "googleMapsApiKey": ""
       }
     },
     "android": {
