@@ -232,7 +232,11 @@ export function useGpsNavigation(): UseGpsNavigationResult {
 
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') return;
-    await Location.requestBackgroundPermissionsAsync();
+
+    const bgPerm = await Location.getBackgroundPermissionsAsync();
+    if (bgPerm.status !== 'granted') {
+      await Location.requestBackgroundPermissionsAsync();
+    }
 
     startWatchdog();
 
