@@ -4,11 +4,15 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet } from 'react-native';
+import { useAuthListener } from '../src/hooks/useAuth';
+import { useProtectedRoute } from '../src/hooks/useProtectedRoute';
 
-// Keep the splash screen up until ready
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
+  useAuthListener();
+  useProtectedRoute();
+
   useEffect(() => {
     SplashScreen.hideAsync();
   }, []);
@@ -24,6 +28,7 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: '#0f0f1a' },
         }}
       >
+        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen
           name="campus/[id]"

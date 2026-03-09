@@ -1,0 +1,47 @@
+{
+  "cli": {
+    "version": ">= 12.0.0"
+  },
+  "build": {
+    "preview-admin": {
+      "distribution": "internal",
+      "env": {
+        "APP_VARIANT": "admin"
+      }
+    },
+    "preview-student": {
+      "distribution": "internal",
+      "env": {
+        "APP_VARIANT": "student"
+      }
+    },
+    "production-admin": {
+      "distribution": "store",
+      "env": {
+        "APP_VARIANT": "admin"
+      }
+    },
+    "production-student": {
+      "distribution": "store",
+      "env": {
+        "APP_VARIANT": "student"
+      }
+    }
+  },
+  "submit": {
+    "production-admin": {
+      "ios": {
+        "appleId": "",
+        "ascAppId": "",
+        "appleTeamId": ""
+      }
+    },
+    "production-student": {
+      "ios": {
+        "appleId": "",
+        "ascAppId": "",
+        "appleTeamId": ""
+      }
+    }
+  }
+}

@@ -26,6 +26,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigationStore } from '../../src/stores/navigationStore';
+import type { NavigationSession } from '@echoecho/shared';
 
 export default function NavigateScreen() {
   const { routeId } = useLocalSearchParams<{ routeId: string }>();
@@ -106,7 +107,7 @@ function StatusBar({ status }: { status: string }) {
 function CurrentInstruction({
   session,
 }: {
-  session: ReturnType<typeof useNavigationStore>['currentSession'];
+  session: NavigationSession | null;
 }) {
   if (!session) {
     return (
@@ -149,7 +150,7 @@ function CurrentInstruction({
 function RouteProgress({
   session,
 }: {
-  session: ReturnType<typeof useNavigationStore>['currentSession'];
+  session: NavigationSession | null;
 }) {
   if (!session) return null;
 

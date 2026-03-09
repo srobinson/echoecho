@@ -15,18 +15,51 @@ student:
 
 # Typecheck all workspaces
 check:
-    yarn workspaces run typecheck
+    yarn workspace @echoecho/shared run typecheck
+    yarn workspace @echoecho/admin run typecheck
+    yarn workspace @echoecho/student run typecheck
 
 # Run linters across workspaces
 lint:
-    yarn workspaces run lint
+    yarn workspace @echoecho/admin run lint
+    yarn workspace @echoecho/student run lint
 
 # Run tests across workspaces
 test:
-    yarn workspaces run test --passWithNoTests
+    yarn workspace @echoecho/shared run test
+    yarn workspace @echoecho/admin run test
+    yarn workspace @echoecho/student run test
 
 # Full CI gate: typecheck + lint + test
 ci: check lint test
+
+# ── Supabase ───────────────────────────────────────────────
+
+# Start local Supabase stack (requires supabase CLI)
+supabase-start:
+    supabase start
+
+# Stop local Supabase stack
+supabase-stop:
+    supabase stop
+
+# Apply pending migrations to local instance
+supabase-migrate:
+    supabase db push
+
+# Reset local database (drop + migrate + seed)
+supabase-reset:
+    supabase db reset
+
+# Push migrations to staging (requires SUPABASE_ACCESS_TOKEN + STAGING_PROJECT_REF env vars)
+supabase-push-staging:
+    supabase db push --project-ref $STAGING_PROJECT_REF
+
+# Generate TypeScript types from the local database schema
+supabase-types:
+    supabase gen types typescript --local > packages/shared/src/types/database.ts
+
+# ──────────────────────────────────────────────────────────
 
 # Build admin app for iOS dev (requires Xcode)
 build-admin-ios:
