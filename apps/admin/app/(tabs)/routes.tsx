@@ -12,6 +12,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Image,
+  AccessibilityInfo,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -67,7 +68,11 @@ export default function RoutesScreen() {
     const { data, error } = await query;
 
     if (!error) {
-      setRoutes((data ?? []) as Route[]);
+      const results = (data ?? []) as Route[];
+      setRoutes(results);
+      AccessibilityInfo.announceForAccessibility(
+        results.length === 0 ? 'No routes found' : `${results.length} route${results.length === 1 ? '' : 's'} found`,
+      );
     }
     setIsLoading(false);
   }, [activeCampus]);
@@ -146,8 +151,8 @@ export default function RoutesScreen() {
       </View>
 
       {isLoading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#6c63ff" />
+        <View style={styles.centered} accessibilityLiveRegion="polite">
+          <ActivityIndicator size="large" color="#6c63ff" accessibilityLabel="Loading routes" />
         </View>
       ) : (
         <FlatList
@@ -232,7 +237,7 @@ const RouteCard = memo(function RouteCard({ route, onPress }: { route: Route; on
           <Text style={styles.cardTitle} numberOfLines={1}>
             {route.name}
           </Text>
-          <View style={[styles.statusBadge, { backgroundColor: `${statusColor}22` }]}>
+          <View style={[styles.statusBadge, { backgroundColor: `${statusColor}22` }]} accessibilityElementsHidden>
             <Text style={[styles.statusText, { color: statusColor }]}>
               {route.status}
             </Text>
@@ -263,7 +268,7 @@ const RouteCard = memo(function RouteCard({ route, onPress }: { route: Route; on
 
 function EmptyState({ hasFilter }: { hasFilter: boolean }) {
   return (
-    <View style={styles.empty}>
+    <View style={styles.empty} accessible accessibilityRole="alert">
       <Ionicons name="navigate-outline" size={64} color="#2a2a3e" />
       <Text style={styles.emptyTitle}>
         {hasFilter ? 'No matching routes' : 'No routes yet'}
