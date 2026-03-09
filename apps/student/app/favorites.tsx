@@ -40,11 +40,15 @@ export default function FavoritesScreen() {
     useRouteHistory(userId);
 
   const sections = useMemo(() => {
-    const result = [
+    // A favorited route may also exist in history locally (before the next
+    // Supabase sync round-trip reconciles the is_favorite flag). Filter
+    // history to exclude any route already shown in favorites so the
+    // SectionList never renders duplicate routeId keys.
+    const favIds = new Set(favorites.map((f) => f.routeId));
+    return [
       { key: 'favorites', data: favorites },
-      { key: 'history', data: history },
+      { key: 'history', data: history.filter((h) => !favIds.has(h.routeId)) },
     ];
-    return result;
   }, [favorites, history]);
 
   const handleReNavigate = useCallback((routeId: string, routeName: string) => {
