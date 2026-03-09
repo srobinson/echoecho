@@ -8,7 +8,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@echoecho/shared": "*"
+    "@echoecho/shared": "*",
+    "react-native-svg": "^15.15.3",
+    "victory-native": "^41.20.2"
   },
   "peerDependencies": {
     "@expo/vector-icons": ">=14",

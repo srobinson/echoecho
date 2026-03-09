@@ -82,6 +82,16 @@ export type {
   MatchRouteError,
 } from './types/matching';
 
+// Analytics
+export type {
+  RouteUsageStat,
+  TimeOfDayStat,
+  OffRoutePoint,
+  TopDestination,
+  CampusCoverage,
+  CompletionRateRow,
+} from './types/analytics';
+
 // Utilities
 export { computeDistance, computeBearing, simplifyTrack } from './utils/geo';
 export { bearingToHaptic, hapticPatternLabel } from './utils/haptic';
