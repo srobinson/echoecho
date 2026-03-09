@@ -1,6 +1,6 @@
 import type { CoordinateWithAltitude } from './geo';
 
-export type RouteStatus = 'draft' | 'published' | 'archived';
+export type RouteStatus = 'pending_save' | 'draft' | 'published' | 'retracted';
 
 export type WaypointType =
   | 'start'

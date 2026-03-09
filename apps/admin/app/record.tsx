@@ -197,8 +197,7 @@ export default function RecordScreen() {
         text: 'Save Route',
         onPress: async () => {
           await gpsStop();
-          // ALP-953: route save flow — navigate to save form
-          router.replace('/routes');
+          router.replace('/save-route');
         },
       },
     ]);

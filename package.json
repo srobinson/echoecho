@@ -11,7 +11,9 @@
     "student": "yarn workspace @echoecho/student start",
     "typecheck": "yarn workspaces run typecheck",
     "lint": "yarn workspaces run lint",
-    "test": "yarn workspaces run test --passWithNoTests"
+    "test": "yarn workspaces run test --passWithNoTests",
+    "format": "prettier --write \"apps/**/*.{ts,tsx}\" \"packages/**/*.{ts,tsx}\"",
+    "format:check": "prettier --check \"apps/**/*.{ts,tsx}\" \"packages/**/*.{ts,tsx}\""
   },
   "engines": {
     "node": ">=20.0.0"
@@ -21,8 +23,10 @@
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "eslint": "^8.56.0",
+    "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react": "^7.34.0",
     "eslint-plugin-react-hooks": "^4.6.0",
+    "prettier": "^3.8.1",
     "typescript": "^5.3.3"
   }
 }
