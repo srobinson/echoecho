@@ -93,7 +93,7 @@ export type {
 } from './types/analytics';
 
 // Utilities
-export { computeDistance, computeBearing, simplifyTrack } from './utils/geo';
+export { computeDistance, computeBearing, haversineM, bearingDeg, normalizeAngle, simplifyTrack } from './utils/geo';
 export { bearingToHaptic, hapticPatternLabel } from './utils/haptic';
 
 // Haptic timing data (ALP-974, ALP-958)

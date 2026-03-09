@@ -24,7 +24,7 @@ import { AccessibilityInfo, Platform } from 'react-native';
 import { Audio } from 'expo-av';
 import type { NavEvent } from '../types/navEvents';
 import type { TrackPositionUpdate } from '../types/navEvents';
-import { haversineM } from './useGpsNavigation';
+import { haversineM } from '@echoecho/shared';
 import type { LocalWaypoint } from '../lib/localDb';
 
 // ── Priority levels ───────────────────────────────────────────────────────────

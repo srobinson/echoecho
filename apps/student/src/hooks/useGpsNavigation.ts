@@ -15,6 +15,7 @@
  */
 import { useCallback, useRef } from 'react';
 import * as Location from 'expo-location';
+import { haversineM, bearingDeg, normalizeAngle } from '@echoecho/shared';
 import type { NavEvent, NavEventHandler, TrackPositionUpdate } from '../types/navEvents';
 import type { LocalWaypoint } from '../lib/localDb';
 
@@ -28,36 +29,6 @@ const DEGRADED_ACCURACY_M = 10;
 const DEGRADED_GAP_MS = 3_000;
 const OFF_ROUTE_THRESHOLD_M = 15;
 const OFF_ROUTE_DEBOUNCE_MS = 5_000;
-
-const EARTH_RADIUS_M = 6_371_000;
-
-// ── Geo helpers ──────────────────────────────────────────────────────────────
-
-function toRad(d: number): number { return (d * Math.PI) / 180; }
-function toDeg(r: number): number { return (r * 180) / Math.PI; }
-
-export function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a = Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(a));
-}
-
-function bearingDeg(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const dLng = toRad(lng2 - lng1);
-  const y = Math.sin(dLng) * Math.cos(toRad(lat2));
-  const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
-    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLng);
-  return (toDeg(Math.atan2(y, x)) + 360) % 360;
-}
-
-function normAngle(d: number): number {
-  let n = d % 360;
-  if (n > 180) n -= 360;
-  if (n < -180) n += 360;
-  return n;
-}
 
 /** Project point P onto segment AB; return projected point. */
 function projectOntoSegment(
@@ -107,7 +78,7 @@ function turnDirection(
   currentBearing: number,
   nextBearing: number
 ): 'left' | 'right' | 'straight' | 'arrived' {
-  const delta = normAngle(nextBearing - currentBearing);
+  const delta = normalizeAngle(nextBearing - currentBearing);
   if (Math.abs(delta) < 30) return 'straight';
   return delta > 0 ? 'right' : 'left';
 }
