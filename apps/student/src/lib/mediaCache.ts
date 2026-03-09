@@ -1,0 +1,57 @@
+/**
+ * Media caching for offline navigation (ALP-963).
+ *
+ * Downloads audio annotations to the local filesystem so the navigation loop
+ * runs without network access. Individual download failures fall back to TTS
+ * on `annotation_text` — a missing audio clip never aborts a sync.
+ */
+
+import * as FileSystem from 'expo-file-system';
+import { setWaypointAudioPath } from './localDb';
+
+export interface ServerWaypoint {
+  id: string;
+  annotation_audio_url: string | null;
+  annotation_text: string | null;
+}
+
+/**
+ * Downloads audio annotations for all waypoints in a route.
+ *
+ * Skips waypoints that already have a cached file (idempotent).
+ * On download failure the waypoint's local path stays null; the navigation
+ * loop uses `annotation_text` + TTS as a fallback.
+ */
+export async function cacheRouteMedia(
+  routeId: string,
+  waypoints: ServerWaypoint[]
+): Promise<void> {
+  const dir = `${FileSystem.documentDirectory}routes/${routeId}/`;
+
+  await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+
+  for (const wp of waypoints) {
+    if (!wp.annotation_audio_url) continue;
+
+    const localPath = `${dir}${wp.id}_audio.m4a`;
+
+    const info = await FileSystem.getInfoAsync(localPath);
+    if (info.exists) {
+      // Already cached from a prior sync run; register the path if not set.
+      await setWaypointAudioPath(wp.id, localPath);
+      continue;
+    }
+
+    try {
+      await FileSystem.downloadAsync(wp.annotation_audio_url, localPath);
+      await setWaypointAudioPath(wp.id, localPath);
+    } catch (err) {
+      // Log and continue — navigation must not fail over a single audio clip.
+      console.warn(
+        `[mediaCache] Failed to download audio for waypoint ${wp.id}:`,
+        err
+      );
+      await setWaypointAudioPath(wp.id, null);
+    }
+  }
+}

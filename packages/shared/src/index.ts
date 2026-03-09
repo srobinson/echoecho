@@ -70,6 +70,15 @@ export type {
   RecordingSession,
 } from './types/recording';
 
+// Route matching (ALP-955)
+export type {
+  MatchRouteRequest,
+  RouteMatch,
+  MatchRouteResponse,
+  MatchRouteErrorCode,
+  MatchRouteError,
+} from './types/matching';
+
 // Utilities
 export { computeDistance, computeBearing, simplifyTrack } from './utils/geo';
 export { bearingToHaptic, hapticPatternLabel } from './utils/haptic';
