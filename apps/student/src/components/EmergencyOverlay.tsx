@@ -13,25 +13,22 @@
  *     fires first
  *
  * Accessibility:
- *   accessibilityLabel="Emergency. Triple-tap to activate."
- *   accessibilityRole="button"
- *   accessibilityHint="Activates emergency navigation to nearest exit"
+ *   When a screen reader is active, the TapGestureHandler is bypassed entirely
+ *   to avoid conflict with VoiceOver rotor gestures on iOS 16+. Instead, a
+ *   dedicated accessible button with accessibilityActions provides the trigger.
+ *   When no screen reader is active, the gesture handler operates normally.
  *
- * Visual: minimal indicator in the bottom-right corner. The overlay is 44×44pt
- * (WCAG 2.5.5 minimum touch target). Color uses emergency token (#FF5252).
- *
- * Note on VoiceOver gesture conflict: the ActiveNavigation screen specifies
- * long-press 2s OR two-finger triple-tap as the in-navigation trigger. This
- * component handles the standard screen-level triple-tap (single-finger) which
- * is compatible with VoiceOver because VoiceOver's swipe/double-tap gestures
- * don't use single-finger triple-tap on app content.
+ * Visual: minimal flash overlay on activation. The overlay is fullscreen
+ * (behind pointerEvents="none"). Color uses emergency token (#FF5252).
  */
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
   AccessibilityInfo,
+  Pressable,
+  Platform,
 } from 'react-native';
 import { TapGestureHandler } from 'react-native-gesture-handler';
 import Animated, {
@@ -49,48 +46,79 @@ interface EmergencyOverlayProps {
 export function EmergencyOverlay({ children }: EmergencyOverlayProps) {
   const tripleTapRef = useRef<TapGestureHandler>(null);
   const flashOpacity = useSharedValue(0);
+  const [screenReaderActive, setScreenReaderActive] = useState(false);
 
-  const handleTripleTap = useCallback(() => {
-      // Step 1: Announce immediately, before any computation
-      AccessibilityInfo.announceForAccessibility(
-        'Emergency mode activated. Finding nearest exit.',
-      );
+  useEffect(() => {
+    const check = async () => {
+      const active = await AccessibilityInfo.isScreenReaderEnabled();
+      setScreenReaderActive(active);
+    };
+    check();
 
-      // Brief visual flash to confirm activation (respects reduceMotion via
-      // withTiming duration — reanimated respects AccessibilityInfo.isReduceMotionEnabled)
-      flashOpacity.value = withSequence(
-        withTiming(1, { duration: 80 }),
-        withTiming(0, { duration: 300 }),
-      );
+    const subscription = AccessibilityInfo.addEventListener(
+      'screenReaderChanged',
+      setScreenReaderActive,
+    );
+    return () => subscription.remove();
+  }, []);
 
-      // Defer navigation by one frame so the accessibility announcement fires first
-      requestAnimationFrame(() => {
-        router.push('/emergency');
-      });
-    },
-    [flashOpacity],
-  );
+  const activateEmergency = useCallback(() => {
+    AccessibilityInfo.announceForAccessibility(
+      'Emergency mode activated. Finding nearest exit.',
+    );
+
+    flashOpacity.value = withSequence(
+      withTiming(1, { duration: 80 }),
+      withTiming(0, { duration: 300 }),
+    );
+
+    requestAnimationFrame(() => {
+      router.push('/emergency');
+    });
+  }, [flashOpacity]);
 
   const flashStyle = useAnimatedStyle(() => ({
     opacity: flashOpacity.value,
   }));
 
+  const flashOverlay = (
+    <Animated.View
+      style={[styles.flash, flashStyle]}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      pointerEvents="none"
+    />
+  );
+
+  // When a screen reader is active, skip the TapGestureHandler entirely.
+  // Provide a dedicated accessible button positioned at the bottom of the
+  // screen that VoiceOver/TalkBack can discover and activate normally.
+  if (screenReaderActive) {
+    return (
+      <View style={styles.root}>
+        {children}
+        <Pressable
+          style={styles.srButton}
+          onPress={activateEmergency}
+          accessibilityLabel="Emergency. Double-tap to activate emergency navigation."
+          accessibilityRole="button"
+          accessibilityHint="Activates emergency navigation to nearest exit"
+        />
+        {flashOverlay}
+      </View>
+    );
+  }
+
   return (
     <TapGestureHandler
       ref={tripleTapRef}
       numberOfTaps={3}
-      onActivated={handleTripleTap}
+      onActivated={activateEmergency}
+      shouldCancelWhenOutside={false}
     >
       <View style={styles.root}>
         {children}
-
-        {/* Emergency activation flash overlay — visual-only confirmation */}
-        <Animated.View
-          style={[styles.flash, flashStyle]}
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
-          pointerEvents="none"
-        />
+        {flashOverlay}
       </View>
     </TapGestureHandler>
   );
@@ -104,5 +132,12 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#FF5252',
     pointerEvents: 'none',
+  },
+  srButton: {
+    position: 'absolute',
+    bottom: Platform.OS === 'ios' ? 44 : 24,
+    right: 16,
+    width: 44,
+    height: 44,
   },
 });
