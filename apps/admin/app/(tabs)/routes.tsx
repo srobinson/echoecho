@@ -78,6 +78,12 @@ export default function RoutesScreen() {
   }, [fetchRoutes, statusFilter]);
   /* eslint-enable react-hooks/exhaustive-deps */
 
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
   const handleSearch = useCallback((text: string) => {
     setSearchQuery(text);
     if (debounceRef.current) clearTimeout(debounceRef.current);
