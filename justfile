@@ -16,6 +16,7 @@ student:
 # Typecheck all workspaces
 check:
     yarn workspace @echoecho/shared run typecheck
+    yarn workspace @echoecho/ui run typecheck
     yarn workspace @echoecho/admin run typecheck
     yarn workspace @echoecho/student run typecheck
 

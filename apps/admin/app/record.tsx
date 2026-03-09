@@ -78,7 +78,7 @@ export default function RecordScreen() {
   const { session } = store;
 
   // Tick state drives elapsed-time re-renders at 1 Hz while recording
-  const [, setTick] = useState(0);
+  const [tick, setTick] = useState(0);
   const lastAnnouncedSecRef = useRef(0);
   const voiceSheetRef = useRef<BottomSheet>(null);
   const [activeWaypointId, setActiveWaypointId] = useState<string | null>(null);
@@ -104,7 +104,11 @@ export default function RecordScreen() {
       ? Date.now() - session.pausedAt
       : 0;
     return Date.now() - session.startedAt - session.totalPausedMs - (isPaused ? pausedContribution : 0);
-  }, [session, isPaused]);
+  // tick is intentionally included: it advances at 1 Hz while recording,
+  // ensuring the elapsed time re-evaluates even when no GPS data arrives
+  // (e.g. battery-saver mode with infrequent location updates).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, isPaused, tick]);
 
   // ── Distance ───────────────────────────────────────────────────────────────
 
