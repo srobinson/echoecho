@@ -450,7 +450,8 @@ export default function HazardsScreen() {
         hazard={selectedHazard}
         routes={routes}
         onResolve={() => { if (selectedHazard) void handleResolve(selectedHazard); }}
-        onDismiss={() => { detailRef.current?.close(); setSelectedHazard(null); }}
+        onDismiss={() => { detailRef.current?.close(); }}
+        onAnimationComplete={() => { setSelectedHazard(null); }}
         onUpdateExpiry={async (hazardId, expiresAt) => {
           const { error } = await supabase
             .from('hazards')
@@ -558,9 +559,10 @@ const HazardDetailSheet = forwardRef<
     routes: Route[];
     onResolve: () => void;
     onDismiss: () => void;
+    onAnimationComplete: () => void;
     onUpdateExpiry: (hazardId: string, expiresAt: string | null) => void;
   }
->(({ hazard, routes, onResolve, onDismiss, onUpdateExpiry }, ref) => {
+>(({ hazard, routes, onResolve, onDismiss, onAnimationComplete, onUpdateExpiry }, ref) => {
   const renderBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => (
       <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} onPress={onDismiss} />
@@ -568,13 +570,16 @@ const HazardDetailSheet = forwardRef<
     [onDismiss],
   );
 
-  if (!hazard) return null;
+  const handleClose = useCallback(() => {
+    onDismiss();
+    onAnimationComplete();
+  }, [onDismiss, onAnimationComplete]);
 
-  const routeName = hazard.routeId
+  const routeName = hazard?.routeId
     ? routes.find((r) => r.id === hazard.routeId)?.name ?? 'Unknown route'
     : 'Campus-wide';
 
-  const severityColor = SEVERITY_COLOR[hazard.severity] ?? '#F97316';
+  const severityColor = hazard ? (SEVERITY_COLOR[hazard.severity] ?? '#F97316') : '#F97316';
 
   const expiryOptions = [
     { label: 'Permanent', value: null },
@@ -589,11 +594,12 @@ const HazardDetailSheet = forwardRef<
       index={-1}
       snapPoints={['50%']}
       enablePanDownToClose
-      onClose={onDismiss}
+      onClose={handleClose}
       backdropComponent={renderBackdrop}
       handleIndicatorStyle={{ backgroundColor: '#4a4a6a' }}
       backgroundStyle={{ backgroundColor: '#1a1a2e' }}
     >
+      {hazard && (
       <BottomSheetView style={detailStyles.container}>
         <View style={detailStyles.headerRow}>
           <View style={[styles.iconCircle, { backgroundColor: `${severityColor}22` }]}>
@@ -659,6 +665,7 @@ const HazardDetailSheet = forwardRef<
           <Text style={detailStyles.resolveBtnText}>Resolve Hazard</Text>
         </Pressable>
       </BottomSheetView>
+      )}
     </BottomSheet>
   );
 });
