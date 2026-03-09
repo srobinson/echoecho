@@ -32,6 +32,7 @@ export interface PendingWaypoint {
 
 /**
  * Pending hazard annotation queued during recording.
+ * expiresAt is an ISO 8601 string; null or absent means permanent.
  */
 export interface PendingHazard {
   localId: string;
@@ -40,6 +41,7 @@ export interface PendingHazard {
   severity: HazardSeverity;
   title: string;
   description: string | null;
+  expiresAt?: string | null;
   capturedAt: number; // Unix ms
 }
 
