@@ -13,7 +13,7 @@
  * closed. Visual elements are supplementary — VoiceOver/TalkBack must deliver all
  * navigation information.
  */
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -134,6 +134,15 @@ export default function NavigateScreen() {
     }
   }, [haptic, audio, offRoute, pdr, gps.lastPositionRef, navStatus]);
 
+  // Stable ref that always points to the latest handleNavEvent.
+  // startTracking receives a wrapper that delegates through this ref,
+  // so the GPS callback always runs the current closure without
+  // needing to restart tracking when dependencies change.
+  const handleNavEventRef = useRef(handleNavEvent);
+  useEffect(() => {
+    handleNavEventRef.current = handleNavEvent;
+  }, [handleNavEvent]);
+
   // Wire PDR event handler (emits pdr_accuracy_warning through handleNavEvent)
   useEffect(() => {
     pdr.onNavEvent(handleNavEvent);
@@ -149,10 +158,14 @@ export default function NavigateScreen() {
     offRoute.setPositionRef(gps.lastPositionRef);
   }, [offRoute, gps.lastPositionRef]);
 
-  // Start navigation on mount: load waypoints from local DB, start GPS tracking
+  // Start navigation on mount: load waypoints from local DB, start GPS tracking.
+  // The stable ref wrapper ensures gps.startTracking always dispatches to
+  // the latest handleNavEvent without restarting the GPS subscription.
   useEffect(() => {
     if (!routeId) return;
     let cancelled = false;
+
+    const dispatchNavEvent = (event: NavEvent) => handleNavEventRef.current(event);
 
     const startNavigation = async () => {
       const waypoints = await getOrderedWaypoints(routeId);
@@ -162,7 +175,7 @@ export default function NavigateScreen() {
       audio.setWaypoints(waypoints);
       setNavStatus('navigating');
 
-      await gps.startTracking(waypoints, handleNavEvent);
+      await gps.startTracking(waypoints, dispatchNavEvent);
       AccessibilityInfo.announceForAccessibility(
         'Navigation started. Follow the audio instructions.'
       );
@@ -175,7 +188,7 @@ export default function NavigateScreen() {
       gps.stopTracking();
       pdr.deactivate();
     };
-  }, [routeId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [routeId, audio, gps, pdr]);
 
   // Announce haptic skip reasons to screen reader users
   useEffect(() => {
