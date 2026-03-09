@@ -1,178 +1,65 @@
 # EchoEcho
 
-Campus navigation for visually impaired students. Haptic feedback, voice input, and screen reader driven turn-by-turn guidance across campus grounds.
+Campus navigation for blind and visually impaired students. No beacons, no LiDAR scans, no infrastructure. A phone in your hand, vibrations you learn in under a minute, and a voice that tells you where to go.
 
-Two apps, one backend:
+## The Problem
 
-- **Admin** (`apps/admin/`) -- Route recording and campus management for O&M specialists and volunteers
-- **Student** (`apps/student/`) -- Accessible navigation with haptic cues, audio instructions, and voice destination search
+Getting across a college campus independently is an unsolved problem for blind students. The existing solutions all require something the campus does not have. BlindSquare needs Bluetooth beacons installed at every doorway. GoodMaps needs a team to walk every building with a LiDAR backpack. Aira needs a sighted human on a video call. These are real products that work, but they all scale slowly and expensively.
 
-## Architecture
+EchoEcho takes a different approach. An Orientation and Mobility specialist walks a route once with the admin app, recording GPS coordinates, compass headings, hazard locations, and voice annotations along the way. That route is stored as a sequence of waypoints. When a student needs to walk it, the student app provides turn-by-turn guidance through haptic vibration patterns and spoken instructions, using GPS outdoors and pedestrian dead reckoning (accelerometer and gyroscope) to maintain position continuity between buildings.
 
-```
-echoecho/
-  apps/
-    admin/          @echoecho/admin    Expo Router (iOS/Android)
-    student/        @echoecho/student  Expo Router (iOS/Android)
-  packages/
-    shared/         @echoecho/shared   Types, geo utils, Supabase client, haptic timings
-    ui/             @echoecho/ui       Chart components, design tokens, bottom sheets
-  supabase/
-    functions/      Edge Functions (Deno): auth webhook, user management, storage cleanup
-    migrations/     23 sequential migrations (PostGIS, RLS, RPCs, indexes)
-    seed.sql        Local dev seed data
-    seed_staging.sql  Staging seed (TSBVI campus, buildings, routes, hazards)
-  docs/             Device verification guide, haptic timing reference
-```
+## How It Feels
 
-Workspaces are resolved via Babel `module-resolver` aliases pointing to TypeScript source. Metro `watchFolders` includes the workspace root for hot-reload across packages.
+The core interface is haptic. The phone vibrates in patterns that encode direction. This is not a gimmick. For someone navigating with a white cane in one hand and a phone in the other, audio alone is insufficient. Audio competes with traffic sounds, conversations, and the environmental cues a blind traveler is actively listening for. Vibration occupies a different sensory channel entirely.
 
-## Tech Stack
+Four candidate encoding schemes are under active research:
 
-| Layer | Technology |
-|-------|-----------|
-| Runtime | React Native 0.76, Expo 52, Expo Router v4 |
-| State | Zustand, AsyncStorage, expo-sqlite (offline cache) |
-| Backend | Supabase (PostgreSQL 17 + PostGIS, Auth, Storage, Edge Functions) |
-| Maps | Mapbox GL (`@rnmapbox/maps`) in admin app |
-| Navigation | GPS + PDR (pedestrian dead reckoning via IMU sensors) |
-| Haptics | Four coded timing schemes (S1-S4) mapping bearing to vibration patterns |
-| Voice | `expo-speech-recognition` for destination input, `expo-speech` for audio guidance |
-| Build | Yarn 4.9, EAS Build, TypeScript 5.3 |
+**Rhythm-based patterns** (current default). Straight ahead feels like a steady march: three even pulses. Left turn is a quick da-dum. Right turn is a slow da-dum-dum. Each direction has a distinct rhythmic character that you feel rather than count. Literature from a 2022 PMC study (n=30) showed 82 to 90 percent recognition accuracy for rhythm patterns in seated conditions and roughly 70 percent under cognitive load.
 
-## Prerequisites
+**Sequential pulse counting**. One buzz for straight, two for left, three for right. Simple to teach but research raises concerns about counting accuracy when the user is simultaneously tracking a cane, body position, and environmental cues.
 
-- Node 20+
-- Yarn 4 (`corepack enable && corepack prepare yarn@4.9.1`)
-- [just](https://github.com/casey/just) command runner
-- Supabase CLI (`brew install supabase/tap/supabase`)
-- Android Studio + JDK 17 (Android builds)
-- Xcode (iOS builds)
+**Duration encoding**. A short 80ms tap means continue. A medium 250ms pulse means left. A long 480ms pulse means right. No counting required, but the middle duration can be ambiguous under movement vibration.
 
-## Setup
+**Proximity intensity ramp**. The phone buzzes faster as you approach a waypoint: every two seconds when far, every half second when close. This scheme layers on top of a directional cue and provides continuous spatial awareness without requiring active pattern recognition.
 
-```bash
-# Install dependencies
-just install
-
-# Copy environment files (gitignored, once per machine)
-cp .env.example apps/admin/.env
-cp .env.example apps/student/.env
-# Edit both .env files with your Supabase URL, anon key, and Mapbox token
-```
-
-### Environment variables
-
-| Variable | Required by | Purpose |
-|----------|------------|---------|
-| `EXPO_PUBLIC_SUPABASE_URL` | Both apps | Supabase project URL |
-| `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Both apps | Supabase anonymous key |
-| `EXPO_PUBLIC_MAPBOX_TOKEN` | Admin only | Mapbox `pk.` access token for map tiles |
-
-Only `EXPO_PUBLIC_` prefixed variables are bundled into the JS runtime.
-
-### Mapbox download token (admin app)
-
-The admin app pulls the Mapbox SDK from Maven during Gradle builds. This requires a secret (`sk.`) download token.
-
-**Local builds** -- add to `~/.gradle/gradle.properties`:
-
-```properties
-MAPBOX_DOWNLOADS_TOKEN=sk.your_mapbox_secret_token
-```
-
-**EAS cloud builds:**
-
-```bash
-eas secret:create --scope project --name MAPBOX_DOWNLOADS_TOKEN --value sk.xxx
-```
-
-## Development
-
-```bash
-# Run apps
-just admin                # Start admin app
-just student              # Start student app
-
-# Quality checks
-just check                # Typecheck all workspaces
-just lint                 # ESLint across workspaces
-just test                 # Jest across workspaces
-just ci                   # Full gate: check + lint + test
-```
-
-### Local Supabase
-
-```bash
-just supabase-start       # Start local stack (API :54321, Studio :54323, DB :54322)
-just supabase-reset       # Drop + migrate + seed
-just supabase-migrate     # Apply pending migrations only
-just supabase-types       # Regenerate TS types from schema
-```
-
-Studio is at `http://localhost:54323` after `supabase-start`.
-
-## Database
-
-PostgreSQL 17 with PostGIS. Core tables:
-
-| Table | Purpose |
-|-------|---------|
-| `campuses` | Campus bounds (PostGIS polygon), security contact |
-| `buildings` | Facility outlines, entrances, floor count, hours |
-| `building_entrances` | Named entry points with accessibility notes |
-| `routes` | Recorded paths with status lifecycle (draft > pending > published > retracted) |
-| `waypoints` | Ordered points along a route: GPS coordinate, heading, text/audio annotations, photos |
-| `hazards` | Marked obstacles (steps, doors, crossings, surface changes) with severity |
-| `pois` | Points of interest (security office, nurse station) |
-| `profiles` | Extended auth.users with role (admin/volunteer/student) and campus association |
-| `activity_log` | Audit trail for login events, route publishes, role changes |
-
-RLS policies scope access by role. Students read published routes. Admins have full CRUD. Anonymous users get limited read access for route previews.
-
-### Edge Functions
-
-| Function | Purpose |
-|----------|---------|
-| `auth-webhook` | Receives Supabase Auth events, writes audit log |
-| `update-user-role` | Admin endpoint to change user roles |
-| `deactivate-user` | Soft-delete user and associated data |
-| `invite-user` | Generate invite codes |
-| `purge-orphaned-storage` | Cleanup unreferenced media from waypoint recordings |
-
-## Builds
-
-```bash
-# Preview APKs (internal distribution)
-eas build --platform android --profile preview-admin
-eas build --platform android --profile preview-student
-
-# Production
-eas build --platform android --profile production-admin
-eas build --platform android --profile production-student
-
-# iOS
-just build-admin-ios
-just build-student-ios
-```
-
-## Staging Deployment
-
-```bash
-# Database migrations
-supabase db push --project-ref $STAGING_PROJECT_REF
-
-# Edge functions
-supabase functions deploy --project-ref $STAGING_PROJECT_REF
-
-# Seed data (after migrations)
-psql $STAGING_DB_URL -f supabase/seed_staging.sql
-```
+All four schemes are defined as millisecond-precision timing arrays and can be tested on device through a haptic lab built into the admin app. A formal within-subjects user study with visually impaired participants is designed and pending IRB approval to determine which scheme performs best under real walking conditions.
 
 ## How It Works
 
-**Recording (Admin):** An O&M specialist walks a route with the admin app. The app captures GPS coordinates, heading, and distance at each waypoint. The specialist adds voice annotations ("turn left at the fountain"), marks hazards, and takes reference photos. The route is saved to Supabase with a computed path geometry and content hash.
+**Recording.** An O&M specialist or trained volunteer walks a route with the admin app open. At each decision point, the app captures GPS coordinates and compass heading. The specialist adds voice annotations ("the fountain will be on your left"), marks hazards (steps, surface changes, crossings), and takes reference photos. Routes go through a review lifecycle: pending_save, draft, published, retracted.
 
-**Navigation (Student):** A student opens the app and speaks a destination. The app matches the request to a building, finds a published route, and begins turn-by-turn guidance. Navigation combines GPS positioning with pedestrian dead reckoning (accelerometer + gyroscope) for continuity when GPS drops between buildings. Each waypoint triggers haptic patterns that encode the turn direction, plus audio instructions from the volunteer's annotations.
+**Navigation.** A student opens the app and speaks a destination. The app matches the request to a building, finds a published route, and begins guidance. At each waypoint, the phone fires the appropriate haptic pattern for the upcoming direction and speaks the specialist's annotation. Navigation combines GPS with pedestrian dead reckoning (step detection via accelerometer, heading via gyroscope and magnetometer) so guidance continues when GPS signal drops between buildings.
 
-**Haptic Feedback:** Four timing schemes (S1-S4) map bearing changes to distinct vibration patterns. The patterns are defined as millisecond-precision time arrays in `packages/shared/src/hapticTimings.ts`. The haptic lab in the admin app allows testing patterns on device.
+**The iOS dictation problem.** Apple's Taptic Engine is silenced whenever speech recognition is active. For an app that uses both voice input and haptic output, this creates a direct conflict. EchoEcho implements a mutex: haptic cues are queued while voice recognition is open and fire immediately after the microphone closes. This is not a workaround. It is a hard platform constraint that any haptic navigation app on iOS must handle.
+
+## Architecture
+
+Two apps, one backend.
+
+- **Admin** (`apps/admin/`). Route recording, campus management, hazard marking, haptic lab. Used by O&M specialists and volunteers.
+- **Student** (`apps/student/`). Accessible navigation with haptic cues, audio instructions, and voice destination search. Screen reader driven throughout.
+
+The backend is Supabase: PostgreSQL with PostGIS for spatial queries, row-level security scoped by user role, edge functions for auth and user management. Routes are stored as ordered waypoint sequences with computed path geometries.
+
+The monorepo shares types, geo utilities, haptic timing definitions, and UI components across both apps through workspace packages.
+
+## What Makes This Different
+
+Most VI navigation technology falls into two categories: systems that need expensive infrastructure installed at the venue, or systems that need a human on the other end of a call. EchoEcho sits in neither camp. The recording step is a one-time walk by a sighted specialist. After that, the route is available to any student, any time, with no ongoing human involvement and no installed hardware.
+
+The haptic encoding work is where the genuine research contribution lives. Translating bearing changes into vibration patterns that a person can reliably interpret while walking with a cane is a problem with real constraints. The phone's vibration motor is the only actuator. iOS and Android render the same timing arrays with perceptibly different tactile character. Ambient vibration from footsteps and cane taps creates noise. The four candidate schemes represent four different hypotheses about how to solve this, and the user study protocol is designed to produce an evidence-based answer rather than a design opinion.
+
+## Development
+
+The project uses Yarn workspaces with Turbo for task orchestration. A `justfile` wraps common operations.
+
+```bash
+just install          # Install dependencies
+just admin            # Start admin app
+just student          # Start student app
+just check            # Typecheck + lint
+just ci-local         # Full gate: typecheck + lint + test
+just supabase-start   # Start local Supabase stack
+```
+
+Built for TSBVI (Texas School for the Blind and Visually Impaired) as the initial deployment target.
