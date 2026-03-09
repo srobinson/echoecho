@@ -4,6 +4,7 @@
 import { View, Text, StyleSheet, Pressable, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import { useCampusStore } from '../../src/stores/campusStore';
 
 export default function SettingsScreen() {
@@ -20,6 +21,21 @@ export default function SettingsScreen() {
           </Text>
           <Ionicons name="chevron-forward" size={16} color="#8888aa" />
         </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Developer Tools</Text>
+        <Pressable
+          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+          onPress={() => router.push('/haptic-lab')}
+          accessibilityRole="button"
+          accessibilityLabel="Open Haptic Lab"
+          accessibilityHint="Test and calibrate haptic patterns for the navigation engine"
+        >
+          <Ionicons name="pulse-outline" size={20} color="#6c63ff" />
+          <Text style={styles.rowText}>Haptic Lab</Text>
+          <Ionicons name="chevron-forward" size={16} color="#8888aa" />
+        </Pressable>
       </View>
 
       <View style={styles.section}>

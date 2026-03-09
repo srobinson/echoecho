@@ -95,7 +95,7 @@ export default function EmergencyScreen() {
         accessibilityRole="button"
         accessibilityHint="Double tap to return to home screen"
       >
-        <Text style={styles.cancelLabel}>Cancel — I'm Safe</Text>
+        <Text style={styles.cancelLabel}>{"Cancel — I'm Safe"}</Text>
       </Pressable>
     </SafeAreaView>
   );

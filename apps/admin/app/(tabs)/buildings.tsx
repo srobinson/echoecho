@@ -2,7 +2,7 @@
  * Buildings tab — manage campus buildings.
  * ALP-966: Full building management (ALP-990 sprint)
  */
-import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 

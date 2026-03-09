@@ -1,5 +1,7 @@
 node_modules/
+.env.staging
 .expo/
+.fmm.db
 dist/
 build/
 *.jks

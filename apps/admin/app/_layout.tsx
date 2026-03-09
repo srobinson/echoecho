@@ -47,6 +47,10 @@ export default function RootLayout() {
           name="record"
           options={{ title: 'Record Route', presentation: 'fullScreenModal' }}
         />
+        <Stack.Screen
+          name="haptic-lab"
+          options={{ title: 'Haptic Lab', headerBackTitle: 'Settings' }}
+        />
       </Stack>
     </GestureHandlerRootView>
   );

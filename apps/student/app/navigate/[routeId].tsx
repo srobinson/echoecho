@@ -20,7 +20,6 @@ import {
   Pressable,
   StyleSheet,
   AccessibilityInfo,
-  Platform,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
