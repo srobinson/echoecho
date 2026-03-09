@@ -10,10 +10,11 @@
  * ALP-962: Emergency mode FAB + triple-tap overlay in _layout.tsx
  * ALP-964: Favorites via useRouteHistory
  */
-import { useCallback } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import {
   View,
   Text,
+  TextInput,
   Pressable,
   StyleSheet,
   FlatList,
@@ -26,6 +27,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useNavigationStore } from '../src/stores/navigationStore';
 import { useRouteHistory } from '../src/hooks/useRouteHistory';
+import { useSttDestination } from '../src/hooks/useSttDestination';
+import { loadBuildingIndex } from '../src/lib/buildingIndex';
 
 // Show at most 5 favorites on the home screen; remainder accessible via "See all"
 const HOME_FAVORITES_LIMIT = 5;
@@ -33,16 +36,47 @@ const HOME_FAVORITES_LIMIT = 5;
 export default function HomeScreen() {
   const { userId } = useNavigationStore();
   const { favorites, isFavorite, toggleFavorite } = useRouteHistory(userId);
+  const [showKeyboardFallback, setShowKeyboardFallback] = useState(false);
+  const [keyboardQuery, setKeyboardQuery] = useState('');
 
-  const handleVoiceSearch = useCallback(() => {
-    // ALP-954: STT voice input — mobile-engineer implementation hook point
-    AccessibilityInfo.announceForAccessibility('Voice search opened. Speak your destination.');
+  // Load building index on mount for STT fuzzy matching
+  useEffect(() => {
+    void loadBuildingIndex();
   }, []);
 
   const handleDestinationSelect = useCallback((routeId: string, label: string) => {
     AccessibilityInfo.announceForAccessibility(`Starting navigation to ${label}`);
     router.push(`/navigate/${routeId}`);
   }, []);
+
+  const handleDestinationConfirmed = useCallback((buildingId: string, name: string) => {
+    AccessibilityInfo.announceForAccessibility(`Starting navigation to ${name}`);
+    router.push(`/navigate/${buildingId}`);
+  }, []);
+
+  const {
+    sttState,
+    matches,
+    pendingMatch,
+    error: sttError,
+    sttUnavailable,
+    startListening,
+    stopListening,
+    confirmDestination,
+    rejectDestination,
+    resetToIdle,
+  } = useSttDestination(handleDestinationConfirmed);
+
+  const handleVoiceSearch = useCallback(() => {
+    if (sttUnavailable) {
+      setShowKeyboardFallback(true);
+      AccessibilityInfo.announceForAccessibility(
+        'Voice search unavailable. Keyboard input opened.'
+      );
+      return;
+    }
+    void startListening();
+  }, [sttUnavailable, startListening]);
 
   const topFavorites = favorites.slice(0, HOME_FAVORITES_LIMIT);
 
@@ -55,16 +89,149 @@ export default function HomeScreen() {
         <Text style={styles.tagline}>Where do you want to go?</Text>
       </View>
 
+      {/* Voice input button with STT state feedback */}
       <Pressable
-        style={({ pressed }) => [styles.voiceBtn, pressed && styles.voiceBtnPressed]}
-        onPress={handleVoiceSearch}
-        accessibilityLabel="Search destination by voice"
+        style={({ pressed }) => [
+          styles.voiceBtn,
+          sttState === 'listening' && styles.voiceBtnListening,
+          pressed && styles.voiceBtnPressed,
+        ]}
+        onPress={sttState === 'listening' ? stopListening : handleVoiceSearch}
+        accessibilityLabel={
+          sttState === 'listening'
+            ? 'Listening. Tap to stop.'
+            : 'Start voice destination input'
+        }
         accessibilityRole="button"
-        accessibilityHint="Double tap to start speaking your destination"
+        accessibilityHint="Double tap to speak your destination"
       >
-        <Ionicons name="mic" size={40} color="#0a0a14" />
-        <Text style={styles.voiceBtnLabel}>Speak Destination</Text>
+        <Ionicons
+          name={sttState === 'listening' ? 'mic' : 'mic-outline'}
+          size={40}
+          color={sttState === 'listening' ? '#fff' : '#0a0a14'}
+        />
+        <Text
+          style={[
+            styles.voiceBtnLabel,
+            sttState === 'listening' && styles.voiceBtnLabelListening,
+          ]}
+        >
+          {sttState === 'listening'
+            ? 'Listening...'
+            : sttState === 'transcribing'
+              ? 'Processing...'
+              : 'Speak Destination'}
+        </Text>
       </Pressable>
+
+      {/* STT confirmation prompt */}
+      {sttState === 'confirming' && pendingMatch && (
+        <View style={styles.sttConfirmCard} accessibilityLiveRegion="polite">
+          <Text style={styles.sttConfirmText}>
+            Navigate to {pendingMatch.name}?
+          </Text>
+          <View style={styles.sttConfirmActions}>
+            <Pressable
+              style={({ pressed }) => [styles.sttConfirmBtn, pressed && { opacity: 0.7 }]}
+              onPress={confirmDestination}
+              accessibilityLabel={`Yes, navigate to ${pendingMatch.name}`}
+              accessibilityRole="button"
+            >
+              <Text style={styles.sttConfirmBtnText}>Yes</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.sttRejectBtn, pressed && { opacity: 0.7 }]}
+              onPress={rejectDestination}
+              accessibilityLabel="No, try again"
+              accessibilityRole="button"
+            >
+              <Text style={styles.sttRejectBtnText}>No</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      {/* STT disambiguation */}
+      {sttState === 'disambiguating' && matches.length > 0 && (
+        <View style={styles.sttConfirmCard} accessibilityLiveRegion="polite">
+          <Text style={styles.sttConfirmText}>Did you mean:</Text>
+          {matches.map((m) => (
+            <Pressable
+              key={m.buildingId}
+              style={({ pressed }) => [styles.sttDisambigBtn, pressed && { opacity: 0.7 }]}
+              onPress={() => handleDestinationConfirmed(m.buildingId, m.name)}
+              accessibilityLabel={`Navigate to ${m.name}`}
+              accessibilityRole="button"
+            >
+              <Ionicons name="navigate" size={18} color="#6c63ff" />
+              <Text style={styles.sttDisambigText}>{m.name}</Text>
+            </Pressable>
+          ))}
+          <Pressable
+            style={({ pressed }) => [styles.sttRejectBtn, pressed && { opacity: 0.7 }]}
+            onPress={resetToIdle}
+            accessibilityLabel="Cancel and try again"
+            accessibilityRole="button"
+          >
+            <Text style={styles.sttRejectBtnText}>Try again</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {/* STT error state */}
+      {sttState === 'error' && sttError && (
+        <View style={styles.sttErrorCard} accessibilityLiveRegion="assertive">
+          <Text style={styles.sttErrorText}>{sttError}</Text>
+          <View style={styles.sttConfirmActions}>
+            <Pressable
+              style={({ pressed }) => [styles.sttConfirmBtn, pressed && { opacity: 0.7 }]}
+              onPress={() => void startListening()}
+              accessibilityLabel="Try voice search again"
+              accessibilityRole="button"
+            >
+              <Text style={styles.sttConfirmBtnText}>Try again</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.sttRejectBtn, pressed && { opacity: 0.7 }]}
+              onPress={() => {
+                resetToIdle();
+                setShowKeyboardFallback(true);
+              }}
+              accessibilityLabel="Switch to keyboard input"
+              accessibilityRole="button"
+            >
+              <Text style={styles.sttRejectBtnText}>Type instead</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      {/* Keyboard fallback */}
+      {showKeyboardFallback && (
+        <View style={styles.keyboardFallback}>
+          <TextInput
+            style={styles.keyboardInput}
+            value={keyboardQuery}
+            onChangeText={setKeyboardQuery}
+            placeholder="Type destination name..."
+            placeholderTextColor="#5555aa"
+            autoFocus
+            accessibilityLabel="Type your destination"
+            returnKeyType="search"
+          />
+          <Pressable
+            style={({ pressed }) => [styles.sttRejectBtn, pressed && { opacity: 0.7 }]}
+            onPress={() => {
+              setShowKeyboardFallback(false);
+              setKeyboardQuery('');
+            }}
+            accessibilityLabel="Close keyboard input"
+            accessibilityRole="button"
+          >
+            <Text style={styles.sttRejectBtnText}>Cancel</Text>
+          </Pressable>
+        </View>
+      )}
 
       <View style={styles.favoritesSection}>
         <View style={styles.sectionRow}>
@@ -346,5 +513,107 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontWeight: '700',
+  },
+  voiceBtnListening: {
+    backgroundColor: '#22c55e',
+    shadowColor: '#22c55e',
+  },
+  voiceBtnLabelListening: {
+    color: '#fff',
+  },
+  sttConfirmCard: {
+    backgroundColor: '#14142a',
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#2a2a4e',
+    gap: 16,
+    marginBottom: 8,
+  },
+  sttConfirmText: {
+    color: '#e0e0f8',
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  sttConfirmActions: {
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'center',
+  },
+  sttConfirmBtn: {
+    backgroundColor: '#6c63ff',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    minHeight: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sttConfirmBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  sttRejectBtn: {
+    backgroundColor: '#2a2a4e',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    minHeight: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sttRejectBtnText: {
+    color: '#9090cc',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  sttDisambigBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#1a1a36',
+    borderRadius: 12,
+    padding: 14,
+    minHeight: 48,
+  },
+  sttDisambigText: {
+    color: '#e0e0f8',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  sttErrorCard: {
+    backgroundColor: '#2a0a0a',
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#7f1d1d',
+    gap: 12,
+    marginBottom: 8,
+  },
+  sttErrorText: {
+    color: '#fca5a5',
+    fontSize: 15,
+    textAlign: 'center',
+  },
+  keyboardFallback: {
+    backgroundColor: '#14142a',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#2a2a4e',
+    gap: 12,
+    marginBottom: 8,
+  },
+  keyboardInput: {
+    backgroundColor: '#0a0a14',
+    borderRadius: 12,
+    padding: 16,
+    color: '#e0e0f8',
+    fontSize: 18,
+    borderWidth: 1,
+    borderColor: '#3a3a6e',
+    minHeight: 52,
   },
 });

@@ -13,7 +13,7 @@
  * closed. Visual elements are supplementary — VoiceOver/TalkBack must deliver all
  * navigation information.
  */
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -25,42 +25,200 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigationStore } from '../../src/stores/navigationStore';
-import type { NavigationSession } from '@echoecho/shared';
+import { useGpsNavigation } from '../../src/hooks/useGpsNavigation';
+import { usePdrNavigation } from '../../src/hooks/usePdrNavigation';
+import { useHapticEngine } from '../../src/hooks/useHapticEngine';
+import { useAudioEngine } from '../../src/hooks/useAudioEngine';
+import { useOffRouteDetection } from '../../src/hooks/useOffRouteDetection';
+import { useSttDestination } from '../../src/hooks/useSttDestination';
+import { getOrderedWaypoints } from '../../src/lib/localDb';
+import type { NavEvent } from '../../src/types/navEvents';
+import type { NavigationStatus } from '@echoecho/shared';
 
 export default function NavigateScreen() {
   const { routeId } = useLocalSearchParams<{ routeId: string }>();
   const { currentSession, endNavigation } = useNavigationStore();
+  const [navStatus, setNavStatus] = useState<NavigationStatus>('searching');
+  const [currentInstruction, setCurrentInstruction] = useState('Acquiring GPS signal...');
+  const [distanceToNext, setDistanceToNext] = useState<number | null>(null);
+  const [waypointProgress, setWaypointProgress] = useState({ current: 0, total: 0 });
+  const [positioningMode, setPositioningMode] = useState<'gps' | 'pdr'>('gps');
 
+  // STT session state for haptic mutex (not actively used during navigation,
+  // but the contract requires it so haptics can check before firing)
+  const { sttSessionState } = useSttDestination(() => {
+    // No-op during active navigation; destination is already selected
+  });
+
+  // ALP-956: GPS position tracking
+  const gps = useGpsNavigation();
+
+  // ALP-957: PDR fallback
+  const pdr = usePdrNavigation(gps.injectPosition);
+
+  // ALP-958: Haptic feedback engine (consumes SttSessionState)
+  const haptic = useHapticEngine(sttSessionState);
+
+  // ALP-959: Audio announcement engine
+  const audio = useAudioEngine();
+
+  // ALP-960: Off-route detection (bridges haptic + audio)
+  const offRoute = useOffRouteDetection(
+    haptic.onNavEvent,
+    async (event: NavEvent) => audio.onNavEvent(event)
+  );
+
+  // Central event handler: distributes NavEvents to all downstream consumers
+  const handleNavEvent = useCallback((event: NavEvent) => {
+    switch (event.type) {
+      case 'approaching_waypoint':
+        haptic.onNavEvent(event);
+        void audio.onNavEvent(event);
+        setDistanceToNext(event.distanceMeters);
+        setCurrentInstruction(`Approaching waypoint in ${Math.round(event.distanceMeters)} meters`);
+        break;
+
+      case 'at_waypoint': {
+        haptic.onNavEvent(event);
+        void audio.onNavEvent(event);
+        offRoute.onNavEvent(event);
+        setWaypointProgress((prev) => ({ ...prev, current: prev.current + 1 }));
+        const dirText: Record<string, string> = {
+          left: 'Turn left',
+          right: 'Turn right',
+          straight: 'Continue straight',
+          arrived: 'You have arrived',
+        };
+        setCurrentInstruction(dirText[event.turnDirection] ?? 'Continue');
+        setDistanceToNext(null);
+        break;
+      }
+
+      case 'arrived':
+        haptic.onNavEvent(event);
+        void audio.onNavEvent(event);
+        offRoute.onNavEvent(event);
+        setNavStatus('arrived');
+        setCurrentInstruction('You have arrived at your destination');
+        break;
+
+      case 'off_route':
+        offRoute.onNavEvent(event);
+        setNavStatus('off_route');
+        setCurrentInstruction(`Off route by ${Math.round(event.deviationMeters)} meters`);
+        break;
+
+      case 'position_degraded':
+        void audio.onNavEvent(event);
+        setPositioningMode('pdr');
+        if (gps.lastPositionRef.current) {
+          const pos = gps.lastPositionRef.current;
+          pdr.activate(pos.lat, pos.lng, pos.heading);
+          offRoute.setIsPDRActive(true);
+        }
+        break;
+
+      case 'position_restored':
+        setPositioningMode('gps');
+        if (gps.lastPositionRef.current) {
+          pdr.reanchor(gps.lastPositionRef.current.lat, gps.lastPositionRef.current.lng);
+        }
+        pdr.deactivate();
+        offRoute.setIsPDRActive(false);
+        if (navStatus === 'off_route') setNavStatus('navigating');
+        break;
+
+      case 'pdr_accuracy_warning':
+        void audio.onNavEvent(event);
+        break;
+    }
+  }, [haptic, audio, offRoute, pdr, gps.lastPositionRef, navStatus]);
+
+  // Wire PDR event handler (emits pdr_accuracy_warning through handleNavEvent)
   useEffect(() => {
-    // ALP-956: GPS tracking service starts here (mobile-engineer)
-    // ALP-958: Haptic engine starts here (mobile-engineer)
-    AccessibilityInfo.announceForAccessibility('Navigation started. Follow the audio instructions.');
+    pdr.onNavEvent(handleNavEvent);
+  }, [pdr, handleNavEvent]);
+
+  // Wire audio engine position ref for playback-time distance computation
+  useEffect(() => {
+    audio.setPositionRef(gps.lastPositionRef);
+  }, [audio, gps.lastPositionRef]);
+
+  // Wire off-route position ref
+  useEffect(() => {
+    offRoute.setPositionRef(gps.lastPositionRef);
+  }, [offRoute, gps.lastPositionRef]);
+
+  // Start navigation on mount: load waypoints from local DB, start GPS tracking
+  useEffect(() => {
+    if (!routeId) return;
+    let cancelled = false;
+
+    const startNavigation = async () => {
+      const waypoints = await getOrderedWaypoints(routeId);
+      if (cancelled || waypoints.length === 0) return;
+
+      setWaypointProgress({ current: 0, total: waypoints.length });
+      audio.setWaypoints(waypoints);
+      setNavStatus('navigating');
+
+      await gps.startTracking(waypoints, handleNavEvent);
+      AccessibilityInfo.announceForAccessibility(
+        'Navigation started. Follow the audio instructions.'
+      );
+    };
+
+    void startNavigation();
 
     return () => {
-      // Cleanup navigation services on unmount
+      cancelled = true;
+      gps.stopTracking();
+      pdr.deactivate();
     };
-  }, [routeId]);
+  }, [routeId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Announce haptic skip reasons to screen reader users
+  useEffect(() => {
+    haptic.onHapticSkipped((reason) => {
+      if (reason === 'low_power') {
+        AccessibilityInfo.announceForAccessibility(
+          'Haptic feedback unavailable in Low Power Mode. Audio guidance continues.'
+        );
+      }
+    });
+  }, [haptic]);
 
   const handleEndNavigation = useCallback(() => {
+    gps.stopTracking();
+    pdr.deactivate();
     endNavigation();
     router.back();
-  }, [endNavigation]);
+  }, [endNavigation, gps, pdr]);
 
-  const status = currentSession?.status ?? 'navigating';
+  const status = navStatus;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Status indicator */}
-      <StatusBar status={status} />
+      <StatusBar status={status} positioningMode={positioningMode} />
 
       {/* Current instruction */}
       <View style={styles.instructionArea} accessibilityLiveRegion="polite">
-        <CurrentInstruction session={currentSession} />
+        <InstructionCard
+          status={status}
+          instruction={currentInstruction}
+          distance={distanceToNext}
+          destination={currentSession?.route.toLabel ?? ''}
+        />
       </View>
 
       {/* Progress */}
       <View style={styles.progressArea}>
-        <RouteProgress session={currentSession} />
+        <ProgressCard
+          current={waypointProgress.current}
+          total={waypointProgress.total}
+          destination={currentSession?.route.toLabel ?? ''}
+        />
       </View>
 
       {/* End navigation */}
@@ -78,16 +236,23 @@ export default function NavigateScreen() {
   );
 }
 
-function StatusBar({ status }: { status: string }) {
+function StatusBar({
+  status,
+  positioningMode,
+}: {
+  status: NavigationStatus;
+  positioningMode: 'gps' | 'pdr';
+}) {
   const config: Record<string, { color: string; label: string }> = {
     navigating: { color: '#22c55e', label: 'Navigating' },
-    off_route: { color: '#f97316', label: 'Off Route — Rerouting' },
+    off_route: { color: '#f97316', label: 'Off Route' },
     arrived: { color: '#6c63ff', label: 'Arrived' },
     searching: { color: '#eab308', label: 'Finding position...' },
     emergency: { color: '#ef4444', label: 'Emergency Mode' },
     idle: { color: '#8888aa', label: 'Ready' },
   };
   const { color, label } = config[status] ?? config['idle'];
+  const modeLabel = positioningMode === 'pdr' ? ' (estimated position)' : '';
 
   return (
     <View style={[styles.statusBar, { borderColor: color }]}>
@@ -95,67 +260,63 @@ function StatusBar({ status }: { status: string }) {
       <Text
         style={[styles.statusLabel, { color }]}
         accessibilityRole="none"
-        accessibilityLabel={`Navigation status: ${label}`}
+        accessibilityLabel={`Navigation status: ${label}${modeLabel}`}
       >
         {label}
       </Text>
+      {positioningMode === 'pdr' && (
+        <Ionicons name="cellular-outline" size={14} color="#eab308" />
+      )}
     </View>
   );
 }
 
-function CurrentInstruction({
-  session,
+function InstructionCard({
+  status,
+  instruction,
+  distance,
+  destination,
 }: {
-  session: NavigationSession | null;
+  status: NavigationStatus;
+  instruction: string;
+  distance: number | null;
+  destination: string;
 }) {
-  if (!session) {
-    return (
-      <View style={styles.instructionCard}>
-        <Text style={styles.instructionText}>Waiting for GPS signal...</Text>
-      </View>
-    );
-  }
-
-  const status = session.status;
-
   if (status === 'arrived') {
     return (
       <View style={styles.instructionCard}>
         <Ionicons name="checkmark-circle" size={80} color="#6c63ff" />
         <Text style={styles.arrivedText}>You have arrived!</Text>
-        <Text style={styles.arrivedSubtext}>{session.route.toLabel}</Text>
+        <Text style={styles.arrivedSubtext}>{destination}</Text>
       </View>
     );
   }
 
-  const nextWaypoint =
-    session.route.waypoints[session.currentWaypointIndex] ?? null;
-  const directionText = nextWaypoint?.audioLabel ?? 'Continue ahead';
-
   return (
     <View style={styles.instructionCard}>
-      <Text style={styles.instructionText} accessibilityLabel={directionText}>
-        {directionText}
+      <Text style={styles.instructionText} accessibilityLabel={instruction}>
+        {instruction}
       </Text>
-      {session.distanceToNextWaypoint != null && (
+      {distance != null && (
         <Text style={styles.distanceText}>
-          {Math.round(session.distanceToNextWaypoint)} m
+          {Math.round(distance)} m
         </Text>
       )}
     </View>
   );
 }
 
-function RouteProgress({
-  session,
+function ProgressCard({
+  current,
+  total,
+  destination,
 }: {
-  session: NavigationSession | null;
+  current: number;
+  total: number;
+  destination: string;
 }) {
-  if (!session) return null;
-
-  const total = session.route.waypoints.length;
-  const current = session.currentWaypointIndex;
-  const progress = total > 0 ? current / total : 0;
+  if (total === 0) return null;
+  const progress = current / total;
 
   return (
     <View style={styles.progressCard}>
@@ -164,7 +325,7 @@ function RouteProgress({
           Waypoint {current + 1} of {total}
         </Text>
         <Text style={styles.destinationLabel} numberOfLines={1}>
-          → {session.route.toLabel}
+          {destination}
         </Text>
       </View>
       <View style={styles.progressBarTrack}>

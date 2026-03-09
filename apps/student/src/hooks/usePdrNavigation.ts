@@ -46,6 +46,12 @@ export interface UsePdrNavigationResult {
   activate: (startLat: number, startLng: number, startHeading: number) => void;
   deactivate: () => void;
   onNavEvent: (handler: NavEventHandler) => void;
+  /**
+   * Called when GPS restores (position_restored). Re-anchors PDR estimated
+   * position to GPS truth. Delta < 10m: smooth interpolation over 2s.
+   * Delta >= 10m: immediate snap.
+   */
+  reanchor: (gpsLat: number, gpsLng: number) => void;
 }
 
 export function usePdrNavigation(
@@ -156,11 +162,38 @@ export function usePdrNavigation(
     eventHandlerRef.current = handler;
   }, []);
 
+  const reanchor = useCallback((gpsLat: number, gpsLng: number) => {
+    const dLat = gpsLat - posRef.current.lat;
+    const dLng = gpsLng - posRef.current.lng;
+    const deltaM = Math.sqrt(dLat ** 2 + dLng ** 2) * 111_320;
+
+    if (deltaM >= 10) {
+      // Immediate snap for large discrepancy; log for post-session drift analysis
+      posRef.current = { lat: gpsLat, lng: gpsLng };
+      console.log('[PDR] reanchor snap', { deltaM });
+    } else if (deltaM > 0) {
+      // Smooth interpolation over 2s (10 steps × 200ms)
+      const steps = 10;
+      const stepLat = dLat / steps;
+      const stepLng = dLng / steps;
+      let step = 0;
+      const timer = setInterval(() => {
+        posRef.current = {
+          lat: posRef.current.lat + stepLat,
+          lng: posRef.current.lng + stepLng,
+        };
+        step += 1;
+        if (step >= steps) clearInterval(timer);
+      }, 200);
+    }
+  }, []);
+
   return {
     get isPDRActive() { return activeRef.current; },
     activate,
     deactivate,
     onNavEvent,
+    reanchor,
   };
 }
 

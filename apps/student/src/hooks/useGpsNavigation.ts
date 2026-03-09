@@ -8,6 +8,10 @@
  * Turn direction at waypoints is derived from segment bearing delta — no
  * waypoint metadata required. The injectPosition() method accepts PDR
  * positions from ALP-957 so the rest of the stack is source-agnostic.
+ *
+ * off_route events are emitted when deviation > 15m for > 5 consecutive
+ * seconds. A watchdog fires position_degraded when no GPS update arrives
+ * for 3s, complementing the accuracy-based trigger.
  */
 import { useCallback, useRef } from 'react';
 import * as Location from 'expo-location';
@@ -22,6 +26,8 @@ const SNAP_THRESHOLD_M = 15;
 const MAX_VALID_ACCURACY_M = 20;
 const DEGRADED_ACCURACY_M = 10;
 const DEGRADED_GAP_MS = 3_000;
+const OFF_ROUTE_THRESHOLD_M = 15;
+const OFF_ROUTE_DEBOUNCE_MS = 5_000;
 
 const EARTH_RADIUS_M = 6_371_000;
 
@@ -69,6 +75,33 @@ function projectOntoSegment(
   return { lat: aLat + t * abLat, lng: aLng + t * abLng };
 }
 
+/** Distance from point to the nearest segment on the route polyline. */
+function distanceToRoute(
+  pLat: number, pLng: number,
+  waypoints: LocalWaypoint[]
+): { dist: number; bearing: number } {
+  if (waypoints.length === 0) return { dist: 0, bearing: 0 };
+  let minDist = Infinity;
+  let nearestLat = waypoints[0].lat;
+  let nearestLng = waypoints[0].lng;
+
+  for (let i = 0; i < waypoints.length - 1; i++) {
+    const a = waypoints[i];
+    const b = waypoints[i + 1];
+    const proj = projectOntoSegment(pLat, pLng, a.lat, a.lng, b.lat, b.lng);
+    const d = haversineM(pLat, pLng, proj.lat, proj.lng);
+    if (d < minDist) {
+      minDist = d;
+      nearestLat = proj.lat;
+      nearestLng = proj.lng;
+    }
+  }
+  return {
+    dist: minDist,
+    bearing: bearingDeg(pLat, pLng, nearestLat, nearestLng),
+  };
+}
+
 /** Turn direction from bearing delta (per ALP-956 spec). */
 function turnDirection(
   currentBearing: number,
@@ -85,6 +118,8 @@ export interface UseGpsNavigationResult {
   startTracking: (waypoints: LocalWaypoint[], onEvent: NavEventHandler) => Promise<void>;
   stopTracking: () => void;
   injectPosition: (update: TrackPositionUpdate) => void;
+  /** Exposed for ALP-959: distance to next waypoint at playback time. */
+  lastPositionRef: React.MutableRefObject<TrackPositionUpdate | null>;
 }
 
 export function useGpsNavigation(): UseGpsNavigationResult {
@@ -97,6 +132,9 @@ export function useGpsNavigation(): UseGpsNavigationResult {
   const approachingFiredRef = useRef(false);
   const degradedRef = useRef(false);
   const degradedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const offRouteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const offRouteFiredRef = useRef(false);
 
   const emit = useCallback((event: NavEvent) => {
     handlerRef.current?.(event);
@@ -110,10 +148,36 @@ export function useGpsNavigation(): UseGpsNavigationResult {
     lastUpdateTimeRef.current = Date.now();
     lastPositionRef.current = update;
 
-    // Accuracy gate — hold invalid positions
+    // Accuracy gate — holds invalid GPS fixes; PDR injections bypass
     if (update.source === 'gps' && update.accuracy > MAX_VALID_ACCURACY_M) return;
 
-    // Route segment snapping — find nearest projected point
+    // Off-route detection against full route polyline
+    const { dist: routeDist, bearing: bearingToRoute } = distanceToRoute(
+      update.lat, update.lng, wps
+    );
+
+    if (routeDist > OFF_ROUTE_THRESHOLD_M) {
+      if (!offRouteTimerRef.current && !offRouteFiredRef.current) {
+        offRouteTimerRef.current = setTimeout(() => {
+          offRouteFiredRef.current = true;
+          emit({
+            type: 'off_route',
+            deviationMeters: routeDist,
+            bearingToRoute,
+            source: update.source,
+          });
+          offRouteTimerRef.current = null;
+        }, OFF_ROUTE_DEBOUNCE_MS);
+      }
+    } else {
+      if (offRouteTimerRef.current) {
+        clearTimeout(offRouteTimerRef.current);
+        offRouteTimerRef.current = null;
+      }
+      offRouteFiredRef.current = false;
+    }
+
+    // Route segment snapping for waypoint distance calculation
     const target = wps[idx];
     let distToTarget = haversineM(update.lat, update.lng, target.lat, target.lng);
 
@@ -164,6 +228,26 @@ export function useGpsNavigation(): UseGpsNavigationResult {
     }
   }, [emit]);
 
+  const stopWatchdog = useCallback(() => {
+    if (watchdogRef.current) {
+      clearInterval(watchdogRef.current);
+      watchdogRef.current = null;
+    }
+  }, []);
+
+  /** Watchdog: fires position_degraded if no GPS update arrives for 3s. */
+  const startWatchdog = useCallback(() => {
+    stopWatchdog();
+    lastUpdateTimeRef.current = Date.now();
+    watchdogRef.current = setInterval(() => {
+      const elapsed = Date.now() - lastUpdateTimeRef.current;
+      if (elapsed > DEGRADED_GAP_MS && !degradedRef.current) {
+        degradedRef.current = true;
+        emit({ type: 'position_degraded', accuracyMeters: 99 });
+      }
+    }, 1_000);
+  }, [emit, stopWatchdog]);
+
   const startTracking = useCallback(async (
     waypoints: LocalWaypoint[],
     onEvent: NavEventHandler
@@ -173,10 +257,13 @@ export function useGpsNavigation(): UseGpsNavigationResult {
     wpIndexRef.current = 0;
     approachingFiredRef.current = false;
     degradedRef.current = false;
+    offRouteFiredRef.current = false;
 
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') return;
     await Location.requestBackgroundPermissionsAsync();
+
+    startWatchdog();
 
     subscriptionRef.current = await Location.watchPositionAsync(
       {
@@ -185,9 +272,9 @@ export function useGpsNavigation(): UseGpsNavigationResult {
         distanceInterval: 0,
       },
       (loc) => {
+        lastUpdateTimeRef.current = Date.now();
         const acc = loc.coords.accuracy ?? 999;
 
-        // Degraded detection
         if (acc > DEGRADED_ACCURACY_M) {
           if (!degradedTimerRef.current) {
             degradedTimerRef.current = setTimeout(handleDegradedTimer, DEGRADED_GAP_MS);
@@ -213,21 +300,26 @@ export function useGpsNavigation(): UseGpsNavigationResult {
         });
       }
     );
-  }, [processPosition, handleDegradedTimer, emit]);
+  }, [processPosition, handleDegradedTimer, startWatchdog, emit]);
 
   const stopTracking = useCallback(() => {
     subscriptionRef.current?.remove();
     subscriptionRef.current = null;
+    stopWatchdog();
     if (degradedTimerRef.current) {
       clearTimeout(degradedTimerRef.current);
       degradedTimerRef.current = null;
     }
-  }, []);
+    if (offRouteTimerRef.current) {
+      clearTimeout(offRouteTimerRef.current);
+      offRouteTimerRef.current = null;
+    }
+  }, [stopWatchdog]);
 
   /** PDR positions (ALP-957) injected here; processed identically to GPS. */
   const injectPosition = useCallback((update: TrackPositionUpdate) => {
     processPosition(update);
   }, [processPosition]);
 
-  return { startTracking, stopTracking, injectPosition };
+  return { startTracking, stopTracking, injectPosition, lastPositionRef };
 }
