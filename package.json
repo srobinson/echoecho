@@ -1,0 +1,23 @@
+{
+  "name": "echoecho",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "admin": "yarn workspace @echoecho/admin start",
+    "student": "yarn workspace @echoecho/student start",
+    "typecheck": "yarn workspaces run typecheck",
+    "lint": "yarn workspaces run lint",
+    "test": "yarn workspaces run test --passWithNoTests"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "yarn@4.9.1",
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}
