@@ -217,8 +217,10 @@ export function useAudioEngine(): UseAudioEngineResult {
           clipUri: clipUri ?? undefined,
           enqueuedAt: Date.now(),
         });
-        // Follow-up turn instruction at higher priority
-        if (event.turnDirection !== 'arrived') {
+        // Follow-up text announcement only when a clip will play first.
+        // Without a clip, the first enqueue's text fallback already covers
+        // the direction. Enqueueing both produces duplicate speech.
+        if (clipUri && event.turnDirection !== 'arrived') {
           enqueue({
             priority: PRIORITY.turn,
             text,
