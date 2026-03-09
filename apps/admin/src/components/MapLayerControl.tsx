@@ -2,7 +2,8 @@
  * Layer toggle panel for the admin map view.
  * Allows O&M specialists to progressively reveal data overlays.
  */
-import { View, Pressable, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { Pressable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 
 export interface MapLayers {
