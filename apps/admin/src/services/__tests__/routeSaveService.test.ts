@@ -193,7 +193,7 @@ describe('saveRoute', () => {
 
     expect(mockReadFile).toHaveBeenCalledWith('file:///local/audio.m4a', expect.any(Object));
     expect(mockUpload).toHaveBeenCalledWith(
-      'pending/wp-1/audio.m4a',
+      'pending/wp-1.m4a',
       expect.any(Uint8Array),
       expect.objectContaining({ contentType: 'audio/mp4' }),
     );
@@ -208,7 +208,7 @@ describe('saveRoute', () => {
     await saveRoute(session, METADATA, jest.fn());
 
     expect(mockUpload).toHaveBeenCalledWith(
-      'pending/wp-1/photo.jpg',
+      'pending/wp-1.jpg',
       expect.any(Uint8Array),
       expect.objectContaining({ contentType: 'image/jpeg' }),
     );
@@ -217,13 +217,13 @@ describe('saveRoute', () => {
 
   it('resolves existing storage key to public URL without re-uploading', async () => {
     const session = makeSession({
-      pendingWaypoints: [makeWaypoint({ audioAnnotationUri: 'pending/wp-1/audio.m4a' })],
+      pendingWaypoints: [makeWaypoint({ audioAnnotationUri: 'pending/wp-1.m4a' })],
     });
 
     await saveRoute(session, METADATA, jest.fn());
 
     expect(mockUpload).not.toHaveBeenCalled();
-    expect(mockGetPublicUrl).toHaveBeenCalledWith('pending/wp-1/audio.m4a');
+    expect(mockGetPublicUrl).toHaveBeenCalledWith('pending/wp-1.m4a');
     expect(mockRpc).toHaveBeenCalled();
   });
 

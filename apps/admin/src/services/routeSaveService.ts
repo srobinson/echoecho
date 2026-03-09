@@ -141,7 +141,7 @@ async function resolveWaypointMedia(
 
     let audioUrl: string;
     if (isLocalUri(wp.audioAnnotationUri)) {
-      const storageKey = `pending/${wp.localId}/audio.m4a`;
+      const storageKey = `pending/${wp.localId}.m4a`;
       const upload = await uploadLocalFile(
         wp.audioAnnotationUri,
         AUDIO_BUCKET,
@@ -165,7 +165,7 @@ async function resolveWaypointMedia(
 
     let photoUrl: string;
     if (isLocalUri(wp.photoUri)) {
-      const storageKey = `pending/${wp.localId}/photo.jpg`;
+      const storageKey = `pending/${wp.localId}.jpg`;
       const upload = await uploadLocalFile(
         wp.photoUri,
         PHOTO_BUCKET,

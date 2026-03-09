@@ -147,7 +147,7 @@ export async function uploadWaypointPhoto(
   localUri: string,
   waypointLocalId: string,
 ): Promise<PhotoUploadResult> {
-  const storageKey = `pending/${waypointLocalId}/photo.jpg`;
+  const storageKey = `pending/${waypointLocalId}.jpg`;
 
   try {
     const base64 = await FileSystem.readAsStringAsync(localUri, {

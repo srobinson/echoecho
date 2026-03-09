@@ -59,16 +59,41 @@ Deno.serve(async (req: Request) => {
       }
 
       // Filter to files whose name (sans extension) is a valid waypoint UUID.
-      // Non-UUID names (e.g. .placeholder, stray files) are skipped — we only
-      // know how to verify ownership for files that follow the path convention.
+      // Non-UUID names (e.g. .placeholder, stray files) are skipped.
       const candidates = (objects ?? []).filter((obj) =>
         UUID_RE.test(obj.name.replace(/\.[^.]+$/, ''))
       );
 
       if (candidates.length === 0) continue;
 
-      // Batch the existence check: one query per folder rather than one per object.
+      // The `pending/` folder holds pre-save uploads keyed by local UUID.
+      // These files are orphaned if the save_route RPC never completed.
+      // For route folders, check against the waypoints table.
       const waypointIds = candidates.map((obj) => obj.name.replace(/\.[^.]+$/, ''));
+
+      if (folder.name === 'pending') {
+        // Pending files older than 24h with no matching waypoint are orphaned.
+        // All pending files use local UUIDs that never become waypoint IDs,
+        // so we can safely remove any pending files that exist here.
+        const staleThreshold = Date.now() - 24 * 60 * 60 * 1000;
+        for (const obj of candidates) {
+          const createdAt = obj.created_at ? new Date(obj.created_at).getTime() : 0;
+          if (createdAt < staleThreshold) {
+            const objectPath = `pending/${obj.name}`;
+            const { error: removeError } = await supabase.storage
+              .from(bucket)
+              .remove([objectPath]);
+            if (removeError) {
+              errors.push(`remove error for ${objectPath}: ${removeError.message}`);
+            } else {
+              removed.push(objectPath);
+            }
+          }
+        }
+        continue;
+      }
+
+      // Batch the existence check: one query per folder rather than one per object.
       const { data: existing, error: queryError } = await supabase
         .from('waypoints')
         .select('id')

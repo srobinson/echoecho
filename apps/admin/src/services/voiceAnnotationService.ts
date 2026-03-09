@@ -253,7 +253,7 @@ export async function uploadVoiceAnnotation(
   localUri: string,
   waypointLocalId: string,
 ): Promise<AudioUploadResult> {
-  const storageKey = `pending/${waypointLocalId}/audio.m4a`;
+  const storageKey = `pending/${waypointLocalId}.m4a`;
 
   try {
     const base64 = await FileSystem.readAsStringAsync(localUri, {
