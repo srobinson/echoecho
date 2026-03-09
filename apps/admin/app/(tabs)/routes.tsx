@@ -2,7 +2,7 @@
  * Routes list tab: route management with server-side filtering and search.
  * ALP-968: Filter by status, search by name (debounced 300ms), sort by recency.
  */
-import { useEffect, useCallback, useState, useRef } from 'react';
+import { useEffect, useCallback, useState, useRef, memo } from 'react';
 import {
   View,
   Text,
@@ -84,6 +84,13 @@ export default function RoutesScreen() {
     };
   }, []);
 
+  const renderRouteItem = useCallback(
+    ({ item }: { item: Route }) => (
+      <RouteCard route={item} onPress={() => router.push(`/route/${item.id}`)} />
+    ),
+    [],
+  );
+
   const handleSearch = useCallback((text: string) => {
     setSearchQuery(text);
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -148,10 +155,8 @@ export default function RoutesScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           ListEmptyComponent={<EmptyState hasFilter={statusFilter !== 'all' || searchQuery.length > 0} />}
-          renderItem={({ item }) => (
-            <RouteCard route={item} onPress={() => router.push(`/route/${item.id}`)} />
-          )}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          renderItem={renderRouteItem}
+          ItemSeparatorComponent={ListSeparator}
           accessibilityRole="list"
         />
       )}
@@ -189,7 +194,11 @@ function staticMapUrl(route: Route): string | null {
   return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${path}/[${bbox}]/300x120@2x?access_token=${token}`;
 }
 
-function RouteCard({ route, onPress }: { route: Route; onPress: () => void }) {
+function ListSeparator() {
+  return <View style={styles.separator} />;
+}
+
+const RouteCard = memo(function RouteCard({ route, onPress }: { route: Route; onPress: () => void }) {
   const statusColor = STATUS_COLOR[route.status] ?? '#9CA3AF';
   const mapUrl = staticMapUrl(route);
   const dateStr = route.recordedAt
@@ -243,7 +252,7 @@ function RouteCard({ route, onPress }: { route: Route; onPress: () => void }) {
       </View>
     </Pressable>
   );
-}
+});
 
 function EmptyState({ hasFilter }: { hasFilter: boolean }) {
   return (

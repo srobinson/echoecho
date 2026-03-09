@@ -10,7 +10,7 @@
  * ALP-962: Emergency mode FAB + triple-tap overlay in _layout.tsx
  * ALP-964: Favorites via useRouteHistory
  */
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, memo } from 'react';
 import {
   View,
   Text,
@@ -79,6 +79,26 @@ export default function HomeScreen() {
   }, [sttUnavailable, startListening]);
 
   const topFavorites = favorites.slice(0, HOME_FAVORITES_LIMIT);
+
+  const renderFavoriteItem = useCallback(
+    ({ item }: { item: (typeof favorites)[number] }) => (
+      <DestinationCard
+        label={item.routeName}
+        sublabel={`${item.fromLabel} → ${item.toLabel}`}
+        isFavorite={isFavorite(item.routeId)}
+        onPress={() => handleDestinationSelect(item.routeId, item.routeName)}
+        onToggleFavorite={() => {
+          void toggleFavorite({
+            id: item.routeId,
+            name: item.routeName,
+            fromLabel: item.fromLabel,
+            toLabel: item.toLabel,
+          } as Parameters<typeof toggleFavorite>[0]);
+        }}
+      />
+    ),
+    [isFavorite, handleDestinationSelect, toggleFavorite],
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -255,23 +275,8 @@ export default function HomeScreen() {
           keyExtractor={(item) => item.routeId}
           contentContainerStyle={styles.favList}
           ListEmptyComponent={<FavoritesEmpty />}
-          renderItem={({ item }) => (
-            <DestinationCard
-              label={item.routeName}
-              sublabel={`${item.fromLabel} → ${item.toLabel}`}
-              isFavorite={isFavorite(item.routeId)}
-              onPress={() => handleDestinationSelect(item.routeId, item.routeName)}
-              onToggleFavorite={() => {
-                void toggleFavorite({
-                  id: item.routeId,
-                  name: item.routeName,
-                  fromLabel: item.fromLabel,
-                  toLabel: item.toLabel,
-                } as Parameters<typeof toggleFavorite>[0]);
-              }}
-            />
-          )}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          renderItem={renderFavoriteItem}
+          ItemSeparatorComponent={FavoriteSeparator}
           accessibilityRole="list"
           scrollEnabled={false}
         />
@@ -292,7 +297,11 @@ export default function HomeScreen() {
   );
 }
 
-function DestinationCard({
+function FavoriteSeparator() {
+  return <View style={styles.separator} />;
+}
+
+const DestinationCard = memo(function DestinationCard({
   label,
   sublabel,
   isFavorite,
@@ -336,7 +345,7 @@ function DestinationCard({
       </Pressable>
     </View>
   );
-}
+});
 
 function FavoritesEmpty() {
   return (

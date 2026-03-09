@@ -236,6 +236,18 @@ export default function HazardsScreen() {
     })),
   }), [filteredHazards]);
 
+  const renderHazardItem = useCallback(
+    ({ item }: { item: Hazard }) => (
+      <HazardListItem
+        hazard={item}
+        routes={routes}
+        onPress={() => handleSelectHazard(item)}
+        onResolve={() => void handleResolve(item)}
+      />
+    ),
+    [routes, handleSelectHazard, handleResolve],
+  );
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* View mode toggle */}
@@ -363,15 +375,8 @@ export default function HazardsScreen() {
               </Text>
             </View>
           }
-          renderItem={({ item }) => (
-            <HazardListItem
-              hazard={item}
-              routes={routes}
-              onPress={() => handleSelectHazard(item)}
-              onResolve={() => void handleResolve(item)}
-            />
-          )}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          renderItem={renderHazardItem}
+          ItemSeparatorComponent={HazardListSeparator}
         />
       ) : (
         <View style={styles.mapContainer}>
@@ -467,6 +472,12 @@ export default function HazardsScreen() {
       />
     </SafeAreaView>
   );
+}
+
+// ── HazardListSeparator ───────────────────────────────────────────────────
+
+function HazardListSeparator() {
+  return <View style={styles.separator} />;
 }
 
 // ── HazardListItem ─────────────────────────────────────────────────────────
