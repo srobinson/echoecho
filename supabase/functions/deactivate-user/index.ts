@@ -1,7 +1,9 @@
 // Edge Function: deactivate-user
 // Admin-only. Immediate two-step deactivation:
-//   1. auth.admin.updateUserById({ ban_duration: '876600h' }) — blocks new token issuance
-//   2. profiles.is_active = false                             — invalidates existing JWTs via RLS
+//   1. profiles.is_active = false                             — invalidates existing JWTs via RLS
+//   2. auth.admin.updateUserById({ ban_duration: '876600h' }) — blocks new token issuance
+// Profile update runs first so it can be rolled back if the auth ban fails,
+// preventing the inconsistent state where auth is banned but profile shows active.
 //
 // current_user_role() in ALP-942 queries profiles WHERE is_active = true.
 // A deactivated user's role resolves to null, failing all RLS policies on the
@@ -65,20 +67,9 @@ Deno.serve(async (req: Request) => {
     return json({ code: 'SELF_LOCKOUT', message: 'Admins cannot deactivate their own account' }, 400);
   }
 
-  // Step 1: ban the auth user to block new token issuance.
-  // '876600h' = 100 years (GoTrue's closest approximation to a permanent ban).
-  // ban_duration: 'none' would *remove* a ban — do not use it here.
-  const { error: banError } = await adminClient.auth.admin.updateUserById(
-    targetUserId,
-    { ban_duration: '876600h' }
-  );
-  if (banError) {
-    console.error('[deactivate-user] Auth ban failed:', banError);
-    return json({ code: 'BAN_FAILED', message: banError.message }, 500);
-  }
-
-  // Step 2: set is_active = false so current_user_role() returns null,
+  // Step 1: set is_active = false so current_user_role() returns null,
   // invalidating existing JWTs at the RLS level immediately.
+  // This runs first because it can be rolled back if the auth ban fails.
   const { error: profileError } = await adminClient
     .from('profiles')
     .update({ is_active: false })
@@ -87,6 +78,22 @@ Deno.serve(async (req: Request) => {
   if (profileError) {
     console.error('[deactivate-user] Profile update failed:', profileError);
     return json({ code: 'PROFILE_UPDATE_FAILED', message: profileError.message }, 500);
+  }
+
+  // Step 2: ban the auth user to block new token issuance.
+  // '876600h' = 100 years (GoTrue's closest approximation to a permanent ban).
+  // ban_duration: 'none' would *remove* a ban, do not use it here.
+  const { error: banError } = await adminClient.auth.admin.updateUserById(
+    targetUserId,
+    { ban_duration: '876600h' }
+  );
+  if (banError) {
+    console.error('[deactivate-user] Auth ban failed, rolling back profile:', banError);
+    await adminClient
+      .from('profiles')
+      .update({ is_active: true })
+      .eq('id', targetUserId);
+    return json({ code: 'BAN_FAILED', message: banError.message }, 500);
   }
 
   await adminClient.from('activity_log').insert({
