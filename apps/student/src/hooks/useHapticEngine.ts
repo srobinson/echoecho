@@ -12,14 +12,20 @@
  *   - Android DND: detected via best-effort; TODO: native module for full support
  *   - iOS/Android pattern variants documented in default pattern map
  *
- * Platform note: react-native-haptic-patterns uses Core Haptics on iOS and
- * Android Vibration API on Android. startTime/endTime in RecordedEventType are
- * milliseconds (library converts to seconds internally).
+ * Pattern playback uses expo-haptics (iOS impactAsync) and Vibration (Android)
+ * directly. startTime/endTime in RecordedEventType are milliseconds.
  */
 import { useCallback, useRef, useEffect } from 'react';
-import { Platform, AccessibilityInfo } from 'react-native';
-import { HapticPatterns, type RecordedEventType } from 'react-native-haptic-patterns';
+import { Platform, AccessibilityInfo, Vibration } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import * as Battery from 'expo-battery';
+
+/** Timing event for a haptic pattern. */
+export interface RecordedEventType {
+  startTime: number;
+  endTime: number;
+  isPause: boolean;
+}
 import type { NavEvent } from '../types/navEvents';
 import type { SttSessionState } from '@echoecho/shared';
 
@@ -133,6 +139,46 @@ const DEFAULT_PATTERN_MAP: PatternMap =
 
 const MAX_QUEUE_DEPTH = 2;
 
+function durationToImpactStyle(durationMs: number): Haptics.ImpactFeedbackStyle {
+  if (durationMs <= 120) return Haptics.ImpactFeedbackStyle.Light;
+  if (durationMs <= 300) return Haptics.ImpactFeedbackStyle.Medium;
+  return Haptics.ImpactFeedbackStyle.Heavy;
+}
+
+/**
+ * Play a recorded haptic pattern using expo-haptics (iOS) or Vibration (Android).
+ * Resolves when the pattern finishes.
+ */
+function playRecordedPattern(events: RecordedEventType[]): Promise<void> {
+  const totalMs = events.length > 0 ? events[events.length - 1].endTime : 0;
+  if (totalMs === 0) return Promise.resolve();
+
+  if (Platform.OS === 'android') {
+    const androidPat: number[] = [];
+    let cursor = 0;
+    for (const event of events) {
+      if (event.isPause) { cursor = event.endTime; continue; }
+      const gap = event.startTime - cursor;
+      const duration = event.endTime - event.startTime;
+      androidPat.push(gap > 0 ? gap : 0);
+      androidPat.push(duration);
+      cursor = event.endTime;
+    }
+    if (androidPat.length > 0) Vibration.vibrate(androidPat);
+    return new Promise((resolve) => setTimeout(resolve, totalMs));
+  }
+
+  // iOS: schedule each vibration event via setTimeout
+  return new Promise((resolve) => {
+    const vibratingEvents = events.filter((e) => !e.isPause);
+    for (const event of vibratingEvents) {
+      const style = durationToImpactStyle(event.endTime - event.startTime);
+      setTimeout(() => { Haptics.impactAsync(style).catch(() => {}); }, event.startTime);
+    }
+    setTimeout(resolve, totalMs);
+  });
+}
+
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export interface UseHapticEngineResult {
@@ -204,7 +250,7 @@ export function useHapticEngine(
     }
 
     try {
-      await HapticPatterns.playRecordedPattern(pattern);
+      await playRecordedPattern(pattern);
     } catch {
       // Native haptic failure — silent fallback (audio engine compensates)
     } finally {
