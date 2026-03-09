@@ -93,13 +93,19 @@ export const VoiceAnnotationSheet = forwardRef<BottomSheet, VoiceAnnotationSheet
         handleIndicatorStyle={styles.handleIndicator}
       >
         <BottomSheetView style={styles.container}>
-          <Text style={styles.title}>Voice Annotation</Text>
+          <Text style={styles.title} accessibilityRole="header">Voice Annotation</Text>
 
           {/* Silence prompt */}
           {state.showSilencePrompt && (
             <View style={styles.warningBanner}>
               <Text style={styles.warningText}>No audio detected. Speak closer to the mic.</Text>
-              <Pressable onPress={dismissSilencePrompt} accessibilityLabel="Dismiss warning">
+              <Pressable
+                onPress={dismissSilencePrompt}
+                accessibilityLabel="Dismiss warning"
+                accessibilityRole="button"
+                hitSlop={16}
+                style={styles.dismissBtn}
+              >
                 <Ionicons name="close" size={16} color="#fff" />
               </Pressable>
             </View>
@@ -180,8 +186,8 @@ export const VoiceAnnotationSheet = forwardRef<BottomSheet, VoiceAnnotationSheet
 
           {/* Uploading */}
           {state.phase === 'uploading' && (
-            <View style={styles.centeredContent}>
-              <ActivityIndicator size="large" color="#6c63ff" />
+            <View style={styles.centeredContent} accessibilityLiveRegion="polite">
+              <ActivityIndicator size="large" color="#6c63ff" accessibilityLabel="Saving annotation" />
               <Text style={styles.hint}>Saving annotation...</Text>
             </View>
           )}
@@ -257,7 +263,15 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 20,
     minWidth: 90,
+    minHeight: 44,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dismissBtn: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pressed: { opacity: 0.75 },
   actionBtnLabel: { color: '#fff', fontWeight: '700', fontSize: 14 },
