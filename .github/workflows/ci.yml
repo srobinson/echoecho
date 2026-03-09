@@ -40,8 +40,9 @@ jobs:
       - name: Validate migrations (dry-run against staging)
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: |
-          supabase db push --dry-run --project-ref ${{ secrets.STAGING_PROJECT_REF }}
+          SUPABASE_PROJECT_ID: ${{ secrets.STAGING_PROJECT_REF }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
+        run: supabase db push --linked --dry-run
 
       - name: Lint Edge Functions
         uses: denoland/setup-deno@v1
