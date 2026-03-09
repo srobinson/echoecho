@@ -77,7 +77,10 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
   appendTrackPoint: (point) => {
     const s = get().session;
     if (!s || s.state !== 'recording') return;
-    set({ session: { ...s, trackPoints: [...s.trackPoints, point] } });
+    // Mutate in place to avoid O(n) copy on every 1 Hz GPS tick.
+    // Spreading the session creates a new reference so Zustand notifies subscribers.
+    s.trackPoints.push(point);
+    set({ session: { ...s } });
   },
 
   addPendingWaypoint: (waypoint) => {
