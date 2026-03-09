@@ -11,6 +11,7 @@
  *   - Tap opens MapDetailPanel with feature type discriminant 'waypoint'
  */
 
+import { memo } from 'react';
 import MapboxGL from '@rnmapbox/maps';
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import type { Waypoint } from '@echoecho/shared';
@@ -39,7 +40,7 @@ const TYPE_EMOJI: Record<string, string> = {
   regular: '●',
 };
 
-export function PoiLayer({ waypoints, onWaypointPress }: Props) {
+export const PoiLayer = memo(function PoiLayer({ waypoints, onWaypointPress }: Props) {
   const featureCollection: FeatureCollection<Point> = {
     type: 'FeatureCollection',
     features: waypoints.map((w): Feature<Point> => ({
@@ -84,4 +85,4 @@ export function PoiLayer({ waypoints, onWaypointPress }: Props) {
       />
     </MapboxGL.ShapeSource>
   );
-}
+});

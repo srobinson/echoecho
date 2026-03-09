@@ -18,7 +18,7 @@
  *   - accessibilityViewIsModal={true} when sheet is open
  */
 
-import { useRef, useEffect, type ReactNode } from 'react';
+import { useRef, useEffect, memo, type ReactNode } from 'react';
 import {
   View,
   Text,
@@ -46,7 +46,7 @@ interface Props {
 
 const SNAP_POINTS = ['40%', '80%'];
 
-export function MapDetailPanel({ feature, detailContent, onClose }: Props) {
+export const MapDetailPanel = memo(function MapDetailPanel({ feature, detailContent, onClose }: Props) {
   const sheetRef = useRef<BottomSheet>(null);
   const headingRef = useRef<View>(null);
 
@@ -115,7 +115,7 @@ export function MapDetailPanel({ feature, detailContent, onClose }: Props) {
       </BottomSheetView>
     </BottomSheet>
   );
-}
+});
 
 const styles = StyleSheet.create({
   background: {

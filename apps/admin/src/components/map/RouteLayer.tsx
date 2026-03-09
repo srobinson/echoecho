@@ -12,6 +12,7 @@
  *   - Tap opens MapDetailPanel with feature type discriminant 'route'
  */
 
+import { memo } from 'react';
 import MapboxGL from '@rnmapbox/maps';
 import type { Feature, FeatureCollection, LineString } from 'geojson';
 import type { Route } from '@echoecho/shared';
@@ -25,7 +26,7 @@ const SOURCE_ID = 'admin-routes';
 const LINE_LAYER_ID = 'admin-routes-lines';
 const TOUCH_LAYER_ID = 'admin-routes-touch';
 
-export function RouteLayer({ routes, onRoutePress }: Props) {
+export const RouteLayer = memo(function RouteLayer({ routes, onRoutePress }: Props) {
   const featureCollection: FeatureCollection<LineString> = {
     type: 'FeatureCollection',
     features: routes
@@ -90,4 +91,4 @@ export function RouteLayer({ routes, onRoutePress }: Props) {
       />
     </MapboxGL.ShapeSource>
   );
-}
+});

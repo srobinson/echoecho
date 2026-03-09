@@ -11,6 +11,7 @@
  *   - Tap opens MapDetailPanel with feature type discriminant 'building'
  */
 
+import { memo } from 'react';
 import MapboxGL from '@rnmapbox/maps';
 import type { Feature, FeatureCollection, Polygon, Point } from 'geojson';
 import type { Building } from '@echoecho/shared';
@@ -25,7 +26,7 @@ const FILL_LAYER_ID = 'admin-buildings-fill';
 const LINE_LAYER_ID = 'admin-buildings-line';
 const LABEL_LAYER_ID = 'admin-buildings-labels';
 
-export function BuildingLayer({ buildings, onBuildingPress }: Props) {
+export const BuildingLayer = memo(function BuildingLayer({ buildings, onBuildingPress }: Props) {
   const featureCollection: FeatureCollection<Polygon> = {
     type: 'FeatureCollection',
     features: buildings.map((b): Feature<Polygon> => ({
@@ -104,7 +105,7 @@ export function BuildingLayer({ buildings, onBuildingPress }: Props) {
       </MapboxGL.ShapeSource>
     </>
   );
-}
+});
 
 /** Approximate centroid by averaging polygon ring vertices */
 function buildingCentroid(footprint: [number, number][]): [number, number] {

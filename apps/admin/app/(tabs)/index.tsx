@@ -81,6 +81,23 @@ export default function MapScreen() {
   const isEditingWaypoints = wpEdit.phase !== 'idle';
   const isModalActive = isDrawing || isEditingWaypoints;
 
+  const handleBuildingPress = useCallback(
+    (b: Building) => {
+      if (!isModalActive) setSelected({ kind: 'building', data: b });
+    },
+    [isModalActive],
+  );
+
+  const handleRoutePress = useCallback(
+    (r: Route) => setSelected({ kind: 'route', data: r }),
+    [],
+  );
+
+  const handleWaypointPress = useCallback(
+    (w: Waypoint) => setSelected({ kind: 'waypoint', data: w }),
+    [],
+  );
+
   // Detect if waypoint edit has changes vs original
   const wpHasChanges = useMemo(() => {
     if (!wpEdit.route) return false;
@@ -174,23 +191,21 @@ export default function MapScreen() {
           {activeLayers.buildings && (
             <BuildingLayer
               buildings={buildings}
-              onBuildingPress={(b) => {
-                if (!isModalActive) setSelected({ kind: 'building', data: b });
-              }}
+              onBuildingPress={handleBuildingPress}
             />
           )}
 
           {activeLayers.routes && !isModalActive && (
             <RouteLayer
               routes={routes}
-              onRoutePress={(r) => setSelected({ kind: 'route', data: r })}
+              onRoutePress={handleRoutePress}
             />
           )}
 
           {activeLayers.waypoints && !isModalActive && (
             <PoiLayer
               waypoints={annotationWaypoints}
-              onWaypointPress={(w) => setSelected({ kind: 'waypoint', data: w })}
+              onWaypointPress={handleWaypointPress}
             />
           )}
 
