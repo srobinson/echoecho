@@ -29,22 +29,8 @@ jobs:
       - name: Install dependencies
         run: yarn install --immutable
 
-      - name: Typecheck
-        run: |
-          yarn workspace @echoecho/shared run typecheck
-          yarn workspace @echoecho/admin run typecheck
-          yarn workspace @echoecho/student run typecheck
-
-      - name: Lint
-        run: |
-          yarn workspace @echoecho/admin run lint
-          yarn workspace @echoecho/student run lint
-
-      - name: Tests
-        run: |
-          yarn workspace @echoecho/shared run test
-          yarn workspace @echoecho/admin run test
-          yarn workspace @echoecho/student run test
+      - name: Typecheck, lint, test
+        run: yarn turbo typecheck lint test
 
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1

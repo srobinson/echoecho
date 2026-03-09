@@ -14,37 +14,24 @@ student:
     yarn workspace @echoecho/student start
 
 # Typecheck all workspaces
-check:
-    yarn workspace @echoecho/shared run typecheck
-    yarn workspace @echoecho/ui run typecheck
-    yarn workspace @echoecho/admin run typecheck
-    yarn workspace @echoecho/student run typecheck
+typecheck:
+    turbo typecheck
 
 # Run linters across workspaces
 lint:
-    yarn workspace @echoecho/admin run lint
-    yarn workspace @echoecho/student run lint
+    turbo lint
 
 # Run tests across workspaces
 test:
-    yarn workspace @echoecho/shared run test
-    yarn workspace @echoecho/admin run test
-    yarn workspace @echoecho/student run test
+    turbo test
 
 # Full CI gate: typecheck + lint + test
-ci: check lint test
+check: typecheck lint
 
 # Reproduce the exact CI pipeline locally (immutable install, deno lint)
 ci-local:
     yarn install --immutable
-    yarn workspace @echoecho/shared run typecheck
-    yarn workspace @echoecho/admin run typecheck
-    yarn workspace @echoecho/student run typecheck
-    yarn workspace @echoecho/admin run lint
-    yarn workspace @echoecho/student run lint
-    yarn workspace @echoecho/shared run test
-    yarn workspace @echoecho/admin run test
-    yarn workspace @echoecho/student run test
+    turbo typecheck lint test
     deno lint supabase/functions/
 
 # ── Supabase ───────────────────────────────────────────────
