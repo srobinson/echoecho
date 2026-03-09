@@ -31,8 +31,10 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useRouteHistory } from '../src/hooks/useRouteHistory';
+import { useRouteHistory, type FavoriteEntry, type HistoryEntry } from '../src/hooks/useRouteHistory';
 import { useNavigationStore } from '../src/stores/navigationStore';
+
+type SectionItem = FavoriteEntry | HistoryEntry;
 
 export default function FavoritesScreen() {
   const { userId } = useNavigationStore();
@@ -46,8 +48,8 @@ export default function FavoritesScreen() {
     // SectionList never renders duplicate routeId keys.
     const favIds = new Set(favorites.map((f) => f.routeId));
     return [
-      { key: 'favorites', data: favorites },
-      { key: 'history', data: history.filter((h) => !favIds.has(h.routeId)) },
+      { key: 'favorites', data: favorites as SectionItem[] },
+      { key: 'history', data: history.filter((h) => !favIds.has(h.routeId)) as SectionItem[] },
     ];
   }, [favorites, history]);
 
@@ -90,7 +92,7 @@ export default function FavoritesScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <SectionList
+      <SectionList<SectionItem>
         sections={sections}
         keyExtractor={(item) => item.routeId}
         contentContainerStyle={styles.listContent}
