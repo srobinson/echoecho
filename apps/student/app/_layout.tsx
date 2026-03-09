@@ -27,7 +27,10 @@ export default function RootLayout() {
 
   useEffect(() => {
     ensureAnonymousSession()
-      .then(() => setAuthReady(true))
+      .then(({ ok }) => {
+        if (!ok) console.error('[auth] Could not establish session. Offline data only.');
+        setAuthReady(true);
+      })
       .catch(() => setAuthReady(true));
   }, []);
 
