@@ -28,9 +28,14 @@ export default function RootLayout() {
   useEffect(() => {
     ensureAnonymousSession()
       .then(() => setAuthReady(true))
-      .catch(() => setAuthReady(true))
-      .finally(() => SplashScreen.hideAsync());
+      .catch(() => setAuthReady(true));
   }, []);
+
+  useEffect(() => {
+    if (authReady) {
+      SplashScreen.hideAsync();
+    }
+  }, [authReady]);
 
   if (!authReady) return null;
 
