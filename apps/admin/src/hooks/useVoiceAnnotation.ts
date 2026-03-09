@@ -16,6 +16,7 @@ import {
   startVoiceAnnotationRecording,
   stopVoiceAnnotationRecording,
   uploadVoiceAnnotation,
+  type SttSubscription,
 } from '../services/voiceAnnotationService';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -65,6 +66,7 @@ export function useVoiceAnnotation(): UseVoiceAnnotationReturn {
   });
 
   const recordingRef = useRef<Audio.Recording | null>(null);
+  const sttSubsRef = useRef<SttSubscription[]>([]);
   const autoStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -78,12 +80,14 @@ export function useVoiceAnnotation(): UseVoiceAnnotationReturn {
       showSilencePrompt: false,
     });
     recordingRef.current = null;
+    sttSubsRef.current = [];
     autoStopTimerRef.current = null;
     silenceTimerRef.current = null;
   }, []);
 
   const doStop = useCallback(async (): Promise<{ audioUri: string | null }> => {
     const recording = recordingRef.current;
+    const sttSubs = sttSubsRef.current;
     const autoStop = autoStopTimerRef.current;
     const silenceStop = silenceTimerRef.current;
 
@@ -91,11 +95,13 @@ export function useVoiceAnnotation(): UseVoiceAnnotationReturn {
 
     const { audioUri } = await stopVoiceAnnotationRecording(
       recording,
+      sttSubs,
       autoStop ?? setTimeout(() => {}, 0),
       silenceStop ?? setTimeout(() => {}, 0),
     );
 
     recordingRef.current = null;
+    sttSubsRef.current = [];
     return { audioUri };
   }, []);
 
@@ -148,6 +154,7 @@ export function useVoiceAnnotation(): UseVoiceAnnotationReturn {
     }
 
     recordingRef.current = result.recording;
+    sttSubsRef.current = result.sttSubscriptions;
     autoStopTimerRef.current = result.autoStopTimer;
     silenceTimerRef.current = result.silenceCheckTimer;
   }, [doStop]);

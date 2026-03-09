@@ -93,10 +93,15 @@ export async function deactivateRecordingAudioSession(): Promise<void> {
 
 // ── Recording lifecycle ───────────────────────────────────────────────────────
 
+export interface SttSubscription {
+  remove: () => void;
+}
+
 export type StartRecordingResult =
   | {
       ok: true;
       recording: Audio.Recording;
+      sttSubscriptions: SttSubscription[];
       autoStopTimer: ReturnType<typeof setTimeout>;
       silenceCheckTimer: ReturnType<typeof setTimeout>;
     }
@@ -166,10 +171,7 @@ export async function startVoiceAnnotationRecording(options: {
     }
   }, SILENCE_CHECK_MS);
 
-  // Attach STT cleanup to the recording object so callers can stop via stopVoiceAnnotationRecording
-  (recording as unknown as { _sttSubs: typeof sttSubs })._sttSubs = sttSubs;
-
-  return { ok: true, recording, autoStopTimer, silenceCheckTimer };
+  return { ok: true, recording, sttSubscriptions: sttSubs, autoStopTimer, silenceCheckTimer };
 }
 
 export interface StopRecordingResult {
@@ -183,6 +185,7 @@ export interface StopRecordingResult {
  */
 export async function stopVoiceAnnotationRecording(
   recording: Audio.Recording,
+  sttSubscriptions: SttSubscription[],
   autoStopTimer: ReturnType<typeof setTimeout>,
   silenceCheckTimer: ReturnType<typeof setTimeout>,
 ): Promise<StopRecordingResult> {
@@ -190,11 +193,7 @@ export async function stopVoiceAnnotationRecording(
   clearTimeout(silenceCheckTimer);
 
   ExpoSpeechRecognitionModule.stop();
-
-  // Remove STT listeners
-  const attached = (recording as unknown as { _sttSubs?: Array<{ remove: () => void }> })
-    ._sttSubs;
-  attached?.forEach((s) => s.remove());
+  sttSubscriptions.forEach((s) => s.remove());
 
   let audioUri: string | null = null;
   let durationMs = 0;
