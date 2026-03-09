@@ -99,36 +99,6 @@ export function useSttDestination(
     return clearTimers;
   }, [clearTimers]);
 
-  // ── STT event handlers ─────────────────────────────────────────────────
-
-  useSpeechRecognitionEvent('result', (event) => {
-    if (event.results.length === 0) return;
-    const text = event.results[0].transcript ?? '';
-    setTranscript(text);
-    clearTimers();
-    processTranscript(text);
-  });
-
-  useSpeechRecognitionEvent('error', (event) => {
-    clearTimers();
-    if (event.error === 'no-speech') {
-      AccessibilityInfo.announceForAccessibility('No speech detected.');
-      resetToIdle();
-    } else {
-      setError(`Recognition error: ${event.message}`);
-      setSttState('error');
-    }
-    isPausedRef.current = false;
-    pauseResolverRef.current?.();
-    pauseResolverRef.current = null;
-  });
-
-  useSpeechRecognitionEvent('end', () => {
-    isPausedRef.current = false;
-    pauseResolverRef.current?.();
-    pauseResolverRef.current = null;
-  });
-
   // ── Public API ─────────────────────────────────────────────────────────
 
   const resetToIdle = useCallback(() => {
@@ -140,7 +110,7 @@ export function useSttDestination(
     setError(null);
   }, [clearTimers]);
 
-  // ── Match processing ───────────────────────────────────────────────────
+  // ── Match processing (defined before event handlers to avoid stale closure) ──
 
   const processTranscript = useCallback((text: string) => {
     setSttState('transcribing');
@@ -182,6 +152,40 @@ export function useSttDestination(
       }, CONFIRMATION_TIMEOUT_MS);
     }
   }, [resetToIdle]);
+
+  // ── STT event handlers (wrapped in useCallback for stable references) ──
+
+  const handleResult = useCallback((event: { results: Array<{ transcript?: string }> }) => {
+    if (event.results.length === 0) return;
+    const text = event.results[0].transcript ?? '';
+    setTranscript(text);
+    clearTimers();
+    processTranscript(text);
+  }, [clearTimers, processTranscript]);
+
+  const handleError = useCallback((event: { error: string; message: string }) => {
+    clearTimers();
+    if (event.error === 'no-speech') {
+      AccessibilityInfo.announceForAccessibility('No speech detected.');
+      resetToIdle();
+    } else {
+      setError(`Recognition error: ${event.message}`);
+      setSttState('error');
+    }
+    isPausedRef.current = false;
+    pauseResolverRef.current?.();
+    pauseResolverRef.current = null;
+  }, [clearTimers, resetToIdle]);
+
+  const handleEnd = useCallback(() => {
+    isPausedRef.current = false;
+    pauseResolverRef.current?.();
+    pauseResolverRef.current = null;
+  }, []);
+
+  useSpeechRecognitionEvent('result', handleResult);
+  useSpeechRecognitionEvent('error', handleError);
+  useSpeechRecognitionEvent('end', handleEnd);
 
   // ── Public API ─────────────────────────────────────────────────────────
 
