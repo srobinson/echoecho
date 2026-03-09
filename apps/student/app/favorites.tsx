@@ -16,7 +16,7 @@
  * announcement names the primary action immediately on Alert open.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -38,6 +38,15 @@ export default function FavoritesScreen() {
   const { userId } = useNavigationStore();
   const { history, favorites, isLoading, toggleFavorite, isFavorite, clearHistory } =
     useRouteHistory(userId);
+
+  // Merged list built once per state change, not on every renderItem call
+  const listData = useMemo(
+    () => [
+      ...favorites.map((f) => ({ ...f, type: 'favorite' as const })),
+      ...history.map((h) => ({ ...h, type: 'history' as const })),
+    ],
+    [favorites, history],
+  );
 
   const handleReNavigate = useCallback((routeId: string, routeName: string) => {
     // Announce the confirmation immediately so screen reader users know what's happening
@@ -79,8 +88,7 @@ export default function FavoritesScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <FlatList
-        data={[...favorites.map((f) => ({ ...f, type: 'favorite' as const })),
-               ...history.map((h) => ({ ...h, type: 'history' as const }))]}
+        data={listData}
         keyExtractor={(item) => `${item.type}-${item.routeId}`}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={() => (
@@ -94,11 +102,9 @@ export default function FavoritesScreen() {
           </>
         )}
         renderItem={({ item, index }) => {
-          // Insert Recent header before first history item
-          const prevItem = index > 0 ? [...favorites, ...history][index - 1] : null;
-          const showHistoryHeader =
-            item.type === 'history' &&
-            (prevItem === null || !('type' in prevItem) || (prevItem as { type: string }).type === 'favorite' || index === favorites.length);
+          // The Recent header appears before the first history item, which is
+          // always at index === favorites.length in the merged list.
+          const showHistoryHeader = item.type === 'history' && index === favorites.length;
 
           return (
             <>

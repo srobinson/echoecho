@@ -231,6 +231,9 @@ export function useRouteHistory(userId: string | null): RouteHistoryState {
       await AsyncStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(next));
 
       if (userId) {
+        // Omit is_favorite from the payload — on INSERT the schema default (false)
+        // applies; on UPDATE the existing value is preserved. Including it as false
+        // would silently de-favorite a route the user had saved.
         await supabase.from('user_route_history').upsert(
           {
             user_id: userId,
@@ -238,7 +241,6 @@ export function useRouteHistory(userId: string | null): RouteHistoryState {
             route_name: route.name,
             from_label: route.fromLabel,
             to_label: route.toLabel,
-            is_favorite: false,
             navigated_at: entry.navigatedAt,
           },
           { onConflict: 'user_id,route_id' },

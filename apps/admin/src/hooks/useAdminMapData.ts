@@ -6,7 +6,7 @@
  * components as pre-fetched GeoJSON feature data.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Building, Route, Waypoint } from '@echoecho/shared';
 
@@ -26,7 +26,7 @@ export function useAdminMapData(campusId: string | null): AdminMapData {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetch = useCallback(async () => {
+  const fetchMapData = useCallback(async () => {
     if (!campusId) return;
     setIsLoading(true);
     setError(null);
@@ -57,12 +57,16 @@ export function useAdminMapData(campusId: string | null): AdminMapData {
   }, [campusId]);
 
   useEffect(() => {
-    void fetch();
-  }, [fetch]);
+    void fetchMapData();
+  }, [fetchMapData]);
 
-  const annotationWaypoints = routes
-    .flatMap((r) => r.waypoints)
-    .filter((w) => w.audioLabel != null || w.type !== 'regular');
+  const annotationWaypoints = useMemo(
+    () =>
+      routes
+        .flatMap((r) => r.waypoints)
+        .filter((w) => w.audioLabel != null || w.type !== 'regular'),
+    [routes],
+  );
 
   return {
     buildings,
@@ -70,6 +74,6 @@ export function useAdminMapData(campusId: string | null): AdminMapData {
     annotationWaypoints,
     isLoading,
     error,
-    refresh: fetch,
+    refresh: fetchMapData,
   };
 }
