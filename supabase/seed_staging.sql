@@ -7,13 +7,34 @@
 -- Or via the Supabase SQL Editor in the dashboard.
 --
 -- Prerequisites:
---   1. All migrations (001-007) applied
---   2. A test user created via Supabase Auth (sign up in the admin app or
---      create via dashboard). After sign-up, update their profile role below.
+--   1. All migrations applied
+--   2. A test admin user created with a well-known UUID:
+--        supabase auth admin create-user \
+--          --user-id 00000000-0000-0000-0000-000000000099 \
+--          --email seed-admin@echoecho.test \
+--          --password test1234
+--      The seed will abort if this user does not exist.
 --
 -- This script is idempotent (uses ON CONFLICT DO NOTHING).
 
 SET search_path TO public, extensions;
+
+-- ============================================================
+-- PREREQUISITE: verify the well-known test user exists
+-- ============================================================
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM auth.users
+    WHERE id = '00000000-0000-0000-0000-000000000099'
+  ) THEN
+    RAISE EXCEPTION
+      'Seed prerequisite failed: test user 00000000-0000-0000-0000-000000000099 '
+      'does not exist. Create it first with: supabase auth admin create-user '
+      '--user-id 00000000-0000-0000-0000-000000000099 --email seed-admin@echoecho.test --password test1234';
+  END IF;
+END $$;
 
 -- ============================================================
 -- CAMPUS: TSBVI (Texas School for the Blind and Visually Impaired)
@@ -166,9 +187,7 @@ VALUES (
   '00000000-0000-0000-0000-000000000010',
   '00000000-0000-0000-0000-000000000011',
   'easy', ARRAY['outdoor', 'accessible'], 'published',
-  -- recorded_by must reference a real auth.users row.
-  -- Replace with the test user's UUID after sign-up.
-  (SELECT id FROM auth.users LIMIT 1),
+  '00000000-0000-0000-0000-000000000099',
   now(), 180
 )
 ON CONFLICT (id) DO NOTHING;
@@ -246,7 +265,7 @@ VALUES (
   '00000000-0000-0000-0000-000000000010',
   '00000000-0000-0000-0000-000000000012',
   'easy', ARRAY['outdoor'], 'published',
-  (SELECT id FROM auth.users LIMIT 1),
+  '00000000-0000-0000-0000-000000000099',
   now(), 120
 )
 ON CONFLICT (id) DO NOTHING;
