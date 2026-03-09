@@ -19,6 +19,8 @@ import { useCallback, useRef, useEffect } from 'react';
 import { Platform, AccessibilityInfo, Vibration } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import * as Battery from 'expo-battery';
+import type { NavEvent } from '../types/navEvents';
+import type { SttSessionState } from '@echoecho/shared';
 
 /** Timing event for a haptic pattern. */
 export interface RecordedEventType {
@@ -26,8 +28,6 @@ export interface RecordedEventType {
   endTime: number;
   isPause: boolean;
 }
-import type { NavEvent } from '../types/navEvents';
-import type { SttSessionState } from '@echoecho/shared';
 
 // ── Pattern types ─────────────────────────────────────────────────────────────
 

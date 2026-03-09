@@ -100,7 +100,7 @@ export function EmergencyOverlay({ children }: EmergencyOverlayProps) {
         <Pressable
           style={styles.srButton}
           onPress={activateEmergency}
-          accessibilityLabel="Emergency. Double-tap to activate emergency navigation."
+          accessibilityLabel="Emergency navigation"
           accessibilityRole="button"
           accessibilityHint="Activates emergency navigation to nearest exit"
         />
