@@ -20,7 +20,7 @@
  * emission time, to account for 1Hz GPS update lag (~1.4m per update).
  */
 import { useCallback, useEffect, useRef } from 'react';
-import { AccessibilityInfo, Platform } from 'react-native';
+import { AccessibilityInfo } from 'react-native';
 import { Audio } from 'expo-av';
 import type { NavEvent } from '../types/navEvents';
 import type { TrackPositionUpdate } from '../types/navEvents';
@@ -81,12 +81,12 @@ export function useAudioEngine(): UseAudioEngineResult {
 
   const configureAudioSession = useCallback(async () => {
     if (audioSessionConfiguredRef.current) return;
-    if (Platform.OS !== 'ios') return;
     try {
       await Audio.setAudioModeAsync({
         playsInSilentModeIOS: true,
         staysActiveInBackground: true,
-        shouldDuckAndroid: false,
+        shouldDuckAndroid: true,
+        allowsRecordingIOS: false,
       });
       audioSessionConfiguredRef.current = true;
     } catch {
