@@ -143,11 +143,13 @@ export function useRouteHistory(userId: string | null): RouteHistoryState {
 
   const toggleFavorite = useCallback(
     async (route: Route) => {
-      const alreadyFav = favorites.some((f) => f.routeId === route.id);
+      // Snapshot pre-optimistic state for safe revert across the async boundary
+      const snapshot = favorites;
+      const alreadyFav = snapshot.some((f) => f.routeId === route.id);
 
       if (alreadyFav) {
         // Optimistic remove
-        const next = favorites.filter((f) => f.routeId !== route.id);
+        const next = snapshot.filter((f) => f.routeId !== route.id);
         setFavorites(next);
         await AsyncStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(next));
         AccessibilityInfo.announceForAccessibility('Removed from favorites');
@@ -160,9 +162,8 @@ export function useRouteHistory(userId: string | null): RouteHistoryState {
             .eq('route_id', route.id);
 
           if (error) {
-            // Revert
-            setFavorites(favorites);
-            await AsyncStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favorites));
+            setFavorites(snapshot);
+            await AsyncStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(snapshot));
             AccessibilityInfo.announceForAccessibility(
               'Could not save favorite. Please try again.',
             );
@@ -177,7 +178,7 @@ export function useRouteHistory(userId: string | null): RouteHistoryState {
           toLabel: route.toLabel,
           savedAt: new Date().toISOString(),
         };
-        const next = [entry, ...favorites];
+        const next = [entry, ...snapshot];
         setFavorites(next);
         await AsyncStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(next));
         AccessibilityInfo.announceForAccessibility('Added to favorites');
@@ -199,9 +200,8 @@ export function useRouteHistory(userId: string | null): RouteHistoryState {
             );
 
           if (error) {
-            // Revert
-            setFavorites(favorites);
-            await AsyncStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favorites));
+            setFavorites(snapshot);
+            await AsyncStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(snapshot));
             AccessibilityInfo.announceForAccessibility(
               'Could not save favorite. Please try again.',
             );
