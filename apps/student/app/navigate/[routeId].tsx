@@ -329,7 +329,7 @@ function ProgressCard({
     <View style={styles.progressCard}>
       <View style={styles.progressMeta}>
         <Text style={styles.progressLabel}>
-          Waypoint {current + 1} of {total}
+          Waypoint {Math.min(current + 1, total)} of {total}
         </Text>
         <Text style={styles.destinationLabel} numberOfLines={1}>
           {destination}
