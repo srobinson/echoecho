@@ -32,15 +32,20 @@ export function useAdminMapData(campusId: string | null): AdminMapData {
     setError(null);
 
     try {
+      // Views output camelCase column names via quoted aliases.
+      // PostgREST matches against the view's output columns, so
+      // .eq('campusId', ...) is correct for v_buildings / v_routes.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sb = supabase as any;
       const [buildingsResult, routesResult] = await Promise.all([
-        supabase
-          .from('v_buildings' as 'buildings')
+        sb
+          .from('v_buildings')
           .select('*')
-          .eq('campusId' as 'campus_id', campusId),
-        supabase
-          .from('v_routes' as 'routes')
+          .eq('campusId', campusId),
+        sb
+          .from('v_routes')
           .select('*')
-          .eq('campusId' as 'campus_id', campusId)
+          .eq('campusId', campusId)
           .in('status', ['draft', 'published']),
       ]);
 
