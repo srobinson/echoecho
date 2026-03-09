@@ -5,32 +5,34 @@
   "build": {
     "preview-admin": {
       "distribution": "internal",
+      "channel": "preview",
       "env": {
         "APP_VARIANT": "admin"
       },
       "android": {
-        "buildType": "apk",
-        "gradleCommand": ":app:assembleRelease"
+        "buildType": "apk"
       }
     },
     "preview-student": {
       "distribution": "internal",
+      "channel": "preview",
       "env": {
         "APP_VARIANT": "student"
       },
       "android": {
-        "buildType": "apk",
-        "gradleCommand": ":app:assembleRelease"
+        "buildType": "apk"
       }
     },
     "production-admin": {
       "distribution": "store",
+      "channel": "production",
       "env": {
         "APP_VARIANT": "admin"
       }
     },
     "production-student": {
       "distribution": "store",
+      "channel": "production",
       "env": {
         "APP_VARIANT": "student"
       }
