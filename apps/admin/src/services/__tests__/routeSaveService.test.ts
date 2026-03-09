@@ -215,7 +215,7 @@ describe('saveRoute', () => {
     expect(mockRpc).toHaveBeenCalled();
   });
 
-  it('resolves existing storage key to public URL without re-uploading', async () => {
+  it('resolves existing storage key without re-uploading', async () => {
     const session = makeSession({
       pendingWaypoints: [makeWaypoint({ audioAnnotationUri: 'pending/wp-1.m4a' })],
     });
@@ -223,7 +223,6 @@ describe('saveRoute', () => {
     await saveRoute(session, METADATA, jest.fn());
 
     expect(mockUpload).not.toHaveBeenCalled();
-    expect(mockGetPublicUrl).toHaveBeenCalledWith('pending/wp-1.m4a');
     expect(mockRpc).toHaveBeenCalled();
   });
 

@@ -3,11 +3,19 @@
  *
  * Downloads audio annotations to the local filesystem so the navigation loop
  * runs without network access. Individual download failures fall back to TTS
- * on `annotation_text` — a missing audio clip never aborts a sync.
+ * on `annotation_text`.
+ *
+ * The route-audio bucket is private, so annotation_audio_url stores a storage
+ * key rather than a direct URL. We generate signed URLs at download time via
+ * createSignedUrl() to obtain time-limited access.
  */
 
 import * as FileSystem from 'expo-file-system';
 import { setWaypointAudioPath } from './localDb';
+import { supabase } from './supabase';
+
+const AUDIO_BUCKET = 'route-audio';
+const SIGNED_URL_TTL_SECONDS = 3600;
 
 export interface ServerWaypoint {
   id: string;
@@ -37,16 +45,33 @@ export async function cacheRouteMedia(
 
     const info = await FileSystem.getInfoAsync(localPath);
     if (info.exists) {
-      // Already cached from a prior sync run; register the path if not set.
       await setWaypointAudioPath(wp.id, localPath);
       continue;
     }
 
     try {
-      await FileSystem.downloadAsync(wp.annotation_audio_url, localPath);
+      const storageKey = wp.annotation_audio_url;
+      let downloadUrl: string;
+
+      if (storageKey.startsWith('http')) {
+        // Legacy: direct URL (pre-fix data). Use as-is.
+        downloadUrl = storageKey;
+      } else {
+        // Storage key: generate a signed URL for the private bucket.
+        const { data: signed, error: signError } = await supabase.storage
+          .from(AUDIO_BUCKET)
+          .createSignedUrl(storageKey, SIGNED_URL_TTL_SECONDS);
+        if (signError || !signed?.signedUrl) {
+          console.warn(`[mediaCache] Failed to sign URL for waypoint ${wp.id}:`, signError?.message);
+          await setWaypointAudioPath(wp.id, null);
+          continue;
+        }
+        downloadUrl = signed.signedUrl;
+      }
+
+      await FileSystem.downloadAsync(downloadUrl, localPath);
       await setWaypointAudioPath(wp.id, localPath);
     } catch (err) {
-      // Log and continue — navigation must not fail over a single audio clip.
       console.warn(
         `[mediaCache] Failed to download audio for waypoint ${wp.id}:`,
         err
