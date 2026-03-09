@@ -77,7 +77,7 @@ export default function SaveRouteScreen() {
 
   // Building fetch
   const [buildings, setBuildings]                   = useState<BuildingOption[]>([]);
-  const [buildingsLoading, setBuildingsLoading]     = useState(false);
+  const [buildingsLoading, setBuildingsLoading]     = useState(true);
 
   // Inline building creation
   const [showNewBuilding, setShowNewBuilding]       = useState<'start' | 'end' | null>(null);
@@ -100,7 +100,6 @@ export default function SaveRouteScreen() {
   useEffect(() => {
     if (!session?.campusId) return;
 
-    setBuildingsLoading(true);
     supabase
       .from('buildings')
       .select('id, name')

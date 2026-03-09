@@ -132,11 +132,12 @@ export function useRouteHistory(userId: string | null): RouteHistoryState {
   }, [loadFromSupabase]);
 
   useEffect(() => {
-    setIsLoading(true);
-    void loadFromCache().then(async () => {
+    const run = async () => {
+      await loadFromCache();
       setIsLoading(false);
       await loadFromSupabase();
-    });
+    };
+    void run();
   }, [loadFromCache, loadFromSupabase]);
 
   // ── Favorite toggle — optimistic write ────────────────────────────────────

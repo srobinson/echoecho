@@ -7,7 +7,7 @@
  * Delete action with confirmation.
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   View,
   Text,
@@ -44,17 +44,17 @@ const TYPES: { value: WaypointType; label: string; emoji: string }[] = [
 ];
 
 export function WaypointEditSheet({ waypoint, index, onUpdate, onDelete, onClose }: Props) {
-  const [audioLabel, setAudioLabel] = useState('');
-  const [description, setDescription] = useState('');
-  const [type, setType] = useState<WaypointType>('regular');
+  const [syncedWaypoint, setSyncedWaypoint] = useState(waypoint);
+  const [audioLabel, setAudioLabel] = useState(waypoint?.audioLabel ?? '');
+  const [description, setDescription] = useState(waypoint?.description ?? '');
+  const [type, setType] = useState<WaypointType>(waypoint?.type ?? 'regular');
 
-  useEffect(() => {
-    if (waypoint) {
-      setAudioLabel(waypoint.audioLabel ?? '');
-      setDescription(waypoint.description ?? '');
-      setType(waypoint.type);
-    }
-  }, [waypoint]);
+  if (waypoint !== syncedWaypoint) {
+    setSyncedWaypoint(waypoint);
+    setAudioLabel(waypoint?.audioLabel ?? '');
+    setDescription(waypoint?.description ?? '');
+    setType(waypoint?.type ?? 'regular');
+  }
 
   if (!waypoint || index === null) return null;
 

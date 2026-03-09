@@ -36,6 +36,7 @@ import Animated, {
   useAnimatedStyle,
   withSequence,
   withTiming,
+  runOnUI,
 } from 'react-native-reanimated';
 import { router } from 'expo-router';
 
@@ -67,10 +68,13 @@ export function EmergencyOverlay({ children }: EmergencyOverlayProps) {
       'Emergency mode activated. Finding nearest exit.',
     );
 
-    flashOpacity.value = withSequence(
-      withTiming(1, { duration: 80 }),
-      withTiming(0, { duration: 300 }),
-    );
+    runOnUI(() => {
+      'worklet';
+      flashOpacity.value = withSequence(
+        withTiming(1, { duration: 80 }),
+        withTiming(0, { duration: 300 }),
+      );
+    })();
 
     requestAnimationFrame(() => {
       router.push('/emergency');

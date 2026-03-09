@@ -99,7 +99,7 @@ export function useGpsNavigation(): UseGpsNavigationResult {
   const handlerRef = useRef<NavEventHandler | null>(null);
   const wpIndexRef = useRef(0);
   const lastPositionRef = useRef<TrackPositionUpdate | null>(null);
-  const lastUpdateTimeRef = useRef<number>(Date.now());
+  const lastUpdateTimeRef = useRef<number>(0);
   const approachingFiredRef = useRef(false);
   const degradedRef = useRef(false);
   const degradedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

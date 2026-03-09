@@ -45,7 +45,7 @@ const CATEGORY_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
 
 export default function BuildingsScreen() {
   const [buildings, setBuildings] = useState<Building[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<FilterCategory>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -54,7 +54,6 @@ export default function BuildingsScreen() {
 
   const fetchBuildings = useCallback(async (search: string, category: FilterCategory) => {
     if (!activeCampus) return;
-    setIsLoading(true);
     setError(null);
 
     let query = supabase
@@ -82,7 +81,8 @@ export default function BuildingsScreen() {
   }, [activeCampus]);
 
   useEffect(() => {
-    void fetchBuildings(searchQuery, categoryFilter);
+    const run = async () => { await fetchBuildings(searchQuery, categoryFilter); };
+    void run();
   }, [fetchBuildings, categoryFilter]); // eslint-disable-line react-hooks/exhaustive-deps -- searchQuery excluded: uses debounced handleSearch
 
   useEffect(() => {

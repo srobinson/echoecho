@@ -52,7 +52,6 @@ export default function RouteDetailScreen() {
 
   const fetchRoute = useCallback(async () => {
     if (!id) return;
-    setIsLoading(true);
     const { data, error } = await supabase
       .from('v_routes')
       .select('*')
@@ -69,7 +68,8 @@ export default function RouteDetailScreen() {
   }, [id]);
 
   useEffect(() => {
-    void fetchRoute();
+    const run = async () => { await fetchRoute(); };
+    void run();
   }, [fetchRoute]);
 
   // Version history fetch (best-effort, table may not exist)

@@ -4,7 +4,7 @@
  * Tests all four encoding schemes with adjustable parameters, per-trial logging,
  * JSON/CSV export, and the ALP-976 STT conflict latency test.
  */
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -206,6 +206,7 @@ function SchemeTab({
 
 export default function HapticLabScreen() {
   const [schemeIndex, setSchemeIndex] = useState(0);
+  const [lastSchemeIndex, setLastSchemeIndex] = useState(0);
   const [durationScale, setDurationScale] = useState(1.0);
   const [pauseScale, setPauseScale] = useState(1.0);
   const [intensityOverride, setIntensityOverride] = useState<IntensityOverride>('auto');
@@ -215,7 +216,7 @@ export default function HapticLabScreen() {
   const [sttActive, setSttActive] = useState(false);
   const [sttTrialCount, setSttTrialCount] = useState(0);
   const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
-  const latencyTrials = useRef<number[]>([]);
+  const [latencyTrials, setLatencyTrials] = useState<number[]>([]);
 
   // Trial logging
   const { trials, addTrial, clearTrials, exportJSON, exportCSV } = useTrialLog();
@@ -225,23 +226,23 @@ export default function HapticLabScreen() {
 
   const scheme = HAPTIC_SCHEMES[schemeIndex];
 
-  // Register latency callback for ALP-976
-  useEffect(() => {
-    player.setLatencyCallback((ms) => {
-      setLastLatencyMs(ms);
-      latencyTrials.current.push(ms);
-      setSttTrialCount((n) => n + 1);
-    });
-    return () => player.setLatencyCallback(null);
-  }, []);
-
-  // Stop proximity loop when scheme changes away from S4
-  useEffect(() => {
+  if (schemeIndex !== lastSchemeIndex) {
+    setLastSchemeIndex(schemeIndex);
     if (scheme.id !== 4) {
       player.stopProximityLoop();
       setActiveS4State(null);
     }
-  }, [scheme.id]);
+  }
+
+  // Register latency callback for ALP-976
+  useEffect(() => {
+    player.setLatencyCallback((ms) => {
+      setLastLatencyMs(ms);
+      setLatencyTrials((prev) => [...prev, ms]);
+      setSttTrialCount((n) => n + 1);
+    });
+    return () => player.setLatencyCallback(null);
+  }, []);
 
   const fireScaled = useCallback(
     (pattern: HapticTimingPattern, cueName: string) => {
@@ -316,20 +317,19 @@ export default function HapticLabScreen() {
   }, [pendingCue, durationScale, pauseScale, intensityOverride, rating, trialNotes, addTrial, trials.length]);
 
   const clearLatency = useCallback(() => {
-    latencyTrials.current = [];
+    setLatencyTrials([]);
     setSttTrialCount(0);
     setLastLatencyMs(null);
   }, []);
 
   const latencyStats = (() => {
-    const arr = latencyTrials.current;
-    if (arr.length === 0) return null;
-    const sum = arr.reduce((a, b) => a + b, 0);
-    const mean = Math.round(sum / arr.length);
-    const min = Math.min(...arr);
-    const max = Math.max(...arr);
-    const reliability = Math.round((arr.length / Math.max(sttTrialCount, arr.length)) * 100);
-    return { mean, min, max, count: arr.length, reliability };
+    if (latencyTrials.length === 0) return null;
+    const sum = latencyTrials.reduce((a, b) => a + b, 0);
+    const mean = Math.round(sum / latencyTrials.length);
+    const min = Math.min(...latencyTrials);
+    const max = Math.max(...latencyTrials);
+    const reliability = Math.round((latencyTrials.length / Math.max(sttTrialCount, latencyTrials.length)) * 100);
+    return { mean, min, max, count: latencyTrials.length, reliability };
   })();
 
   return (

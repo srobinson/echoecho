@@ -71,6 +71,7 @@ export default function HazardsScreen() {
   const [expiryFilter, setExpiryFilter] = useState<ExpiryFilter>('active');
   const [selectedHazard, setSelectedHazard] = useState<Hazard | null>(null);
   const [addCoordinate, setAddCoordinate] = useState<[number, number] | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const activeCampus = useCampusStore((s) => s.activeCampus);
   const detailRef = useRef<BottomSheet>(null);
@@ -111,8 +112,11 @@ export default function HazardsScreen() {
   }, [activeCampus]);
 
   useEffect(() => {
-    void fetchHazards();
-    void fetchRoutes();
+    const run = async () => {
+      await fetchHazards();
+      await fetchRoutes();
+    };
+    void run();
   }, [fetchHazards, fetchRoutes]);
 
   // Realtime subscription for hazard changes
@@ -141,9 +145,14 @@ export default function HazardsScreen() {
     return () => { void supabase.removeChannel(channel); };
   }, [activeCampus, fetchHazards]);
 
+  useEffect(() => {
+    const id = setInterval(() => { setNowMs(Date.now()); }, 60_000);
+    return () => { clearInterval(id); };
+  }, []);
+
   // Client-side expiry filtering
   const filteredHazards = useMemo(() => {
-    const now = Date.now();
+    const now = nowMs;
     return hazards.filter((h) => {
       if (expiryFilter === 'all') return true;
       if (!h.expiresAt) return expiryFilter === 'active';
@@ -156,7 +165,7 @@ export default function HazardsScreen() {
       // 'active'
       return expiresMs >= now;
     });
-  }, [hazards, expiryFilter]);
+  }, [hazards, expiryFilter, nowMs]);
 
   const handleResolve = useCallback(async (hazard: Hazard) => {
     Alert.alert(
@@ -241,11 +250,12 @@ export default function HazardsScreen() {
       <HazardListItem
         hazard={item}
         routes={routes}
+        nowMs={nowMs}
         onPress={() => handleSelectHazard(item)}
         onResolve={() => void handleResolve(item)}
       />
     ),
-    [routes, handleSelectHazard, handleResolve],
+    [routes, nowMs, handleSelectHazard, handleResolve],
   );
 
   return (
@@ -449,6 +459,7 @@ export default function HazardsScreen() {
         ref={detailRef}
         hazard={selectedHazard}
         routes={routes}
+        nowMs={nowMs}
         onResolve={() => { if (selectedHazard) void handleResolve(selectedHazard); }}
         onDismiss={() => { detailRef.current?.close(); }}
         onAnimationComplete={() => { setSelectedHazard(null); }}
@@ -486,11 +497,13 @@ function HazardListSeparator() {
 const HazardListItem = memo(function HazardListItem({
   hazard,
   routes,
+  nowMs,
   onPress,
   onResolve,
 }: {
   hazard: Hazard;
   routes: Route[];
+  nowMs: number;
   onPress: () => void;
   onResolve: () => void;
 }) {
@@ -502,9 +515,9 @@ const HazardListItem = memo(function HazardListItem({
     ? new Date(hazard.expiresAt).toLocaleDateString()
     : 'No expiry';
 
-  const isExpiringSoon = hazard.expiresAt
-    ? new Date(hazard.expiresAt).getTime() - Date.now() <= FORTY_EIGHT_HOURS_MS
-      && new Date(hazard.expiresAt).getTime() > Date.now()
+  const expiresMs = hazard.expiresAt ? new Date(hazard.expiresAt).getTime() : null;
+  const isExpiringSoon = expiresMs !== null
+    ? expiresMs - nowMs <= FORTY_EIGHT_HOURS_MS && expiresMs > nowMs
     : false;
 
   const severityColor = SEVERITY_COLOR[hazard.severity] ?? '#F97316';
@@ -557,12 +570,13 @@ const HazardDetailSheet = forwardRef<
   {
     hazard: Hazard | null;
     routes: Route[];
+    nowMs: number;
     onResolve: () => void;
     onDismiss: () => void;
     onAnimationComplete: () => void;
     onUpdateExpiry: (hazardId: string, expiresAt: string | null) => void;
   }
->(({ hazard, routes, onResolve, onDismiss, onAnimationComplete, onUpdateExpiry }, ref) => {
+>(({ hazard, routes, nowMs, onResolve, onDismiss, onAnimationComplete, onUpdateExpiry }, ref) => {
   const renderBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => (
       <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} onPress={onDismiss} />
@@ -583,9 +597,9 @@ const HazardDetailSheet = forwardRef<
 
   const expiryOptions = [
     { label: 'Permanent', value: null },
-    { label: '1 day', value: new Date(Date.now() + 86_400_000).toISOString() },
-    { label: '1 week', value: new Date(Date.now() + 7 * 86_400_000).toISOString() },
-    { label: '1 month', value: new Date(Date.now() + 30 * 86_400_000).toISOString() },
+    { label: '1 day', value: new Date(nowMs + 86_400_000).toISOString() },
+    { label: '1 week', value: new Date(nowMs + 7 * 86_400_000).toISOString() },
+    { label: '1 month', value: new Date(nowMs + 30 * 86_400_000).toISOString() },
   ];
 
   return (

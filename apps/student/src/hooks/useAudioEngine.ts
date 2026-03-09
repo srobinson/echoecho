@@ -130,16 +130,21 @@ export function useAudioEngine(): UseAudioEngineResult {
     }
   }, [playClip]);
 
+  const drainQueueRef = useRef<(() => Promise<void>) | null>(null);
+
   const drainQueue = useCallback(async () => {
     if (playingRef.current || queueRef.current.length === 0) return;
     playingRef.current = true;
-    // Pop highest priority (lowest number)
     queueRef.current.sort((a, b) => a.priority - b.priority);
     const item = queueRef.current.shift()!;
     await announce(item);
     playingRef.current = false;
-    void drainQueue();
+    void drainQueueRef.current?.();
   }, [announce]);
+
+  useEffect(() => {
+    drainQueueRef.current = drainQueue;
+  }, [drainQueue]);
 
   const enqueue = useCallback((item: QueueItem, preempt = false) => {
     if (preempt) {

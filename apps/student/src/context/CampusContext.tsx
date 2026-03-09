@@ -224,7 +224,8 @@ export function CampusProvider({ children }: CampusProviderProps) {
   }, [fetchFromNetwork]);
 
   useEffect(() => {
-    void restoreFromCache();
+    const run = async () => { await restoreFromCache(); };
+    void run();
   }, [restoreFromCache]);
 
   // Sync route data when the app returns to the foreground (ALP-1087).
