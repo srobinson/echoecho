@@ -20,14 +20,5 @@
         "APP_VARIANT": "admin"
       }
     }
-  },
-  "submit": {
-    "production-admin": {
-      "ios": {
-        "appleId": "",
-        "ascAppId": "",
-        "appleTeamId": ""
-      }
-    }
   }
 }

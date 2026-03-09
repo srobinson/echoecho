@@ -20,14 +20,5 @@
         "APP_VARIANT": "student"
       }
     }
-  },
-  "submit": {
-    "production-student": {
-      "ios": {
-        "appleId": "",
-        "ascAppId": "",
-        "appleTeamId": ""
-      }
-    }
   }
 }
