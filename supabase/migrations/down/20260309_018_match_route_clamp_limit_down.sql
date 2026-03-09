@@ -1,0 +1,14 @@
+-- DOWN migration for 20260309_018_match_route_clamp_limit
+-- Restores match_route without the p_limit clamp.
+-- The full function is defined in migration 005; re-applying it
+-- without the clamp is sufficient since CREATE OR REPLACE overwrites.
+
+-- No action needed: the next deploy of the original migration 005
+-- function will overwrite. For explicit rollback, the orchestrator
+-- should re-run migration 005.
+--
+-- Alternatively, remove the clamp lines manually:
+-- This down migration is intentionally left as a no-op because the
+-- function signature is unchanged (same parameters) and the clamp
+-- is purely behavioral. Rolling back to the previous behavior means
+-- accepting unbounded p_limit values, which is the pre-migration state.
