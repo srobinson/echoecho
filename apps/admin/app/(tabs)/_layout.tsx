@@ -48,7 +48,7 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: 'Map',
-          tabBarIcon: ({ focused }) => (
+          tabBarIcon: ({ focused }: { focused: boolean }) => (
             <TabIcon name="map" focused={focused} />
           ),
         }}
@@ -57,7 +57,7 @@ export default function TabsLayout() {
         name="routes"
         options={{
           title: 'Routes',
-          tabBarIcon: ({ focused }) => (
+          tabBarIcon: ({ focused }: { focused: boolean }) => (
             <TabIcon name="navigate" focused={focused} />
           ),
         }}
@@ -66,7 +66,7 @@ export default function TabsLayout() {
         name="buildings"
         options={{
           title: 'Buildings',
-          tabBarIcon: ({ focused }) => (
+          tabBarIcon: ({ focused }: { focused: boolean }) => (
             <TabIcon name="business" focused={focused} />
           ),
         }}
@@ -75,7 +75,7 @@ export default function TabsLayout() {
         name="hazards"
         options={{
           title: 'Hazards',
-          tabBarIcon: ({ focused }) => (
+          tabBarIcon: ({ focused }: { focused: boolean }) => (
             <TabIcon name="warning" focused={focused} />
           ),
         }}
@@ -84,7 +84,7 @@ export default function TabsLayout() {
         name="analytics"
         options={{
           title: 'Analytics',
-          tabBarIcon: ({ focused }) => (
+          tabBarIcon: ({ focused }: { focused: boolean }) => (
             <TabIcon name="analytics" focused={focused} />
           ),
         }}
@@ -93,7 +93,7 @@ export default function TabsLayout() {
         name="settings"
         options={{
           title: 'Settings',
-          tabBarIcon: ({ focused }) => (
+          tabBarIcon: ({ focused }: { focused: boolean }) => (
             <TabIcon name="settings" focused={focused} />
           ),
         }}
