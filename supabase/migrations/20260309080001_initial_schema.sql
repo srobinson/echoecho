@@ -2,9 +2,12 @@
 -- UP: Create EchoEcho core tables, indexes, helper functions, and profile trigger
 -- Reversible via: supabase/migrations/down/20260309_001_initial_schema_down.sql
 
--- Extensions
-CREATE EXTENSION IF NOT EXISTS postgis;
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
+-- Extensions (Supabase hosted installs these in the 'extensions' schema)
+CREATE EXTENSION IF NOT EXISTS postgis SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA extensions;
+
+-- Make PostGIS types (geometry, geography) resolvable without schema prefix
+SET search_path TO public, extensions;
 
 -- ============================================================
 -- TABLES

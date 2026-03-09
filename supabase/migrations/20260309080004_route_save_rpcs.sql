@@ -3,6 +3,8 @@
 --     and create_building_stub RPCs
 -- Reversible via: supabase/migrations/down/20260309_004_route_save_rpcs_down.sql
 
+SET search_path TO public, extensions;
+
 -- ============================================================
 -- ADD MISSING COLUMNS TO ROUTES
 -- These are in the shared Route type but were absent from the initial schema.
