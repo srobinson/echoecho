@@ -102,10 +102,10 @@ SELECT
   b.description,
   (ST_AsGeoJSON(b.outline)::jsonb -> 'coordinates' -> 0) AS footprint,
   COALESCE(
-    (SELECT jsonb_build_object(
+    (SELECT CASE WHEN be.geom IS NOT NULL THEN jsonb_build_object(
        'latitude',  ST_Y(be.geom),
        'longitude', ST_X(be.geom)
-     )
+     ) ELSE NULL END
      FROM building_entrances be
      WHERE be.building_id = b.id AND be.is_main = true
      LIMIT 1),
@@ -119,10 +119,10 @@ SELECT
        'id',                  be.id,
        'buildingId',          be.building_id,
        'name',                be.name,
-       'coordinate',          jsonb_build_object(
+       'coordinate',          CASE WHEN be.geom IS NOT NULL THEN jsonb_build_object(
          'latitude',  ST_Y(be.geom),
          'longitude', ST_X(be.geom)
-       ),
+       ) ELSE NULL END,
        'isMain',              be.is_main,
        'accessibilityNotes',  be.accessibility_notes
      ) ORDER BY be.is_main DESC, be.name)
@@ -145,10 +145,10 @@ SELECT
   h.waypoint_id AS "waypointId",
   h.type,
   h.severity,
-  jsonb_build_object(
+  CASE WHEN h.geom IS NOT NULL THEN jsonb_build_object(
     'latitude',  ST_Y(h.geom),
     'longitude', ST_X(h.geom)
-  ) AS coordinate,
+  ) ELSE NULL END AS coordinate,
   h.title,
   h.description,
   h.expires_at AS "expiresAt",
@@ -206,10 +206,10 @@ SELECT
        'waypointId',  h.waypoint_id,
        'type',        h.type,
        'severity',    h.severity,
-       'coordinate',  jsonb_build_object(
+       'coordinate',  CASE WHEN h.geom IS NOT NULL THEN jsonb_build_object(
          'latitude',  ST_Y(h.geom),
          'longitude', ST_X(h.geom)
-       ),
+       ) ELSE NULL END,
        'title',       h.title,
        'description', h.description,
        'expiresAt',   h.expires_at,

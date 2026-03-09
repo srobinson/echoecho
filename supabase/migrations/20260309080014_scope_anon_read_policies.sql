@@ -54,12 +54,13 @@ CREATE POLICY buildings_anon_read ON buildings FOR SELECT USING (
   )
 );
 
--- Building entrances: readable if the parent building is readable.
+-- Building entrances: readable if the parent building is in an active campus.
 CREATE POLICY building_entrances_anon_read ON building_entrances FOR SELECT USING (
   auth.uid() IS NOT NULL
   AND EXISTS (
     SELECT 1 FROM buildings b
-    WHERE b.id = building_id AND b.deleted_at IS NULL
+    JOIN campuses c ON c.id = b.campus_id
+    WHERE b.id = building_id AND b.deleted_at IS NULL AND c.deleted_at IS NULL
   )
 );
 
