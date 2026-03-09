@@ -55,8 +55,8 @@ export type PublishResult = { ok: true } | { ok: false; error: string };
 // ── Internal types ────────────────────────────────────────────────────────────
 
 interface ResolvedMedia {
-  audioUrl: string | null;
-  photoUrl: string | null;
+  audioKey: string | null;
+  photoKey: string | null;
 }
 
 interface WaypointPayload {
@@ -125,7 +125,7 @@ async function resolveWaypointMedia(
   const mediaMap = new Map<string, ResolvedMedia>();
 
   for (const wp of waypoints) {
-    mediaMap.set(wp.localId, { audioUrl: null, photoUrl: null });
+    mediaMap.set(wp.localId, { audioKey: null, photoKey: null });
   }
 
   // Step 1: audio
@@ -148,7 +148,7 @@ async function resolveWaypointMedia(
       audioKey = wp.audioAnnotationUri;
     }
 
-    mediaMap.set(wp.localId, { audioUrl: audioKey, photoUrl: null });
+    mediaMap.set(wp.localId, { audioKey, photoKey: null });
   }
 
   // Step 2: photos
@@ -172,7 +172,7 @@ async function resolveWaypointMedia(
     }
 
     const existing = mediaMap.get(wp.localId)!;
-    mediaMap.set(wp.localId, { ...existing, photoUrl: photoKey });
+    mediaMap.set(wp.localId, { ...existing, photoKey });
   }
 
   return { ok: true, mediaMap };
@@ -242,8 +242,8 @@ function buildWaypointPayloads(
       longitude:             wp.coordinate.longitude,
       heading:               null,
       annotation_text:       wp.audioLabel,
-      annotation_audio_url:  media?.audioUrl ?? null,
-      photo_url:             media?.photoUrl ?? null,
+      annotation_audio_url:  media?.audioKey ?? null,
+      photo_url:             media?.photoKey ?? null,
     };
   });
 }

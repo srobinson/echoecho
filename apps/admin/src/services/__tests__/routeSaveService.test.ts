@@ -42,8 +42,7 @@ const mockStorageFrom    = supabase.storage.from as jest.Mock;
 const mockReadFile       = FileSystem.readAsStringAsync as jest.Mock;
 
 // Storage bucket sub-methods, recreated in beforeEach
-let mockUpload:       jest.Mock;
-let mockGetPublicUrl: jest.Mock;
+let mockUpload: jest.Mock;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -114,12 +113,10 @@ const METADATA: RouteSaveMetadata = {
 beforeEach(() => {
   jest.clearAllMocks();
 
-  mockUpload       = jest.fn().mockResolvedValue({ error: null });
-  mockGetPublicUrl = jest.fn().mockReturnValue({ data: { publicUrl: 'https://cdn.example.com/key' } });
+  mockUpload = jest.fn().mockResolvedValue({ error: null });
 
   mockStorageFrom.mockReturnValue({
-    upload:       mockUpload,
-    getPublicUrl: mockGetPublicUrl,
+    upload: mockUpload,
   });
 
   mockRpc.mockResolvedValue({ data: 'route-uuid-returned', error: null });
