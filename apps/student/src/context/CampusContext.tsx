@@ -41,6 +41,8 @@ export interface CampusContextValue {
   entrances: Entrance[];
   securityWaypoints: Waypoint[];
   isLoaded: boolean;
+  /** True when both cache and network failed to provide campus data. Safety-critical for emergency routing. */
+  loadFailed: boolean;
   /** Manually re-fetch campus data (e.g. on foreground resume) */
   refresh: () => Promise<void>;
 }
@@ -58,6 +60,7 @@ const CampusContext = createContext<CampusContextValue>({
   entrances: [],
   securityWaypoints: [],
   isLoaded: false,
+  loadFailed: false,
   refresh: async () => {},
 });
 
@@ -76,8 +79,9 @@ export function CampusProvider({ children }: CampusProviderProps) {
   const [entrances, setEntrances] = useState<Entrance[]>([]);
   const [securityWaypoints, setSecurityWaypoints] = useState<Waypoint[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
 
-  const fetchFromNetwork = useCallback(async () => {
+  const fetchFromNetwork = useCallback(async (): Promise<boolean> => {
     try {
       // Fetch active campus — for TSBVI there is exactly one campus
       const { data: campusRows, error: campusErr } = await supabase
@@ -86,7 +90,7 @@ export function CampusProvider({ children }: CampusProviderProps) {
         .limit(1)
         .single();
 
-      if (campusErr || !campusRows) return;
+      if (campusErr || !campusRows) return false;
 
       const campusInfo: CampusInfo = {
         id: campusRows.id as string,
@@ -100,7 +104,7 @@ export function CampusProvider({ children }: CampusProviderProps) {
         .select('id, name, entrances:building_entrances(id, building_id, name, coordinate, is_main, accessibility_notes)')
         .eq('campus_id', campusInfo.id);
 
-      if (buildErr || !buildings) return;
+      if (buildErr || !buildings) return false;
 
       const allEntrances: Entrance[] = (buildings as Array<{
         id: string;
@@ -166,12 +170,16 @@ export function CampusProvider({ children }: CampusProviderProps) {
         AsyncStorage.setItem(STORAGE_KEY_ENTRANCES, JSON.stringify(allEntrances)),
         AsyncStorage.setItem(STORAGE_KEY_SECURITY_WPS, JSON.stringify(secWaypoints)),
       ]);
+
+      setLoadFailed(false);
+      return true;
     } catch {
-      // Network failure is non-fatal — cached data remains available
+      return false;
     }
   }, []);
 
   const restoreFromCache = useCallback(async () => {
+    let cacheHit = false;
     try {
       const [campusJson, entrancesJson, secJson] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEY_CAMPUS),
@@ -179,15 +187,31 @@ export function CampusProvider({ children }: CampusProviderProps) {
         AsyncStorage.getItem(STORAGE_KEY_SECURITY_WPS),
       ]);
 
-      if (campusJson) setCampus(JSON.parse(campusJson) as CampusInfo);
+      if (campusJson) {
+        setCampus(JSON.parse(campusJson) as CampusInfo);
+        cacheHit = true;
+      }
       if (entrancesJson) setEntrances(JSON.parse(entrancesJson) as Entrance[]);
       if (secJson) setSecurityWaypoints(JSON.parse(secJson) as Waypoint[]);
     } catch {
-      // Cache miss is non-fatal — network fetch will populate it
-    } finally {
+      // Cache read failure is non-fatal
+    }
+
+    // If cache had data, mark loaded immediately so the app is usable.
+    // Network fetch will still update in the background.
+    if (cacheHit) {
       setIsLoaded(true);
       void fetchFromNetwork();
+      return;
     }
+
+    // No cache: network is the only source. Wait for it before marking loaded
+    // so consumers do not render with null campus.
+    const networkSuccess = await fetchFromNetwork();
+    if (!networkSuccess) {
+      setLoadFailed(true);
+    }
+    setIsLoaded(true);
   }, [fetchFromNetwork]);
 
   useEffect(() => {
@@ -195,11 +219,14 @@ export function CampusProvider({ children }: CampusProviderProps) {
   }, [restoreFromCache]);
 
   const refresh = useCallback(async () => {
-    await fetchFromNetwork();
+    const success = await fetchFromNetwork();
+    if (success) {
+      setLoadFailed(false);
+    }
   }, [fetchFromNetwork]);
 
   return (
-    <CampusContext.Provider value={{ campus, entrances, securityWaypoints, isLoaded, refresh }}>
+    <CampusContext.Provider value={{ campus, entrances, securityWaypoints, isLoaded, loadFailed, refresh }}>
       {children}
     </CampusContext.Provider>
   );
