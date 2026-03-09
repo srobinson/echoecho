@@ -39,7 +39,7 @@ interface ServerRouteHeader {
 }
 
 /**
- * Syncs all published (and recently retracted) routes for a campus.
+ * Syncs all published routes for a campus and detects retractions by absence.
  *
  * @param campusId       The campus to sync.
  * @param activeRouteId  Skip writing this route — it is currently being navigated.
@@ -58,13 +58,14 @@ export async function syncCampus(
     }
   }
 
-  // Fetch published + recently-retracted route headers (no waypoints).
-  // content_hash is the sole change-detection signal.
+  // Fetch only published route headers. RLS blocks retracted routes for
+  // anonymous users anyway. Retractions are detected by absence: any locally
+  // cached route that no longer appears in the published set is marked retracted.
   const { data: serverRoutes, error: routesError } = await supabase
     .from('routes')
     .select('id, content_hash, status, campus_id, name, difficulty, tags, total_distance_m')
     .eq('campus_id', campusId)
-    .in('status', ['published', 'retracted']);
+    .eq('status', 'published');
 
   if (routesError) {
     console.error('[syncEngine] Failed to fetch route headers:', routesError);
@@ -72,20 +73,24 @@ export async function syncCampus(
   }
 
   const routes = (serverRoutes ?? []) as ServerRouteHeader[];
+  const serverRouteIds = new Set(routes.map((r) => r.id));
 
   // Compare content_hash against local cache. Stale = missing or hash changed.
   const localHashes = await getAllRouteHashes(campusId);
+
+  // Mark locally cached routes that are absent from the server as retracted.
+  // This catches routes that were published, cached, then administratively retracted.
+  for (const localRouteId of Object.keys(localHashes)) {
+    if (!serverRouteIds.has(localRouteId) && localRouteId !== activeRouteId) {
+      await markRouteRetracted(localRouteId);
+    }
+  }
+
   const staleRoutes = routes.filter(
     (r) => !localHashes[r.id] || localHashes[r.id] !== r.content_hash
   );
 
   for (const route of staleRoutes) {
-    // Retracted routes: update local status without re-fetching waypoints.
-    if (route.status === 'retracted') {
-      await markRouteRetracted(route.id);
-      continue;
-    }
-
     // Skip the active navigation route — never modify data mid-session.
     if (activeRouteId && route.id === activeRouteId) {
       continue;
