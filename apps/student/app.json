@@ -72,15 +72,6 @@
     },
     "accessibility": {
       "screenReaderMode": "default"
-    },
-    "autolinking": {
-      "exclude": [
-        "@rnmapbox/maps",
-        "expo-camera",
-        "expo-image-picker",
-        "expo-image-manipulator",
-        "expo-linear-gradient"
-      ]
     }
   }
 }
