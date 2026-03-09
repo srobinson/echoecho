@@ -83,19 +83,25 @@ export function CampusProvider({ children }: CampusProviderProps) {
 
   const fetchFromNetwork = useCallback(async (): Promise<boolean> => {
     try {
-      // Fetch active campus — for TSBVI there is exactly one campus
-      const { data: campusRows, error: campusErr } = await supabase
+      const { data: campusRow, error: campusErr } = await supabase
         .from('campuses')
         .select('id, name, security_phone')
         .limit(1)
-        .single();
+        .maybeSingle();
 
-      if (campusErr || !campusRows) return false;
+      if (campusErr) {
+        console.error('[CampusContext] Failed to fetch campus:', campusErr.message);
+        return false;
+      }
+      if (!campusRow) {
+        console.warn('[CampusContext] No campus configured');
+        return false;
+      }
 
       const campusInfo: CampusInfo = {
-        id: campusRows.id as string,
-        name: campusRows.name as string,
-        securityPhone: (campusRows.security_phone as string | null) ?? null,
+        id: campusRow.id as string,
+        name: campusRow.name as string,
+        securityPhone: (campusRow.security_phone as string | null) ?? null,
       };
 
       // Fetch all buildings with entrances for this campus
