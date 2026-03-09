@@ -101,9 +101,26 @@ export function usePdrNavigation(
     });
   }, [injectPosition]);
 
+  // Shared teardown: remove subscriptions first, then clear the active flag.
+  // Ordering matters: sensor callbacks check activeRef before processing, so
+  // removing subscriptions while activeRef is still true prevents the window
+  // where a callback fires between flag clear and subscription removal.
+  const teardownSensors = useCallback(() => {
+    accelSubRef.current?.remove();
+    gyroSubRef.current?.remove();
+    magSubRef.current?.remove();
+    accelSubRef.current = null;
+    gyroSubRef.current = null;
+    magSubRef.current = null;
+    activeRef.current = false;
+  }, []);
+
   const activate = useCallback((startLat: number, startLng: number, startHeading: number) => {
-    if (activeRef.current) return;
-    activeRef.current = true;
+    // Defensively tear down any prior session to prevent duplicate listeners
+    if (activeRef.current) {
+      teardownSensors();
+    }
+
     posRef.current = { lat: startLat, lng: startLng };
     headingRef.current = startHeading;
     traveledMRef.current = 0;
@@ -147,17 +164,15 @@ export function usePdrNavigation(
       // Simple atan2 heading from magnetometer X/Y
       magHeadingRef.current = (Math.atan2(y, x) * (180 / Math.PI) + 360) % 360;
     });
-  }, [stepForward]);
+
+    // Set active after subscriptions are assigned so teardownSensors() in a
+    // concurrent call always finds the subscription refs populated
+    activeRef.current = true;
+  }, [stepForward, teardownSensors]);
 
   const deactivate = useCallback(() => {
-    activeRef.current = false;
-    accelSubRef.current?.remove();
-    gyroSubRef.current?.remove();
-    magSubRef.current?.remove();
-    accelSubRef.current = null;
-    gyroSubRef.current = null;
-    magSubRef.current = null;
-  }, []);
+    teardownSensors();
+  }, [teardownSensors]);
 
   const onNavEvent = useCallback((handler: NavEventHandler) => {
     eventHandlerRef.current = handler;
