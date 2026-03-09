@@ -70,6 +70,9 @@ export type {
   RecordingSession,
 } from './types/recording';
 
+// STT session state (ALP-954 owns, ALP-958 consumes)
+export type { SttSessionState } from './types/stt';
+
 // Route matching (ALP-955)
 export type {
   MatchRouteRequest,

@@ -1,0 +1,233 @@
+/**
+ * GPS position tracking service for navigation (ALP-956).
+ *
+ * Subscribes to expo-location at high accuracy, projects positions onto the
+ * route, and emits typed NavEvents to downstream consumers (ALP-957 PDR,
+ * ALP-958 haptics, ALP-959 audio, ALP-960 off-route).
+ *
+ * Turn direction at waypoints is derived from segment bearing delta — no
+ * waypoint metadata required. The injectPosition() method accepts PDR
+ * positions from ALP-957 so the rest of the stack is source-agnostic.
+ */
+import { useCallback, useRef } from 'react';
+import * as Location from 'expo-location';
+import type { NavEvent, NavEventHandler, TrackPositionUpdate } from '../types/navEvents';
+import type { LocalWaypoint } from '../lib/localDb';
+
+// ── Configurable thresholds (defaults per spec) ─────────────────────────────
+
+const APPROACHING_DISTANCE_M = 15;
+const AT_WAYPOINT_DISTANCE_M = 5;
+const SNAP_THRESHOLD_M = 15;
+const MAX_VALID_ACCURACY_M = 20;
+const DEGRADED_ACCURACY_M = 10;
+const DEGRADED_GAP_MS = 3_000;
+
+const EARTH_RADIUS_M = 6_371_000;
+
+// ── Geo helpers ──────────────────────────────────────────────────────────────
+
+function toRad(d: number): number { return (d * Math.PI) / 180; }
+function toDeg(r: number): number { return (r * 180) / Math.PI; }
+
+export function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(a));
+}
+
+function bearingDeg(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const dLng = toRad(lng2 - lng1);
+  const y = Math.sin(dLng) * Math.cos(toRad(lat2));
+  const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLng);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+function normAngle(d: number): number {
+  let n = d % 360;
+  if (n > 180) n -= 360;
+  if (n < -180) n += 360;
+  return n;
+}
+
+/** Project point P onto segment AB; return projected point. */
+function projectOntoSegment(
+  pLat: number, pLng: number,
+  aLat: number, aLng: number,
+  bLat: number, bLng: number
+): { lat: number; lng: number } {
+  const abLat = bLat - aLat;
+  const abLng = bLng - aLng;
+  const apLat = pLat - aLat;
+  const apLng = pLng - aLng;
+  const ab2 = abLat ** 2 + abLng ** 2;
+  if (ab2 === 0) return { lat: aLat, lng: aLng };
+  const t = Math.max(0, Math.min(1, (apLat * abLat + apLng * abLng) / ab2));
+  return { lat: aLat + t * abLat, lng: aLng + t * abLng };
+}
+
+/** Turn direction from bearing delta (per ALP-956 spec). */
+function turnDirection(
+  currentBearing: number,
+  nextBearing: number
+): 'left' | 'right' | 'straight' | 'arrived' {
+  const delta = normAngle(nextBearing - currentBearing);
+  if (Math.abs(delta) < 30) return 'straight';
+  return delta > 0 ? 'right' : 'left';
+}
+
+// ── Hook ─────────────────────────────────────────────────────────────────────
+
+export interface UseGpsNavigationResult {
+  startTracking: (waypoints: LocalWaypoint[], onEvent: NavEventHandler) => Promise<void>;
+  stopTracking: () => void;
+  injectPosition: (update: TrackPositionUpdate) => void;
+}
+
+export function useGpsNavigation(): UseGpsNavigationResult {
+  const subscriptionRef = useRef<Location.LocationSubscription | null>(null);
+  const waypointsRef = useRef<LocalWaypoint[]>([]);
+  const handlerRef = useRef<NavEventHandler | null>(null);
+  const wpIndexRef = useRef(0);
+  const lastPositionRef = useRef<TrackPositionUpdate | null>(null);
+  const lastUpdateTimeRef = useRef<number>(Date.now());
+  const approachingFiredRef = useRef(false);
+  const degradedRef = useRef(false);
+  const degradedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const emit = useCallback((event: NavEvent) => {
+    handlerRef.current?.(event);
+  }, []);
+
+  const processPosition = useCallback((update: TrackPositionUpdate) => {
+    const wps = waypointsRef.current;
+    const idx = wpIndexRef.current;
+    if (idx >= wps.length) return;
+
+    lastUpdateTimeRef.current = Date.now();
+    lastPositionRef.current = update;
+
+    // Accuracy gate — hold invalid positions
+    if (update.source === 'gps' && update.accuracy > MAX_VALID_ACCURACY_M) return;
+
+    // Route segment snapping — find nearest projected point
+    const target = wps[idx];
+    let distToTarget = haversineM(update.lat, update.lng, target.lat, target.lng);
+
+    if (idx > 0) {
+      const prev = wps[idx - 1];
+      const projected = projectOntoSegment(
+        update.lat, update.lng, prev.lat, prev.lng, target.lat, target.lng
+      );
+      const snapDist = haversineM(update.lat, update.lng, projected.lat, projected.lng);
+      if (snapDist < SNAP_THRESHOLD_M) {
+        distToTarget = haversineM(projected.lat, projected.lng, target.lat, target.lng);
+      }
+    }
+
+    // Waypoint arrival
+    if (distToTarget < AT_WAYPOINT_DISTANCE_M) {
+      approachingFiredRef.current = false;
+      const isLast = idx === wps.length - 1;
+
+      let dir: 'left' | 'right' | 'straight' | 'arrived' = 'arrived';
+      if (!isLast && idx > 0) {
+        const prev = wps[idx - 1];
+        const curBearing = bearingDeg(prev.lat, prev.lng, target.lat, target.lng);
+        const next = wps[idx + 1];
+        const nextBearing = bearingDeg(target.lat, target.lng, next.lat, next.lng);
+        dir = turnDirection(curBearing, nextBearing);
+      }
+
+      emit({ type: 'at_waypoint', waypointId: target.id, turnDirection: dir });
+      wpIndexRef.current += 1;
+
+      if (isLast) emit({ type: 'arrived' });
+      return;
+    }
+
+    // Approaching pre-announcement
+    if (distToTarget < APPROACHING_DISTANCE_M && !approachingFiredRef.current) {
+      approachingFiredRef.current = true;
+      emit({ type: 'approaching_waypoint', waypointId: target.id, distanceMeters: distToTarget });
+    }
+  }, [emit]);
+
+  const handleDegradedTimer = useCallback(() => {
+    if (!degradedRef.current) {
+      degradedRef.current = true;
+      const acc = lastPositionRef.current?.accuracy ?? 99;
+      emit({ type: 'position_degraded', accuracyMeters: acc });
+    }
+  }, [emit]);
+
+  const startTracking = useCallback(async (
+    waypoints: LocalWaypoint[],
+    onEvent: NavEventHandler
+  ) => {
+    waypointsRef.current = waypoints;
+    handlerRef.current = onEvent;
+    wpIndexRef.current = 0;
+    approachingFiredRef.current = false;
+    degradedRef.current = false;
+
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') return;
+    await Location.requestBackgroundPermissionsAsync();
+
+    subscriptionRef.current = await Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.High,
+        timeInterval: 1000,
+        distanceInterval: 0,
+      },
+      (loc) => {
+        const acc = loc.coords.accuracy ?? 999;
+
+        // Degraded detection
+        if (acc > DEGRADED_ACCURACY_M) {
+          if (!degradedTimerRef.current) {
+            degradedTimerRef.current = setTimeout(handleDegradedTimer, DEGRADED_GAP_MS);
+          }
+        } else {
+          if (degradedTimerRef.current) {
+            clearTimeout(degradedTimerRef.current);
+            degradedTimerRef.current = null;
+          }
+          if (degradedRef.current) {
+            degradedRef.current = false;
+            emit({ type: 'position_restored' });
+          }
+        }
+
+        processPosition({
+          lat: loc.coords.latitude,
+          lng: loc.coords.longitude,
+          heading: loc.coords.heading ?? 0,
+          accuracy: acc,
+          speed: loc.coords.speed ?? 0,
+          source: 'gps',
+        });
+      }
+    );
+  }, [processPosition, handleDegradedTimer, emit]);
+
+  const stopTracking = useCallback(() => {
+    subscriptionRef.current?.remove();
+    subscriptionRef.current = null;
+    if (degradedTimerRef.current) {
+      clearTimeout(degradedTimerRef.current);
+      degradedTimerRef.current = null;
+    }
+  }, []);
+
+  /** PDR positions (ALP-957) injected here; processed identically to GPS. */
+  const injectPosition = useCallback((update: TrackPositionUpdate) => {
+    processPosition(update);
+  }, [processPosition]);
+
+  return { startTracking, stopTracking, injectPosition };
+}
