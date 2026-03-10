@@ -10,7 +10,7 @@
  * ALP-962: Emergency mode FAB + triple-tap overlay in _layout.tsx
  * ALP-964: Favorites via useRouteHistory
  */
-import { useCallback, useState, useEffect, memo } from 'react';
+import { useCallback, useState, useEffect, memo, useRef } from 'react';
 import {
   View,
   Text,
@@ -22,52 +22,215 @@ import {
   Platform,
   Animated,
   Easing,
+  Linking,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Speech from 'expo-speech';
+import * as Location from 'expo-location';
 
 import { useNavigationStore } from '../src/stores/navigationStore';
 import { useRouteHistory } from '../src/hooks/useRouteHistory';
 import { useSttDestination } from '../src/hooks/useSttDestination';
 import { loadBuildingIndex, fuzzySearch } from '../src/lib/buildingIndex';
+import { useCampus } from '../src/context/CampusContext';
+import { getLocalRoutesForCampus, type LocalRoute } from '../src/lib/localDb';
+import { supabase } from '../src/lib/supabase';
+import { matchRoute, preloadRoute } from '../src/lib/routeMatchingService';
+import type { Route } from '@echoecho/shared';
 
 // Show at most 5 favorites on the home screen; remainder accessible via "See all"
 const HOME_FAVORITES_LIMIT = 5;
 
+interface AssistRoute {
+  id: string;
+  name: string;
+  fromBuildingId: string | null;
+  toBuildingId: string | null;
+  fromLabel: string;
+  toLabel: string;
+}
+
 export default function HomeScreen() {
-  const { userId } = useNavigationStore();
+  const { userId, setCurrentSession } = useNavigationStore();
   const { favorites, isFavorite, toggleFavorite } = useRouteHistory(userId);
+  const { campus, nearestCampus, isLoaded: campusLoaded, loadFailed } = useCampus();
   const [showKeyboardFallback, setShowKeyboardFallback] = useState(false);
   const [keyboardQuery, setKeyboardQuery] = useState('');
+  const [showLocationPermissionHelp, setShowLocationPermissionHelp] = useState(false);
+  const [availableRoutes, setAvailableRoutes] = useState<LocalRoute[]>([]);
+  const [availableRouteSummaries, setAvailableRouteSummaries] = useState<AssistRoute[]>([]);
+  const lastSpokenNoMatchRef = useRef<string | null>(null);
 
   // Load building index on mount for STT fuzzy matching
   useEffect(() => {
     void loadBuildingIndex();
   }, []);
 
-  const handleDestinationSelect = useCallback((routeId: string, label: string) => {
-    AccessibilityInfo.announceForAccessibility(`Starting navigation to ${label}`);
-    router.push(`/navigate/${routeId}`);
-  }, []);
+  const startRouteNavigation = useCallback(async (
+    routeId: string,
+    routeName: string,
+    toLabel = '',
+  ) => {
+    await preloadRoute(routeId);
 
-  const handleDestinationConfirmed = useCallback((buildingId: string, name: string) => {
-    AccessibilityInfo.announceForAccessibility(`Starting navigation to ${name}`);
-    router.push(`/navigate/${buildingId}`);
+    const { data } = await supabase
+      .from('v_routes' as 'routes')
+      .select('*')
+      .eq('id', routeId)
+      .single();
+
+    if (data) {
+      setCurrentSession({
+        id: `session-${Date.now()}`,
+        userId: userId ?? 'anonymous',
+        route: data as Route,
+        status: 'searching',
+        positioningMode: 'unknown',
+        currentPosition: null,
+        currentWaypointIndex: 0,
+        distanceToNextWaypoint: null,
+        bearingToNextWaypoint: null,
+        startedAt: new Date().toISOString(),
+        arrivedAt: null,
+      });
+    }
+
+    AccessibilityInfo.announceForAccessibility(`Starting navigation to ${toLabel || routeName}`);
+    router.push(`/navigate/${routeId}`);
+  }, [setCurrentSession, userId]);
+
+  const resolveRouteForDestination = useCallback(async (destinationBuildingId: string, name: string) => {
+    if (!campus?.id) {
+      if (nearestCampus) {
+        throw new Error(
+          `No nearby campus detected. The nearest campus is ${nearestCampus.name}, ${formatCampusDistance(nearestCampus.distanceMeters)} away.`,
+        );
+      }
+      throw new Error('No nearby campus detected.');
+    }
+
+    let permission = await Location.getForegroundPermissionsAsync();
+    if (permission.status !== 'granted') {
+      permission = await Location.requestForegroundPermissionsAsync();
+    }
+    if (permission.status !== 'granted') {
+      setShowLocationPermissionHelp(true);
+      throw new Error('Location permission required. Enable location access in Settings.');
+    }
+
+    const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: 60_000 });
+    const current = lastKnown ?? await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+
+    const matched = await matchRoute({
+      lat: current.coords.latitude,
+      lng: current.coords.longitude,
+      destinationText: name,
+      campusId: campus.id,
+      limit: 5,
+    });
+
+    if ('error' in matched) {
+      throw new Error(matched.error.message);
+    }
+
+    const bestRoute = matched.data.matches.find((route) => route.endBuildingId === destinationBuildingId)
+      ?? matched.data.matches[0];
+
+    if (!bestRoute) {
+      throw new Error(`No published route found for ${name}`);
+    }
+
+    await startRouteNavigation(
+      bestRoute.routeId,
+      bestRoute.routeName,
+      bestRoute.endBuildingName,
+    );
+  }, [campus, nearestCampus, startRouteNavigation]);
+
+  const handleDestinationSelect = useCallback((routeId: string, label: string) => {
+    void startRouteNavigation(routeId, label);
+  }, [startRouteNavigation]);
+
+  const handleDestinationConfirmed = useCallback((destinationBuildingId: string, name: string) => {
+    void resolveRouteForDestination(destinationBuildingId, name).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : 'Could not start navigation.';
+      Speech.stop();
+      Speech.speak(message);
+      AccessibilityInfo.announceForAccessibility(message);
+    });
+  }, [resolveRouteForDestination]);
+
+  const handleOpenSettings = useCallback(() => {
+    void Linking.openSettings();
   }, []);
 
   const {
     sttState,
+    transcript,
     matches,
     pendingMatch,
     error: sttError,
     sttUnavailable,
     startListening,
     stopListening,
-    confirmDestination,
-    rejectDestination,
     resetToIdle,
   } = useSttDestination(handleDestinationConfirmed);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAvailableRoutes() {
+      if (!campus?.id) {
+        setAvailableRoutes([]);
+        setAvailableRouteSummaries([]);
+        return;
+      }
+
+      const [localRoutes, routeHeaders, buildingRows] = await Promise.all([
+        getLocalRoutesForCampus(campus.id),
+        supabase
+          .from('v_routes' as 'routes')
+          .select('id, name, fromBuildingId, toBuildingId, fromLabel, toLabel')
+          .eq('campusId' as 'campus_id', campus.id)
+          .eq('status', 'published')
+          .order('name'),
+        supabase
+          .from('v_buildings' as 'buildings')
+          .select('id, name')
+          .eq('campusId' as 'campus_id', campus.id),
+      ]);
+
+      if (!cancelled) {
+        setAvailableRoutes(localRoutes);
+        if (routeHeaders.error || !routeHeaders.data) {
+          setAvailableRouteSummaries([]);
+          return;
+        }
+
+        const buildingNameById = new Map<string, string>(
+          ((buildingRows.error || !buildingRows.data ? [] : buildingRows.data) as Array<{
+            id: string;
+            name: string;
+          }>).map((building) => [building.id, building.name]),
+        );
+
+        setAvailableRouteSummaries((routeHeaders.data as AssistRoute[]).map((route) => ({
+          ...route,
+          fromLabel: route.fromLabel?.trim() || (route.fromBuildingId ? buildingNameById.get(route.fromBuildingId) ?? 'Unknown start' : 'Unknown start'),
+          toLabel: route.toLabel?.trim() || (route.toBuildingId ? buildingNameById.get(route.toBuildingId) ?? 'Unknown destination' : 'Unknown destination'),
+        })));
+      }
+    }
+
+    void loadAvailableRoutes();
+    return () => {
+      cancelled = true;
+    };
+  }, [campus?.id]);
 
   // Pulsing animation while listening
   const [pulseAnim] = useState(() => new Animated.Value(1));
@@ -123,6 +286,44 @@ export default function HomeScreen() {
       AccessibilityInfo.announceForAccessibility('Processing your speech');
     }
   }, [sttState]);
+
+  useEffect(() => {
+    if (sttState !== 'error' || !sttError || !transcript) {
+      lastSpokenNoMatchRef.current = null;
+      return;
+    }
+
+    if (!sttError.startsWith('No destination found')) {
+      return;
+    }
+
+    if (lastSpokenNoMatchRef.current === transcript) {
+      return;
+    }
+
+    const routeSummary = availableRouteSummaries.length > 0
+      ? `Available routes on ${campus?.name ?? 'this campus'} include ${availableRouteSummaries
+        .slice(0, 4)
+        .map((route) => `${route.name} from ${route.fromLabel} to ${route.toLabel}`)
+        .join(', ')}.`
+      : 'There are no synced routes available right now.';
+
+    Speech.stop();
+    Speech.speak(`I could not find ${transcript}. ${routeSummary} Review the route list below or try again.`);
+    lastSpokenNoMatchRef.current = transcript;
+  }, [sttState, sttError, transcript, availableRouteSummaries, campus?.name]);
+
+  const speakAvailableRoutes = useCallback(() => {
+    const routeSummary = availableRouteSummaries.length > 0
+      ? `${availableRouteSummaries.length} available route${availableRouteSummaries.length === 1 ? '' : 's'}: ${availableRouteSummaries
+        .slice(0, 6)
+        .map((route) => `${route.name} from ${route.fromLabel} to ${route.toLabel}`)
+        .join(', ')}.`
+      : 'There are no synced routes available on this device right now.';
+    Speech.stop();
+    Speech.speak(routeSummary);
+    AccessibilityInfo.announceForAccessibility(routeSummary);
+  }, [availableRouteSummaries]);
 
   const topFavorites = favorites.slice(0, HOME_FAVORITES_LIMIT);
 
@@ -195,30 +396,93 @@ export default function HomeScreen() {
         </Pressable>
       </Animated.View>
 
+      <View style={styles.assistCard} accessibilityLiveRegion="polite">
+        <View style={styles.assistRow}>
+          <Text style={styles.assistLabel}>Campus</Text>
+          <Text style={styles.assistValue}>
+            {!campusLoaded
+              ? 'Detecting...'
+              : loadFailed
+                ? 'Unavailable'
+                : campus?.name ?? 'No nearby campus detected'}
+          </Text>
+        </View>
+        {!campus && nearestCampus && (
+          <View style={styles.assistRowStack}>
+            <Text style={styles.assistLabel}>Nearest campus</Text>
+            <Text style={styles.assistTranscript}>
+              {`The nearest campus is ${nearestCampus.name}, ${formatCampusDistance(nearestCampus.distanceMeters)} away`}
+            </Text>
+          </View>
+        )}
+        <View style={styles.assistRow}>
+          <Text style={styles.assistLabel}>Routes on device</Text>
+          <Text style={styles.assistValue}>{availableRoutes.length}</Text>
+        </View>
+        <View style={styles.assistRowStack}>
+          <Text style={styles.assistLabel}>Heard</Text>
+          <Text style={styles.assistTranscript}>
+            {transcript?.trim() || 'Nothing yet'}
+          </Text>
+        </View>
+        <View style={styles.assistRowStack}>
+          <Text style={styles.assistLabel}>Available routes</Text>
+          <Text style={styles.assistRouteList}>
+            {availableRouteSummaries.length > 0
+              ? availableRouteSummaries
+                .slice(0, 6)
+                .map((route) => `${route.name} (${route.fromLabel} → ${route.toLabel})`)
+                .join(' • ')
+              : 'No synced routes available yet'}
+          </Text>
+        </View>
+        <Pressable
+          style={({ pressed }) => [styles.assistSecondaryBtn, pressed && { opacity: 0.75 }]}
+          onPress={speakAvailableRoutes}
+          accessibilityLabel="Speak the available routes"
+          accessibilityRole="button"
+        >
+          <Ionicons name="volume-high-outline" size={18} color="#4FC3F7" />
+          <Text style={styles.assistSecondaryBtnText}>Speak available routes</Text>
+        </Pressable>
+      </View>
+
+      {showLocationPermissionHelp && (
+        <View style={styles.permissionCard} accessibilityLiveRegion="assertive">
+          <Text style={styles.permissionTitle}>Location access needed</Text>
+          <Text style={styles.permissionText}>
+            EchoEcho needs your current location to choose the best route and start navigation.
+          </Text>
+          <View style={styles.permissionActions}>
+            <Pressable
+              style={({ pressed }) => [styles.sttConfirmBtn, pressed && { opacity: 0.7 }]}
+              onPress={handleOpenSettings}
+              accessibilityLabel="Open app settings"
+              accessibilityRole="button"
+            >
+              <Text style={styles.sttConfirmBtnText}>Enable Location</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.sttRejectBtn, pressed && { opacity: 0.7 }]}
+              onPress={() => setShowLocationPermissionHelp(false)}
+              accessibilityLabel="Dismiss permission help"
+              accessibilityRole="button"
+            >
+              <Text style={styles.sttRejectBtnText}>Dismiss</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
       {/* STT confirmation prompt */}
       {sttState === 'confirming' && pendingMatch && (
         <View style={styles.sttConfirmCard} accessibilityLiveRegion="polite">
           <Text style={styles.sttConfirmText}>
-            Navigate to {pendingMatch.name}?
+            Matched destination: {pendingMatch.name}
           </Text>
-          <View style={styles.sttConfirmActions}>
-            <Pressable
-              style={({ pressed }) => [styles.sttConfirmBtn, pressed && { opacity: 0.7 }]}
-              onPress={confirmDestination}
-              accessibilityLabel={`Yes, navigate to ${pendingMatch.name}`}
-              accessibilityRole="button"
-            >
-              <Text style={styles.sttConfirmBtnText}>Yes</Text>
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [styles.sttRejectBtn, pressed && { opacity: 0.7 }]}
-              onPress={rejectDestination}
-              accessibilityLabel="No, try again"
-              accessibilityRole="button"
-            >
-              <Text style={styles.sttRejectBtnText}>No</Text>
-            </Pressable>
-          </View>
+          <Text style={styles.sttConfirmSubtext}>
+            Starting navigation…
+          </Text>
         </View>
       )}
 
@@ -352,6 +616,14 @@ export default function HomeScreen() {
   );
 }
 
+function formatCampusDistance(distanceMeters: number): string {
+  if (distanceMeters < 1000) {
+    return `${Math.round(distanceMeters)} meters`;
+  }
+
+  return `${(distanceMeters / 1000).toFixed(1)} kilometers`;
+}
+
 function FavoriteSeparator() {
   return <View style={styles.separator} />;
 }
@@ -463,6 +735,66 @@ const styles = StyleSheet.create({
     color: '#060608',
     fontSize: 22,
     fontWeight: '800',
+  },
+  assistCard: {
+    backgroundColor: '#0D0D12',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#22222C',
+    padding: 16,
+    gap: 10,
+    marginBottom: 24,
+  },
+  assistRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  assistRowStack: {
+    gap: 6,
+  },
+  assistLabel: {
+    color: '#808090',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  assistValue: {
+    color: '#F5F5FA',
+    fontSize: 15,
+    fontWeight: '700',
+    flexShrink: 1,
+    textAlign: 'right',
+  },
+  assistTranscript: {
+    color: '#F5F5FA',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  assistRouteList: {
+    color: '#B0B0BE',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  assistSecondaryBtn: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#28465A',
+    backgroundColor: '#101C24',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  assistSecondaryBtnText: {
+    color: '#4FC3F7',
+    fontSize: 14,
+    fontWeight: '700',
   },
   favoritesSection: {
     flex: 1,
@@ -599,6 +931,36 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  sttConfirmSubtext: {
+    color: '#A0A0AE',
+    fontSize: 15,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  permissionCard: {
+    backgroundColor: '#171117',
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#4A2835',
+    gap: 12,
+    marginBottom: 8,
+  },
+  permissionTitle: {
+    color: '#F5F5FA',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  permissionText: {
+    color: '#C7C7D4',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  permissionActions: {
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'center',
   },
   sttConfirmActions: {
     flexDirection: 'row',

@@ -26,9 +26,10 @@ import {
 } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
 import { supabase } from '../lib/supabase';
 import { syncCampus } from '../lib/syncEngine';
-import type { Entrance, Waypoint } from '@echoecho/shared';
+import { haversineM, type Campus, type Entrance, type Waypoint } from '@echoecho/shared';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,7 @@ export interface CampusInfo {
 
 export interface CampusContextValue {
   campus: CampusInfo | null;
+  nearestCampus: { name: string; distanceMeters: number } | null;
   entrances: Entrance[];
   securityWaypoints: Waypoint[];
   isLoaded: boolean;
@@ -60,6 +62,7 @@ const STORAGE_KEY_SECURITY_WPS = '@echoecho/security_waypoints';
 
 const CampusContext = createContext<CampusContextValue>({
   campus: null,
+  nearestCampus: null,
   entrances: [],
   securityWaypoints: [],
   isLoaded: false,
@@ -79,6 +82,7 @@ interface CampusProviderProps {
 
 export function CampusProvider({ children }: CampusProviderProps) {
   const [campus, setCampus] = useState<CampusInfo | null>(null);
+  const [nearestCampus, setNearestCampus] = useState<{ name: string; distanceMeters: number } | null>(null);
   const [entrances, setEntrances] = useState<Entrance[]>([]);
   const [securityWaypoints, setSecurityWaypoints] = useState<Waypoint[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -86,25 +90,53 @@ export function CampusProvider({ children }: CampusProviderProps) {
 
   const fetchFromNetwork = useCallback(async (): Promise<boolean> => {
     try {
-      const { data: campusRow, error: campusErr } = await supabase
-        .from('campuses')
-        .select('id, name, security_phone')
-        .limit(1)
-        .maybeSingle();
+      const deviceCoords = await getDeviceCoords();
+
+      const { data: campusRows, error: campusErr } = await supabase
+        .from('v_campuses' as 'campuses')
+        .select('id, name, center, securityPhone')
+        .order('name');
 
       if (campusErr) {
         console.error('[CampusContext] Failed to fetch campus:', campusErr.message);
         return false;
       }
-      if (!campusRow) {
+      if (!campusRows || campusRows.length === 0) {
         console.warn('[CampusContext] No campus configured');
         return false;
       }
 
+      const campusSelection = selectCampusForDevice(
+        campusRows as Array<Campus & { securityPhone?: string | null }>,
+        deviceCoords,
+      );
+
+      setNearestCampus(
+        campusSelection
+          ? {
+              name: campusSelection.nearestCampus.name,
+              distanceMeters: campusSelection.nearestDistanceMeters,
+            }
+          : null,
+      );
+
+      if (!campusSelection || !campusSelection.selectedCampus) {
+        setCampus(null);
+        setEntrances([]);
+        setSecurityWaypoints([]);
+        await Promise.all([
+          AsyncStorage.removeItem(STORAGE_KEY_CAMPUS),
+          AsyncStorage.removeItem(STORAGE_KEY_ENTRANCES),
+          AsyncStorage.removeItem(STORAGE_KEY_SECURITY_WPS),
+        ]);
+        setLoadFailed(false);
+        return true;
+      }
+
       const campusInfo: CampusInfo = {
-        id: campusRow.id as string,
-        name: campusRow.name as string,
-        securityPhone: (campusRow.security_phone as string | null) ?? null,
+        id: campusSelection.selectedCampus.id,
+        name: campusSelection.selectedCampus.name,
+        securityPhone: campusSelection.selectedCampus.securityPhone ?? null,
       };
 
       // Fetch all buildings with entrances for this campus
@@ -180,6 +212,10 @@ export function CampusProvider({ children }: CampusProviderProps) {
         AsyncStorage.setItem(STORAGE_KEY_SECURITY_WPS, JSON.stringify(secWaypoints)),
       ]);
 
+      // Ensure the student app has local route data on first load, not only
+      // after a later foreground event.
+      await syncCampus(campusInfo.id, undefined, true);
+
       setLoadFailed(false);
       return true;
     } catch {
@@ -250,8 +286,71 @@ export function CampusProvider({ children }: CampusProviderProps) {
   }, [fetchFromNetwork]);
 
   return (
-    <CampusContext.Provider value={{ campus, entrances, securityWaypoints, isLoaded, loadFailed, refresh }}>
+    <CampusContext.Provider value={{ campus, nearestCampus, entrances, securityWaypoints, isLoaded, loadFailed, refresh }}>
       {children}
     </CampusContext.Provider>
   );
+}
+
+const NEARBY_CAMPUS_RADIUS_M = 1_500;
+
+async function getDeviceCoords(): Promise<{ latitude: number; longitude: number } | null> {
+  try {
+    const permission = await Location.getForegroundPermissionsAsync();
+    if (permission.status !== 'granted') {
+      return null;
+    }
+
+    const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: 60_000 });
+    const current = lastKnown ?? await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+
+    return {
+      latitude: current.coords.latitude,
+      longitude: current.coords.longitude,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function selectCampusForDevice(
+  campuses: Array<Campus & { securityPhone?: string | null }>,
+  coords: { latitude: number; longitude: number } | null,
+): {
+  selectedCampus: (Campus & { securityPhone?: string | null }) | null;
+  nearestCampus: Campus & { securityPhone?: string | null };
+  nearestDistanceMeters: number;
+} | null {
+  if (campuses.length === 0 || !coords) {
+    return null;
+  }
+
+  let nearest = campuses[0];
+  let nearestDistance = haversineM(
+    coords.latitude,
+    coords.longitude,
+    nearest.center.latitude,
+    nearest.center.longitude,
+  );
+
+  for (const campus of campuses.slice(1)) {
+    const distance = haversineM(
+      coords.latitude,
+      coords.longitude,
+      campus.center.latitude,
+      campus.center.longitude,
+    );
+    if (distance < nearestDistance) {
+      nearest = campus;
+      nearestDistance = distance;
+    }
+  }
+
+  return {
+    selectedCampus: nearestDistance <= NEARBY_CAMPUS_RADIUS_M ? nearest : null,
+    nearestCampus: nearest,
+    nearestDistanceMeters: nearestDistance,
+  };
 }

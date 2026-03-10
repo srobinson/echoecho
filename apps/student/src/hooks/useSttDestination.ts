@@ -14,6 +14,7 @@
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { AccessibilityInfo } from 'react-native';
+import * as Speech from 'expo-speech';
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
@@ -24,7 +25,6 @@ import { fuzzySearch, type FuseMatch } from '../lib/buildingIndex';
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const NO_SPEECH_TIMEOUT_MS = 8_000;
-const CONFIRMATION_TIMEOUT_MS = 5_000;
 /** Fuse score delta within which two results are considered ambiguous. */
 const AMBIGUITY_SCORE_DELTA = 0.1;
 
@@ -47,7 +47,7 @@ export interface UseSttDestinationResult {
   sttState: SttState;
   transcript: string | null;
   matches: DestinationMatch[];
-  /** The single confirmed match awaiting user confirmation. */
+  /** The most recent single match, shown briefly as visual assistance. */
   pendingMatch: DestinationMatch | null;
   error: string | null;
   /** True when STT is unavailable (offline, permission denied). */
@@ -139,16 +139,18 @@ export function useSttDestination(
       const match = { buildingId: best.item.id, name: best.item.name };
       setPendingMatch(match);
       setSttState('confirming');
+      Speech.stop();
+      Speech.speak(`Destination matched. Starting navigation to ${match.name}.`);
       AccessibilityInfo.announceForAccessibility(
-        `Navigate to ${match.name}?`
+        `Destination matched. Starting navigation to ${match.name}.`
       );
 
       confirmTimerRef.current = setTimeout(() => {
-        AccessibilityInfo.announceForAccessibility('Cancelled.');
+        onDestinationSelected(match.buildingId, match.name);
         resetToIdle();
-      }, CONFIRMATION_TIMEOUT_MS);
+      }, 900);
     }
-  }, [resetToIdle]);
+  }, [onDestinationSelected, resetToIdle]);
 
   // ── STT event handlers (wrapped in useCallback for stable references) ──
 
