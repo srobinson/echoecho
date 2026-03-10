@@ -49,7 +49,7 @@ export function BuildingDrawToolbar({
           label="Close polygon"
           onPress={onClosePolygon}
           disabled={vertexCount < 3}
-          color="#22C55E"
+          color="#81C784"
         />
         <ToolbarButton
           icon="keypad"
@@ -60,7 +60,7 @@ export function BuildingDrawToolbar({
           icon="close-circle"
           label="Cancel drawing"
           onPress={onCancel}
-          color="#ef4444"
+          color="#F06292"
         />
       </View>
     </View>
@@ -72,7 +72,7 @@ function ToolbarButton({
   label,
   onPress,
   disabled,
-  color = '#e8e8f0',
+  color = '#F0F0F5',
 }: {
   icon: React.ComponentProps<typeof Ionicons>['name'];
   label: string;
@@ -104,15 +104,15 @@ function ToolbarButton({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#1a1a2eee',
+    backgroundColor: '#111116ee',
     borderRadius: 14,
     padding: 12,
     gap: 10,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
   },
   hint: {
-    color: '#9090cc',
+    color: '#808090',
     fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
@@ -126,16 +126,16 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 10,
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
   },
   buttonDisabled: {
     opacity: 0.4,
   },
   buttonPressed: {
-    backgroundColor: '#2a2a3e',
+    backgroundColor: '#1E1E26',
   },
 });

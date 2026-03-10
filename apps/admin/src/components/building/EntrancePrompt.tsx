@@ -9,6 +9,7 @@ import { View, Text, Pressable, StyleSheet, TextInput } from 'react-native';
 import { useState, useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import type { Entrance } from '@echoecho/shared';
+import { useSectionColor } from '../../contexts/SectionColorContext';
 
 interface Props {
   buildingName: string;
@@ -29,6 +30,7 @@ export function EntrancePrompt({
   onConfirmEntrance,
   onCancelEntrance,
 }: Props) {
+  const accent = useSectionColor();
   const [entranceName, setEntranceName] = useState('');
   const [isMain, setIsMain] = useState(entrances.length === 0);
 
@@ -55,7 +57,7 @@ export function EntrancePrompt({
             value={entranceName}
             onChangeText={setEntranceName}
             placeholder={`Entrance ${entrances.length + 1}`}
-            placeholderTextColor="#5555aa"
+            placeholderTextColor="#404050"
             accessibilityLabel="Entrance name"
           />
           <Pressable
@@ -68,7 +70,7 @@ export function EntrancePrompt({
             <Ionicons
               name={isMain ? 'star' : 'star-outline'}
               size={16}
-              color={isMain ? '#22C55E' : '#8888aa'}
+              color={isMain ? '#81C784' : '#606070'}
             />
             <Text style={[styles.mainToggleLabel, isMain && styles.mainToggleLabelActive]}>
               Main
@@ -81,7 +83,7 @@ export function EntrancePrompt({
               accessibilityLabel="Cancel this entrance"
               accessibilityRole="button"
             >
-              <Ionicons name="close" size={18} color="#9090cc" />
+              <Ionicons name="close" size={18} color="#808090" />
             </Pressable>
             <Pressable
               style={styles.confirmFormBtn}
@@ -103,7 +105,7 @@ export function EntrancePrompt({
               <Ionicons
                 name={e.isMain ? 'star' : 'location'}
                 size={14}
-                color={e.isMain ? '#22C55E' : '#fbbf24'}
+                color={e.isMain ? '#81C784' : '#FFA726'}
               />
               <Text style={styles.entranceName}>{e.name}</Text>
             </View>
@@ -112,7 +114,7 @@ export function EntrancePrompt({
       )}
 
       <Pressable
-        style={styles.doneBtn}
+        style={[styles.doneBtn, { backgroundColor: accent }]}
         onPress={onDone}
         accessibilityLabel={`Done marking entrances for ${buildingName}`}
         accessibilityRole="button"
@@ -127,37 +129,37 @@ export function EntrancePrompt({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#1a1a2eee',
+    backgroundColor: '#111116ee',
     borderRadius: 16,
     padding: 16,
     gap: 10,
     margin: 12,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
   },
   title: {
-    color: '#e8e8f0',
+    color: '#F0F0F5',
     fontSize: 16,
     fontWeight: '700',
   },
   subtitle: {
-    color: '#9090cc',
+    color: '#808090',
     fontSize: 13,
   },
   form: {
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
     borderRadius: 12,
     padding: 12,
     gap: 8,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
   },
   input: {
-    backgroundColor: '#0f0f1a',
+    backgroundColor: '#0A0A0F',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
-    color: '#e8e8f0',
+    borderColor: '#1E1E26',
+    color: '#F0F0F5',
     fontSize: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -173,15 +175,15 @@ const styles = StyleSheet.create({
     minHeight: 36,
   },
   mainToggleActive: {
-    backgroundColor: '#22C55E22',
+    backgroundColor: '#81C78422',
   },
   mainToggleLabel: {
-    color: '#8888aa',
+    color: '#606070',
     fontSize: 13,
     fontWeight: '600',
   },
   mainToggleLabelActive: {
-    color: '#22C55E',
+    color: '#81C784',
   },
   formActions: {
     flexDirection: 'row',
@@ -192,7 +194,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 10,
-    backgroundColor: '#2a2a3e',
+    backgroundColor: '#1E1E26',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -202,7 +204,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     height: 44,
     borderRadius: 10,
-    backgroundColor: '#22C55E',
+    backgroundColor: '#81C784',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -227,7 +229,6 @@ const styles = StyleSheet.create({
   doneBtn: {
     paddingVertical: 14,
     borderRadius: 10,
-    backgroundColor: '#6c63ff',
     alignItems: 'center',
     minHeight: 44,
     justifyContent: 'center',

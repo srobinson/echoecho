@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/stores/authStore';
+import { colors } from '@echoecho/ui';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -106,7 +107,7 @@ export default function LoginScreen() {
                 <Ionicons
                   name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                   size={22}
-                  color="#8888aa"
+                  color="#606070"
                 />
               </Pressable>
             </View>
@@ -171,12 +172,12 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f0f1a',
+    backgroundColor: '#0A0A0F',
     justifyContent: 'center',
     padding: 24,
   },
   card: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderRadius: 16,
     padding: 28,
     gap: 16,
@@ -184,7 +185,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#e8e8f0',
+    color: '#F0F0F5',
     textAlign: 'center',
   },
   subtitle: {
@@ -194,19 +195,19 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   input: {
-    backgroundColor: '#0f0f1a',
+    backgroundColor: '#0A0A0F',
     borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: '#e8e8f0',
+    color: '#F0F0F5',
     borderWidth: 1,
     borderColor: '#2a2a4a',
   },
   passwordContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0f0f1a',
+    backgroundColor: '#0A0A0F',
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#2a2a4a',
@@ -216,7 +217,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: '#e8e8f0',
+    color: '#F0F0F5',
   },
   eyeButton: {
     paddingHorizontal: 14,
@@ -227,7 +228,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   primaryButton: {
-    backgroundColor: '#5b5bff',
+    backgroundColor: colors.brand,
     borderRadius: 10,
     paddingVertical: 14,
     alignItems: 'center',
@@ -242,13 +243,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   linkText: {
-    color: '#5b5bff',
+    color: colors.brand,
     fontSize: 14,
     textAlign: 'center',
     paddingVertical: 4,
   },
   errorText: {
-    color: '#ff6b6b',
+    color: '#F06292',
     fontSize: 14,
     textAlign: 'center',
   },

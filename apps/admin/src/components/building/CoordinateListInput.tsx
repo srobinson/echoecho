@@ -15,6 +15,7 @@ import {
   StyleSheet,
   Alert,
 } from 'react-native';
+import { useSectionColor } from '../../contexts/SectionColorContext';
 
 interface Props {
   onSubmit: (vertices: [number, number][]) => void;
@@ -22,6 +23,7 @@ interface Props {
 }
 
 export function CoordinateListInput({ onSubmit, onCancel }: Props) {
+  const accent = useSectionColor();
   const [text, setText] = useState('');
 
   const handleSubmit = useCallback(() => {
@@ -63,7 +65,7 @@ export function CoordinateListInput({ onSubmit, onCancel }: Props) {
       <Text style={styles.instructions}>
         Enter one coordinate per line as: latitude, longitude
       </Text>
-      <Text style={styles.example}>
+      <Text style={[styles.example, { color: accent }]}>
         Example: 30.3495, -97.7468
       </Text>
 
@@ -72,7 +74,7 @@ export function CoordinateListInput({ onSubmit, onCancel }: Props) {
         value={text}
         onChangeText={setText}
         placeholder={'30.3495, -97.7468\n30.3498, -97.7470\n30.3496, -97.7472'}
-        placeholderTextColor="#5555aa"
+        placeholderTextColor="#404050"
         multiline
         numberOfLines={8}
         textAlignVertical="top"
@@ -93,7 +95,7 @@ export function CoordinateListInput({ onSubmit, onCancel }: Props) {
           <Text style={styles.cancelLabel}>Cancel</Text>
         </Pressable>
         <Pressable
-          style={styles.submitBtn}
+          style={[styles.submitBtn, { backgroundColor: accent }]}
           onPress={handleSubmit}
           accessibilityLabel="Submit coordinates to create building polygon"
           accessibilityRole="button"
@@ -107,34 +109,33 @@ export function CoordinateListInput({ onSubmit, onCancel }: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderRadius: 16,
     padding: 20,
     gap: 12,
     margin: 16,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
   },
   title: {
-    color: '#e8e8f0',
+    color: '#F0F0F5',
     fontSize: 18,
     fontWeight: '700',
   },
   instructions: {
-    color: '#9090cc',
+    color: '#808090',
     fontSize: 13,
   },
   example: {
-    color: '#6c63ff',
     fontSize: 12,
     fontFamily: 'monospace',
   },
   input: {
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
-    color: '#e8e8f0',
+    borderColor: '#1E1E26',
+    color: '#F0F0F5',
     fontSize: 14,
     fontFamily: 'monospace',
     paddingHorizontal: 14,
@@ -150,17 +151,16 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     borderRadius: 10,
-    backgroundColor: '#2a2a3e',
+    backgroundColor: '#1E1E26',
     alignItems: 'center',
     minHeight: 44,
     justifyContent: 'center',
   },
-  cancelLabel: { color: '#9090cc', fontSize: 15, fontWeight: '600' },
+  cancelLabel: { color: '#808090', fontSize: 15, fontWeight: '600' },
   submitBtn: {
     flex: 2,
     paddingVertical: 14,
     borderRadius: 10,
-    backgroundColor: '#6c63ff',
     alignItems: 'center',
     minHeight: 44,
     justifyContent: 'center',

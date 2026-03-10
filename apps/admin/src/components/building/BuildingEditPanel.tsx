@@ -26,6 +26,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { Building } from '@echoecho/shared';
 import { supabase } from '../../lib/supabase';
 import { BuildingMetadataSheet } from './BuildingMetadataSheet';
+import { useSectionColor } from '../../contexts/SectionColorContext';
 
 interface Props {
   building: Building;
@@ -33,6 +34,7 @@ interface Props {
 }
 
 export function BuildingEditPanel({ building, onClose }: Props) {
+  const accent = useSectionColor();
   const [isDeleting, setIsDeleting] = useState(false);
   const [editBuilding, setEditBuilding] = useState<Building>(building);
   const metadataSheetRef = useRef<BottomSheet>(null);
@@ -90,12 +92,12 @@ export function BuildingEditPanel({ building, onClose }: Props) {
             <Ionicons
               name={entrance.isMain ? 'enter' : 'git-merge-outline'}
               size={16}
-              color={entrance.isMain ? '#6c63ff' : '#8888aa'}
+              color={entrance.isMain ? accent : '#606070'}
             />
             <View style={styles.entranceText}>
               <Text style={styles.entranceName}>{entrance.name}</Text>
               {entrance.isMain && (
-                <Text style={styles.mainBadge}>Main</Text>
+                <Text style={[styles.mainBadge, { color: accent, backgroundColor: accent + '22' }]}>Main</Text>
               )}
             </View>
           </View>
@@ -105,13 +107,13 @@ export function BuildingEditPanel({ building, onClose }: Props) {
       {/* Actions */}
       <View style={styles.actions}>
         <Pressable
-          style={({ pressed }) => [styles.actionBtn, styles.editBtn, pressed && styles.actionPressed]}
+          style={({ pressed }) => [styles.actionBtn, styles.editBtn, { backgroundColor: accent + '22', borderColor: accent + '44' }, pressed && styles.actionPressed]}
           onPress={() => metadataSheetRef.current?.snapToIndex(0)}
           accessibilityLabel={`Edit ${editBuilding.name}`}
           accessibilityRole="button"
         >
-          <Ionicons name="pencil" size={16} color="#6c63ff" />
-          <Text style={styles.editBtnLabel}>Edit</Text>
+          <Ionicons name="pencil" size={16} color={accent} />
+          <Text style={[styles.editBtnLabel, { color: accent }]}>Edit</Text>
         </Pressable>
 
         <Pressable
@@ -127,7 +129,7 @@ export function BuildingEditPanel({ building, onClose }: Props) {
           accessibilityRole="button"
           accessibilityHint="Double tap to permanently delete this building"
         >
-          <Ionicons name="trash" size={16} color="#ef4444" />
+          <Ionicons name="trash" size={16} color="#F06292" />
           <Text style={styles.deleteBtnLabel}>
             {isDeleting ? 'Deleting…' : 'Delete'}
           </Text>
@@ -163,7 +165,7 @@ function SectionHeader({ title }: { title: string }) {
 const styles = StyleSheet.create({
   container: { gap: 12 },
   section: {
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
     borderRadius: 12,
     padding: 14,
     gap: 10,
@@ -173,10 +175,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
-  rowLabel: { color: '#9090cc', fontSize: 13, fontWeight: '500', flex: 1 },
-  rowValue: { color: '#e8e8f0', fontSize: 13, fontWeight: '600', flex: 2, textAlign: 'right' },
+  rowLabel: { color: '#808090', fontSize: 13, fontWeight: '500', flex: 1 },
+  rowValue: { color: '#F0F0F5', fontSize: 13, fontWeight: '600', flex: 2, textAlign: 'right' },
   sectionHeader: {
-    color: '#9090cc',
+    color: '#808090',
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -190,20 +192,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 4,
     borderBottomWidth: 1,
-    borderBottomColor: '#2a2a3e',
+    borderBottomColor: '#1E1E26',
   },
   entranceText: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   entranceName: { color: '#c8c8e8', fontSize: 14 },
   mainBadge: {
-    color: '#6c63ff',
     fontSize: 10,
     fontWeight: '700',
-    backgroundColor: '#6c63ff22',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
   },
-  emptyText: { color: '#5555aa', fontSize: 13, fontStyle: 'italic' },
+  emptyText: { color: '#404050', fontSize: 13, fontStyle: 'italic' },
   actions: {
     flexDirection: 'row',
     gap: 12,
@@ -220,17 +220,15 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   editBtn: {
-    backgroundColor: '#6c63ff22',
     borderWidth: 1,
-    borderColor: '#6c63ff44',
   },
   deleteBtn: {
-    backgroundColor: '#ef444422',
+    backgroundColor: '#F0629222',
     borderWidth: 1,
-    borderColor: '#ef444444',
+    borderColor: '#F0629244',
   },
   actionDisabled: { opacity: 0.5 },
   actionPressed: { opacity: 0.75 },
-  editBtnLabel: { color: '#6c63ff', fontSize: 14, fontWeight: '600' },
-  deleteBtnLabel: { color: '#ef4444', fontSize: 14, fontWeight: '600' },
+  editBtnLabel: { fontSize: 14, fontWeight: '600' },
+  deleteBtnLabel: { color: '#F06292', fontSize: 14, fontWeight: '600' },
 });

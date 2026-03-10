@@ -19,7 +19,7 @@
  *   When no screen reader is active, the gesture handler operates normally.
  *
  * Visual: minimal flash overlay on activation. The overlay is fullscreen
- * (behind pointerEvents="none"). Color uses emergency token (#FF5252).
+ * (behind pointerEvents="none"). Color uses emergency token (#FF4081).
  */
 
 import { useCallback, useRef, useState, useEffect } from 'react';
@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
   },
   flash: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#FF5252',
+    backgroundColor: '#FF4081',
     pointerEvents: 'none',
   },
   srButton: {

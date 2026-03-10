@@ -5,6 +5,7 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { Pressable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
+import { useSectionColor } from '../contexts/SectionColorContext';
 
 export interface MapLayers {
   buildings: boolean;
@@ -25,9 +26,10 @@ interface LayerToggleProps {
 }
 
 function LayerToggle({ label, icon, active, onToggle }: LayerToggleProps) {
+  const accent = useSectionColor();
   return (
     <Pressable
-      style={[styles.toggle, active && styles.toggleActive]}
+      style={[styles.toggle, active && { backgroundColor: accent + '22' }]}
       onPress={onToggle}
       accessibilityLabel={`${label} layer ${active ? 'on' : 'off'}`}
       accessibilityRole="switch"
@@ -36,9 +38,9 @@ function LayerToggle({ label, icon, active, onToggle }: LayerToggleProps) {
       <Ionicons
         name={icon}
         size={18}
-        color={active ? '#6c63ff' : '#8888aa'}
+        color={active ? accent : '#606070'}
       />
-      <Text style={[styles.toggleLabel, active && styles.toggleLabelActive]}>
+      <Text style={[styles.toggleLabel, active && { color: accent }]}>
         {label}
       </Text>
     </Pressable>
@@ -76,12 +78,12 @@ export function MapLayerControl({ layers, onChange }: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#1a1a2ecc',
+    backgroundColor: '#111116cc',
     borderRadius: 12,
     padding: 6,
     gap: 4,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
   },
   toggle: {
     flexDirection: 'row',
@@ -92,15 +94,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     gap: 6,
   },
-  toggleActive: {
-    backgroundColor: '#6c63ff22',
-  },
   toggleLabel: {
-    color: '#8888aa',
+    color: '#606070',
     fontSize: 12,
     fontWeight: '600',
-  },
-  toggleLabelActive: {
-    color: '#6c63ff',
   },
 });

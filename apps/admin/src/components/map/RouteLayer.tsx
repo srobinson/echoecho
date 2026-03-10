@@ -2,8 +2,8 @@
  * RouteLayer — Layer 3 of the admin map view.
  *
  * Renders route polylines as GeoJSON LineStrings, color-coded by status:
- *   draft      → #F59E0B (amber)
- *   published  → #22C55E (green)
+ *   draft      → #FFB74D (amber)
+ *   published  → #81C784 (green)
  *   archived   → #9CA3AF (gray)
  *
  * ALP-965 spec:
@@ -52,8 +52,8 @@ export const RouteLayer = memo(function RouteLayer({ routes, onRoutePress }: Pro
   const colorExpression = [
     'match',
     ['get', 'status'],
-    'draft', '#F59E0B',
-    'published', '#22C55E',
+    'draft', '#FFB74D',
+    'published', '#81C784',
     'archived', '#9CA3AF',
     '#9CA3AF',
   ];

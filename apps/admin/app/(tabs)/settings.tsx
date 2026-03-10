@@ -9,8 +9,19 @@ import { router } from 'expo-router';
 import { useCampusStore } from '../../src/stores/campusStore';
 import { useAuthStore } from '../../src/stores/authStore';
 import type { Campus } from '@echoecho/shared';
+import { tabColors } from '@echoecho/ui';
+import { SectionColorProvider, useSectionColor } from '../../src/contexts/SectionColorContext';
 
 export default function SettingsScreen() {
+  return (
+    <SectionColorProvider value={tabColors.settings}>
+      <SettingsScreenInner />
+    </SectionColorProvider>
+  );
+}
+
+function SettingsScreenInner() {
+  const accent = useSectionColor();
   const { activeCampus, campuses, setActiveCampus } = useCampusStore();
   const { signOut, session } = useAuthStore();
   const [showCampusPicker, setShowCampusPicker] = useState(false);
@@ -30,14 +41,14 @@ export default function SettingsScreen() {
           accessibilityLabel={`Active campus: ${activeCampus?.name ?? 'None'}. Tap to change.`}
           accessibilityRole="button"
         >
-          <Ionicons name="school-outline" size={20} color="#6c63ff" />
+          <Ionicons name="school-outline" size={20} color={accent} />
           <Text style={styles.rowText}>
             {activeCampus?.name ?? 'No campus selected'}
           </Text>
           <Ionicons
             name={showCampusPicker ? 'chevron-up' : 'chevron-down'}
             size={16}
-            color="#8888aa"
+            color="#606070"
           />
         </Pressable>
         {showCampusPicker && campuses.length > 0 && (
@@ -49,7 +60,7 @@ export default function SettingsScreen() {
               <Pressable
                 style={({ pressed }) => [
                   styles.campusOption,
-                  item.id === activeCampus?.id && styles.campusOptionActive,
+                  item.id === activeCampus?.id && { backgroundColor: accent + '11' },
                   pressed && styles.rowPressed,
                 ]}
                 onPress={() => handleSwitchCampus(item)}
@@ -60,11 +71,11 @@ export default function SettingsScreen() {
                 <Ionicons
                   name={item.id === activeCampus?.id ? 'radio-button-on' : 'radio-button-off'}
                   size={18}
-                  color={item.id === activeCampus?.id ? '#6c63ff' : '#5555aa'}
+                  color={item.id === activeCampus?.id ? accent : '#404050'}
                 />
                 <Text style={[
                   styles.campusOptionText,
-                  item.id === activeCampus?.id && styles.campusOptionTextActive,
+                  item.id === activeCampus?.id && [styles.campusOptionTextActive, { color: accent }],
                 ]}>
                   {item.name}
                 </Text>
@@ -83,9 +94,9 @@ export default function SettingsScreen() {
           accessibilityLabel="Open Haptic Lab"
           accessibilityHint="Test and calibrate haptic patterns for the navigation engine"
         >
-          <Ionicons name="pulse-outline" size={20} color="#6c63ff" />
+          <Ionicons name="pulse-outline" size={20} color={accent} />
           <Text style={styles.rowText}>Haptic Lab</Text>
-          <Ionicons name="chevron-forward" size={16} color="#8888aa" />
+          <Ionicons name="chevron-forward" size={16} color="#606070" />
         </Pressable>
       </View>
 
@@ -102,8 +113,8 @@ export default function SettingsScreen() {
           accessibilityRole="button"
           accessibilityLabel="Sign out"
         >
-          <Ionicons name="log-out-outline" size={20} color="#e53e3e" />
-          <Text style={[styles.rowText, { color: '#e53e3e' }]}>Sign Out</Text>
+          <Ionicons name="log-out-outline" size={20} color="#F06292" />
+          <Text style={[styles.rowText, { color: '#F06292' }]}>Sign Out</Text>
           {session?.user?.email && (
             <Text style={styles.emailText}>{session.user.email}</Text>
           )}
@@ -116,17 +127,17 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f0f1a', padding: 16 },
+  container: { flex: 1, backgroundColor: '#0A0A0F', padding: 16 },
   section: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
     marginBottom: 16,
     overflow: 'hidden',
   },
   sectionTitle: {
-    color: '#8888aa',
+    color: '#606070',
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -141,8 +152,8 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   rowPressed: { opacity: 0.7 },
-  rowText: { color: '#e8e8f0', flex: 1, fontSize: 15 },
-  emailText: { color: '#8888aa', fontSize: 12 },
+  rowText: { color: '#F0F0F5', flex: 1, fontSize: 15 },
+  emailText: { color: '#606070', fontSize: 12 },
   campusOption: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -150,18 +161,15 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderTopWidth: 1,
-    borderTopColor: '#14142a',
+    borderTopColor: '#0D0D12',
   },
-  campusOptionActive: {
-    backgroundColor: '#6c63ff11',
-  },
+  campusOptionActive: {},
   campusOptionText: {
-    color: '#8888aa',
+    color: '#606070',
     fontSize: 14,
   },
   campusOptionTextActive: {
-    color: '#6c63ff',
     fontWeight: '600',
   },
-  version: { color: '#4444aa', fontSize: 12, textAlign: 'center', marginTop: 'auto' },
+  version: { color: '#1A5F7A', fontSize: 12, textAlign: 'center', marginTop: 'auto' },
 });

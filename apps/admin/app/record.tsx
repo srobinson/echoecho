@@ -36,28 +36,28 @@ const TSBVI_CENTER: [number, number] = [-97.7468, 30.3495];
 
 // Waypoint type → color for marker dot
 const WAYPOINT_COLORS: Record<string, string> = {
-  turn:          '#6c63ff',
-  regular:       '#48bb78',
-  start:         '#48bb78',
-  end:           '#e53e3e',
-  decision_point:'#ed8936',
-  landmark:      '#38b2ac',
-  hazard:        '#dd6b20',
+  turn:          '#4FC3F7',
+  regular:       '#66BB6A',
+  start:         '#66BB6A',
+  end:           '#F06292',
+  decision_point:'#FFA726',
+  landmark:      '#4FC3F7',
+  hazard:        '#FFA726',
   door:          '#805ad5',
-  elevator:      '#3182ce',
+  elevator:      '#4FC3F7',
   stairs:        '#d69e2e',
   ramp:          '#319795',
-  crossing:      '#e53e3e',
+  crossing:      '#F06292',
 };
 
 const HAZARD_COLORS: Record<string, string> = {
-  uneven_surface:  '#ed8936',
+  uneven_surface:  '#FFA726',
   construction:    '#f6ad55',
-  stairs_unmarked: '#e53e3e',
-  low_clearance:   '#dd6b20',
-  seasonal:        '#38b2ac',
-  wet_surface:     '#3182ce',
-  other:           '#8888aa',
+  stairs_unmarked: '#F06292',
+  low_clearance:   '#FFA726',
+  seasonal:        '#4FC3F7',
+  wet_surface:     '#4FC3F7',
+  other:           '#606070',
 };
 
 export default function RecordScreen() {
@@ -262,7 +262,7 @@ export default function RecordScreen() {
             <MapboxGL.LineLayer
               id="live-track-line"
               style={{
-                lineColor: '#e53e3e',
+                lineColor: '#F06292',
                 lineWidth: 3,
                 lineOpacity: 0.9,
                 lineCap: 'round',
@@ -279,7 +279,7 @@ export default function RecordScreen() {
             coordinate={[wp.coordinate.longitude, wp.coordinate.latitude]}
           >
             <WaypointDot
-              color={WAYPOINT_COLORS[wp.type] ?? '#48bb78'}
+              color={WAYPOINT_COLORS[wp.type] ?? '#66BB6A'}
               label={wp.type}
             />
           </MapboxGL.MarkerView>
@@ -292,7 +292,7 @@ export default function RecordScreen() {
             coordinate={[hz.coordinate.longitude, hz.coordinate.latitude]}
           >
             <HazardDot
-              color={HAZARD_COLORS[hz.type] ?? '#ed8936'}
+              color={HAZARD_COLORS[hz.type] ?? '#FFA726'}
               label={hz.title}
             />
           </MapboxGL.MarkerView>
@@ -379,7 +379,7 @@ function formatElapsed(ms: number): string {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f0f1a' },
+  container: { flex: 1, backgroundColor: '#0A0A0F' },
   map: { flex: 1 },
   markerDot: {
     width: 14,

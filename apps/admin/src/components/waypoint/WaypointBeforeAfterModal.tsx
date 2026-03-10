@@ -66,10 +66,10 @@ function hasChanged(a: Waypoint, b: Waypoint): boolean {
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  unchanged: '#8888aa',
-  modified: '#F59E0B',
-  added: '#22C55E',
-  removed: '#ef4444',
+  unchanged: '#606070',
+  modified: '#FFB74D',
+  added: '#81C784',
+  removed: '#F06292',
 };
 
 export function WaypointBeforeAfterModal({
@@ -187,21 +187,21 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#0f0f1acc',
+    backgroundColor: '#0A0A0Fcc',
     justifyContent: 'center',
     padding: 16,
   },
   modal: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
     padding: 20,
     maxHeight: '85%',
     gap: 12,
   },
-  title: { color: '#e8e8f0', fontSize: 18, fontWeight: '700' },
-  summary: { color: '#9090cc', fontSize: 13 },
+  title: { color: '#F0F0F5', fontSize: 18, fontWeight: '700' },
+  summary: { color: '#808090', fontSize: 13 },
   columns: {
     flexDirection: 'row',
     flex: 1,
@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
   },
   column: { flex: 1 },
   columnHeader: {
-    color: '#9090cc',
+    color: '#808090',
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
   columnList: { maxHeight: 300 },
   divider: {
     width: 1,
-    backgroundColor: '#2a2a3e',
+    backgroundColor: '#1E1E26',
     marginHorizontal: 8,
   },
   diffRow: {
@@ -241,17 +241,17 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     borderRadius: 10,
-    backgroundColor: '#2a2a3e',
+    backgroundColor: '#1E1E26',
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 44,
   },
-  discardLabel: { color: '#9090cc', fontSize: 15, fontWeight: '600' },
+  discardLabel: { color: '#808090', fontSize: 15, fontWeight: '600' },
   confirmBtn: {
     flex: 2,
     paddingVertical: 14,
     borderRadius: 10,
-    backgroundColor: '#22C55E',
+    backgroundColor: '#81C784',
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 44,

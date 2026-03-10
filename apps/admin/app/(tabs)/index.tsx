@@ -41,6 +41,8 @@ import { useBuildingDraw } from '../../src/hooks/useBuildingDraw';
 import { useWaypointEdit } from '../../src/hooks/useWaypointEdit';
 import type { MapLayers } from '../../src/components/MapLayerControl';
 import type { Building, Route, Waypoint } from '@echoecho/shared';
+import { tabColors } from '@echoecho/ui';
+import { SectionColorProvider, useSectionColor } from '../../src/contexts/SectionColorContext';
 
 const TSBVI_CENTER: [number, number] = [-97.7468, 30.3495];
 const DEFAULT_ZOOM = 16;
@@ -52,6 +54,15 @@ type SelectedFeature =
   | null;
 
 export default function MapScreen() {
+  return (
+    <SectionColorProvider value={tabColors.map}>
+      <MapScreenInner />
+    </SectionColorProvider>
+  );
+}
+
+function MapScreenInner() {
+  const accent = useSectionColor();
   const cameraRef = useRef<MapboxGL.Camera>(null);
   const [activeLayers, setActiveLayers] = useState<MapLayers>({
     buildings: true,
@@ -233,21 +244,21 @@ export default function MapScreen() {
         {/* Loading overlay for initial data fetch */}
         {isLoading && (
           <View style={styles.loadingOverlay} accessibilityRole="progressbar" accessibilityLabel="Loading map data">
-            <ActivityIndicator size="large" color="#6c63ff" />
+            <ActivityIndicator size="large" color={accent} />
           </View>
         )}
 
         {/* Error banner with retry */}
         {error && !isLoading && (
           <View style={styles.errorBanner} accessibilityRole="alert">
-            <Ionicons name="alert-circle" size={16} color="#F87171" />
+            <Ionicons name="alert-circle" size={16} color="#F06292" />
             <Text style={styles.errorText}>{error}</Text>
             <Pressable
               onPress={() => void refresh()}
               accessibilityLabel="Retry loading map data"
               accessibilityRole="button"
             >
-              <Text style={styles.retryText}>Retry</Text>
+              <Text style={[styles.retryText, { color: accent }]}>Retry</Text>
             </Pressable>
           </View>
         )}
@@ -364,7 +375,7 @@ export default function MapScreen() {
             </Pressable>
 
             <Pressable
-              style={({ pressed }) => [styles.addBuildingFab, pressed && styles.fabPressed]}
+              style={({ pressed }) => [styles.addBuildingFab, { backgroundColor: accent }, pressed && styles.fabPressed]}
               onPress={draw.startDrawing}
               accessibilityLabel="Add a new building"
               accessibilityRole="button"
@@ -391,7 +402,7 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   container: {
     flex: 1,
-    backgroundColor: '#0f0f1a',
+    backgroundColor: '#0A0A0F',
   },
   map: { flex: 1 },
   layerControlContainer: {
@@ -437,20 +448,20 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#2a1a1a',
+    backgroundColor: '#1A080E',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#4a2020',
+    borderColor: '#2A1028',
     zIndex: 30,
     elevation: 30,
   },
-  errorText: { color: '#F87171', fontSize: 13, flex: 1 },
-  retryText: { color: '#6c63ff', fontSize: 13, fontWeight: '600' },
+  errorText: { color: '#F06292', fontSize: 13, flex: 1 },
+  retryText: { fontSize: 13, fontWeight: '600' },
   fab: {
     position: 'absolute',
     bottom: Platform.OS === 'ios' ? 24 : 16,
     right: 16,
-    backgroundColor: '#e53e3e',
+    backgroundColor: '#F06292',
     borderRadius: 32,
     flexDirection: 'row',
     alignItems: 'center',
@@ -467,7 +478,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: Platform.OS === 'ios' ? 24 : 16,
     left: 16,
-    backgroundColor: '#6c63ff',
+    backgroundColor: 'transparent', // overridden inline with accent
     borderRadius: 32,
     flexDirection: 'row',
     alignItems: 'center',

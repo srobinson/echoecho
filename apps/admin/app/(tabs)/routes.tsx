@@ -20,6 +20,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCampusStore } from '../../src/stores/campusStore';
 import { supabase } from '../../src/lib/supabase';
 import type { Route, RouteStatus } from '@echoecho/shared';
+import { tabColors } from '@echoecho/ui';
+import { SectionColorProvider, useSectionColor } from '../../src/contexts/SectionColorContext';
 
 type FilterStatus = 'all' | RouteStatus;
 
@@ -31,13 +33,22 @@ const STATUS_FILTERS: { value: FilterStatus; label: string }[] = [
 ];
 
 const STATUS_COLOR: Record<string, string> = {
-  draft: '#F59E0B',
-  published: '#22C55E',
+  draft: '#FFB74D',
+  published: '#81C784',
   retracted: '#9CA3AF',
   pending_save: '#9CA3AF',
 };
 
 export default function RoutesScreen() {
+  return (
+    <SectionColorProvider value={tabColors.routes}>
+      <RoutesScreenInner />
+    </SectionColorProvider>
+  );
+}
+
+function RoutesScreenInner() {
+  const accent = useSectionColor();
   const [routes, setRoutes] = useState<Route[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
@@ -107,13 +118,13 @@ export default function RoutesScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.searchContainer}>
-        <Ionicons name="search" size={18} color="#8888aa" style={styles.searchIcon} />
+        <Ionicons name="search" size={18} color="#606070" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           value={searchQuery}
           onChangeText={handleSearch}
           placeholder="Search routes..."
-          placeholderTextColor="#5555aa"
+          placeholderTextColor="#404050"
           accessibilityLabel="Search routes by name"
           accessibilityHint="Results update as you type"
           returnKeyType="search"
@@ -125,7 +136,7 @@ export default function RoutesScreen() {
             accessibilityRole="button"
             style={styles.clearBtn}
           >
-            <Ionicons name="close-circle" size={18} color="#8888aa" />
+            <Ionicons name="close-circle" size={18} color="#606070" />
           </Pressable>
         )}
       </View>
@@ -134,7 +145,7 @@ export default function RoutesScreen() {
         {STATUS_FILTERS.map((f) => (
           <Pressable
             key={f.value}
-            style={[styles.filterChip, statusFilter === f.value && styles.filterChipActive]}
+            style={[styles.filterChip, statusFilter === f.value && { backgroundColor: accent + '22', borderColor: accent }]}
             onPress={() => setStatusFilter(f.value)}
             accessibilityLabel={`Filter: ${f.label}`}
             accessibilityRole="radio"
@@ -142,7 +153,7 @@ export default function RoutesScreen() {
           >
             <Text style={[
               styles.filterLabel,
-              statusFilter === f.value && styles.filterLabelActive,
+              statusFilter === f.value && { color: accent },
             ]}>
               {f.label}
             </Text>
@@ -152,7 +163,7 @@ export default function RoutesScreen() {
 
       {isLoading ? (
         <View style={styles.centered} accessibilityLiveRegion="polite">
-          <ActivityIndicator size="large" color="#6c63ff" accessibilityLabel="Loading routes" />
+          <ActivityIndicator size="large" color={accent} accessibilityLabel="Loading routes" />
         </View>
       ) : (
         <FlatList
@@ -245,12 +256,12 @@ const RouteCard = memo(function RouteCard({ route, onPress }: { route: Route; on
         </View>
         <View style={styles.cardMeta}>
           <View style={styles.metaItem}>
-            <Ionicons name="location-outline" size={14} color="#8888aa" />
+            <Ionicons name="location-outline" size={14} color="#606070" />
             <Text style={styles.metaText}>{route.waypoints.length} wp</Text>
           </View>
           {route.distanceMeters != null && (
             <View style={styles.metaItem}>
-              <Ionicons name="arrow-forward-outline" size={14} color="#8888aa" />
+              <Ionicons name="arrow-forward-outline" size={14} color="#606070" />
               <Text style={styles.metaText}>
                 {(route.distanceMeters / 1000).toFixed(2)} km
               </Text>
@@ -269,7 +280,7 @@ const RouteCard = memo(function RouteCard({ route, onPress }: { route: Route; on
 function EmptyState({ hasFilter }: { hasFilter: boolean }) {
   return (
     <View style={styles.empty} accessible accessibilityRole="alert">
-      <Ionicons name="navigate-outline" size={64} color="#2a2a3e" />
+      <Ionicons name="navigate-outline" size={64} color="#1E1E26" />
       <Text style={styles.emptyTitle}>
         {hasFilter ? 'No matching routes' : 'No routes yet'}
       </Text>
@@ -283,24 +294,24 @@ function EmptyState({ hasFilter }: { hasFilter: boolean }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f0f1a' },
+  container: { flex: 1, backgroundColor: '#0A0A0F' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderRadius: 12,
     marginHorizontal: 16,
     marginTop: 12,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
     minHeight: 44,
   },
   searchIcon: { marginRight: 8 },
   searchInput: {
     flex: 1,
-    color: '#e8e8f0',
+    color: '#F0F0F5',
     fontSize: 15,
     paddingVertical: 10,
   },
@@ -315,32 +326,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
     minHeight: 36,
     justifyContent: 'center',
   },
-  filterChipActive: {
-    backgroundColor: '#6c63ff22',
-    borderColor: '#6c63ff',
-  },
-  filterLabel: { color: '#8888aa', fontSize: 13, fontWeight: '600' },
-  filterLabelActive: { color: '#6c63ff' },
+  filterChipActive: {},
+  filterLabel: { color: '#606070', fontSize: 13, fontWeight: '600' },
+  filterLabelActive: {},
   list: { padding: 16, paddingBottom: 80 },
   separator: { height: 8 },
   card: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
     overflow: 'hidden',
   },
   cardPressed: { opacity: 0.8 },
   mapPreview: {
     width: '100%',
     height: 100,
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
   },
   cardContent: { padding: 14, gap: 6 },
   cardHeader: {
@@ -349,7 +357,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cardTitle: {
-    color: '#e8e8f0',
+    color: '#F0F0F5',
     fontSize: 16,
     fontWeight: '700',
     flex: 1,
@@ -363,9 +371,9 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
   cardMeta: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaText: { color: '#8888aa', fontSize: 12 },
-  dateText: { color: '#5555aa', fontSize: 11, marginLeft: 'auto' },
-  routeLabels: { color: '#6888aa', fontSize: 13 },
+  metaText: { color: '#606070', fontSize: 12 },
+  dateText: { color: '#404050', fontSize: 11, marginLeft: 'auto' },
+  routeLabels: { color: '#606070', fontSize: 13 },
   fab: {
     position: 'absolute',
     bottom: 24,
@@ -373,7 +381,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#e53e3e',
+    backgroundColor: '#F06292',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -384,6 +392,6 @@ const styles = StyleSheet.create({
   },
   fabPressed: { opacity: 0.85 },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 80, gap: 12 },
-  emptyTitle: { color: '#8888aa', fontSize: 20, fontWeight: '700' },
-  emptyBody: { color: '#5555aa', fontSize: 14, textAlign: 'center', maxWidth: 280 },
+  emptyTitle: { color: '#606070', fontSize: 20, fontWeight: '700' },
+  emptyBody: { color: '#404050', fontSize: 14, textAlign: 'center', maxWidth: 280 },
 });

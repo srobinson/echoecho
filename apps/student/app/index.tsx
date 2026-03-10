@@ -149,7 +149,7 @@ export default function HomeScreen() {
         <Ionicons
           name={sttState === 'listening' ? 'mic' : 'mic-outline'}
           size={40}
-          color={sttState === 'listening' ? '#fff' : '#0a0a14'}
+          color={sttState === 'listening' ? '#fff' : '#060608'}
         />
         <Text
           style={[
@@ -204,7 +204,7 @@ export default function HomeScreen() {
               accessibilityLabel={`Navigate to ${m.name}`}
               accessibilityRole="button"
             >
-              <Ionicons name="navigate" size={18} color="#6c63ff" />
+              <Ionicons name="navigate" size={18} color="#4FC3F7" />
               <Text style={styles.sttDisambigText}>{m.name}</Text>
             </Pressable>
           ))}
@@ -255,7 +255,7 @@ export default function HomeScreen() {
             value={keyboardQuery}
             onChangeText={setKeyboardQuery}
             placeholder="Type destination name..."
-            placeholderTextColor="#5555aa"
+            placeholderTextColor="#404050"
             autoFocus
             accessibilityLabel="Type your destination"
             returnKeyType="search"
@@ -348,12 +348,12 @@ const DestinationCard = memo(function DestinationCard({
         accessibilityRole="button"
         accessibilityHint="Double tap to start navigation"
       >
-        <Ionicons name="navigate" size={22} color="#6c63ff" />
+        <Ionicons name="navigate" size={22} color="#4FC3F7" />
         <View style={styles.destTextBlock}>
           <Text style={styles.destLabel}>{label}</Text>
           <Text style={styles.destSublabel}>{sublabel}</Text>
         </View>
-        <Ionicons name="chevron-forward" size={20} color="#6666aa" />
+        <Ionicons name="chevron-forward" size={20} color="#505060" />
       </Pressable>
       <Pressable
         style={({ pressed }) => [styles.favToggle, pressed && styles.favTogglePressed]}
@@ -365,7 +365,7 @@ const DestinationCard = memo(function DestinationCard({
         <Ionicons
           name={isFavorite ? 'star' : 'star-outline'}
           size={20}
-          color={isFavorite ? '#eab308' : '#4444aa'}
+          color={isFavorite ? '#FFD54F' : '#1A5F7A'}
         />
       </Pressable>
     </View>
@@ -389,7 +389,7 @@ function FavoritesEmpty() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0a14',
+    backgroundColor: '#060608',
     paddingHorizontal: 20,
   },
   header: {
@@ -398,19 +398,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   appName: {
-    color: '#f0f0ff',
+    color: '#F5F5FA',
     fontSize: 36,
     fontWeight: '900',
     letterSpacing: -1,
     marginBottom: 6,
   },
   tagline: {
-    color: '#9090cc',
+    color: '#808090',
     fontSize: 18,
     fontWeight: '400',
   },
   voiceBtn: {
-    backgroundColor: '#6c63ff',
+    backgroundColor: '#4FC3F7',
     borderRadius: 24,
     paddingVertical: 24,
     paddingHorizontal: 32,
@@ -419,7 +419,7 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 36,
     minHeight: 100,
-    shadowColor: '#6c63ff',
+    shadowColor: '#4FC3F7',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.4,
     shadowRadius: 16,
@@ -430,7 +430,7 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.98 }],
   },
   voiceBtnLabel: {
-    color: '#0a0a14',
+    color: '#060608',
     fontSize: 22,
     fontWeight: '800',
   },
@@ -443,7 +443,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: {
-    color: '#9090cc',
+    color: '#808090',
     fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -457,7 +457,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   seeAllLabel: {
-    color: '#6c63ff',
+    color: '#4FC3F7',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -466,10 +466,10 @@ const styles = StyleSheet.create({
   },
   separator: { height: 8 },
   destCard: {
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#2a2a4e',
+    borderColor: '#22222C',
     flexDirection: 'row',
     alignItems: 'center',
     overflow: 'hidden',
@@ -490,12 +490,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   destLabel: {
-    color: '#e0e0f8',
+    color: '#E0E0E8',
     fontSize: 17,
     fontWeight: '600',
   },
   destSublabel: {
-    color: '#6666aa',
+    color: '#505060',
     fontSize: 13,
     fontWeight: '400',
   },
@@ -506,20 +506,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 64,
     borderLeftWidth: 1,
-    borderLeftColor: '#2a2a4e',
+    borderLeftColor: '#22222C',
   },
   favTogglePressed: { opacity: 0.7 },
   emptyState: {
     padding: 20,
     alignItems: 'center',
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#2a2a4e',
+    borderColor: '#22222C',
     borderStyle: 'dashed',
   },
   emptyText: {
-    color: '#5555aa',
+    color: '#404050',
     fontSize: 15,
     textAlign: 'center',
     lineHeight: 22,
@@ -528,14 +528,14 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: Platform.OS === 'ios' ? 32 : 20,
     right: 20,
-    backgroundColor: '#9b1c1c',
+    backgroundColor: '#4A1528',
     borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 14,
     paddingHorizontal: 18,
     gap: 8,
-    shadowColor: '#9b1c1c',
+    shadowColor: '#4A1528',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.5,
     shadowRadius: 8,
@@ -549,23 +549,23 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   voiceBtnListening: {
-    backgroundColor: '#22c55e',
-    shadowColor: '#22c55e',
+    backgroundColor: '#81C784',
+    shadowColor: '#81C784',
   },
   voiceBtnLabelListening: {
     color: '#fff',
   },
   sttConfirmCard: {
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
     borderRadius: 16,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#2a2a4e',
+    borderColor: '#22222C',
     gap: 16,
     marginBottom: 8,
   },
   sttConfirmText: {
-    color: '#e0e0f8',
+    color: '#E0E0E8',
     fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',
@@ -576,7 +576,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sttConfirmBtn: {
-    backgroundColor: '#6c63ff',
+    backgroundColor: '#4FC3F7',
     borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 28,
@@ -590,7 +590,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   sttRejectBtn: {
-    backgroundColor: '#2a2a4e',
+    backgroundColor: '#22222C',
     borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 28,
@@ -599,7 +599,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sttRejectBtnText: {
-    color: '#9090cc',
+    color: '#808090',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -607,47 +607,47 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#1a1a36',
+    backgroundColor: '#111116',
     borderRadius: 12,
     padding: 14,
     minHeight: 48,
   },
   sttDisambigText: {
-    color: '#e0e0f8',
+    color: '#E0E0E8',
     fontSize: 16,
     fontWeight: '600',
   },
   sttErrorCard: {
-    backgroundColor: '#2a0a0a',
+    backgroundColor: '#1A080E',
     borderRadius: 16,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#7f1d1d',
+    borderColor: '#4A1528',
     gap: 12,
     marginBottom: 8,
   },
   sttErrorText: {
-    color: '#fca5a5',
+    color: '#F8BBD0',
     fontSize: 15,
     textAlign: 'center',
   },
   keyboardFallback: {
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#2a2a4e',
+    borderColor: '#22222C',
     gap: 12,
     marginBottom: 8,
   },
   keyboardInput: {
-    backgroundColor: '#0a0a14',
+    backgroundColor: '#060608',
     borderRadius: 12,
     padding: 16,
-    color: '#e0e0f8',
+    color: '#E0E0E8',
     fontSize: 18,
     borderWidth: 1,
-    borderColor: '#3a3a6e',
+    borderColor: '#2A2A35',
     minHeight: 52,
   },
 });

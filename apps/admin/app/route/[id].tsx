@@ -22,9 +22,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../src/lib/supabase';
 import type { Route, RouteStatus } from '@echoecho/shared';
 
+import { tabColors } from '@echoecho/ui';
+import { SectionColorProvider, useSectionColor } from '../../src/contexts/SectionColorContext';
+
 const STATUS_COLOR: Record<string, string> = {
-  draft: '#F59E0B',
-  published: '#22C55E',
+  draft: '#FFB74D',
+  published: '#81C784',
   retracted: '#9CA3AF',
   pending_save: '#9CA3AF',
 };
@@ -38,6 +41,15 @@ interface RouteVersion {
 }
 
 export default function RouteDetailScreen() {
+  return (
+    <SectionColorProvider value={tabColors.routes}>
+      <RouteDetailScreenInner />
+    </SectionColorProvider>
+  );
+}
+
+function RouteDetailScreenInner() {
+  const accent = useSectionColor();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [route, setRoute] = useState<Route | null>(null);
   const [versions, setVersions] = useState<RouteVersion[]>([]);
@@ -198,7 +210,7 @@ export default function RouteDetailScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#6c63ff" />
+          <ActivityIndicator size="large" color={accent} />
         </View>
       </SafeAreaView>
     );
@@ -221,7 +233,7 @@ export default function RouteDetailScreen() {
             accessibilityLabel="Go back"
             accessibilityRole="button"
           >
-            <Ionicons name="arrow-back" size={22} color="#e8e8f0" />
+            <Ionicons name="arrow-back" size={22} color="#F0F0F5" />
           </Pressable>
           <View style={styles.headerTitle}>
             <Text style={styles.routeName} numberOfLines={2}>
@@ -265,12 +277,12 @@ export default function RouteDetailScreen() {
               disabled={isSaving}
               accessibilityLabel={isEditing ? 'Save metadata' : 'Edit metadata'}
               accessibilityRole="button"
-              style={styles.editToggle}
+              style={[styles.editToggle, { backgroundColor: accent + '22' }]}
             >
               {isSaving ? (
-                <ActivityIndicator size="small" color="#6c63ff" />
+                <ActivityIndicator size="small" color={accent} />
               ) : (
-                <Text style={styles.editToggleLabel}>
+                <Text style={[styles.editToggleLabel, { color: accent }]}>
                   {isEditing ? 'Save' : 'Edit'}
                 </Text>
               )}
@@ -318,7 +330,7 @@ export default function RouteDetailScreen() {
               <ActionButton
                 icon="cloud-upload"
                 label="Publish"
-                color="#22C55E"
+                color="#81C784"
                 onPress={() => void handleStatusChange('published')}
               />
             )}
@@ -326,7 +338,7 @@ export default function RouteDetailScreen() {
               <ActionButton
                 icon="archive"
                 label="Archive"
-                color="#F59E0B"
+                color="#FFB74D"
                 onPress={() => void handleStatusChange('retracted')}
               />
             )}
@@ -334,20 +346,20 @@ export default function RouteDetailScreen() {
               <ActionButton
                 icon="refresh"
                 label="Restore"
-                color="#22C55E"
+                color="#81C784"
                 onPress={() => void handleStatusChange('draft')}
               />
             )}
             <ActionButton
               icon="copy"
               label="Duplicate"
-              color="#6c63ff"
+              color={accent}
               onPress={() => void handleDuplicate()}
             />
             <ActionButton
               icon="trash"
               label="Delete"
-              color="#ef4444"
+              color="#F06292"
               onPress={handleDelete}
             />
           </View>
@@ -366,12 +378,12 @@ export default function RouteDetailScreen() {
               <Ionicons
                 name={showVersions ? 'chevron-up' : 'chevron-down'}
                 size={18}
-                color="#8888aa"
+                color="#606070"
               />
             </Pressable>
             {showVersions && versions.map((v) => (
               <View key={v.id} style={styles.versionRow}>
-                <Text style={styles.versionNumber}>v{v.version}</Text>
+                <Text style={[styles.versionNumber, { color: accent }]}>v{v.version}</Text>
                 <View style={styles.versionInfo}>
                   <Text style={styles.versionDate}>
                     {new Date(v.createdAt).toLocaleDateString()}
@@ -470,7 +482,7 @@ function ActionButton({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f0f1a' },
+  container: { flex: 1, backgroundColor: '#0A0A0F' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scroll: { paddingBottom: 40 },
   header: {
@@ -483,18 +495,18 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: { flex: 1, gap: 6 },
-  routeName: { color: '#e8e8f0', fontSize: 20, fontWeight: '700' },
+  routeName: { color: '#F0F0F5', fontSize: 20, fontWeight: '700' },
   statusBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, alignSelf: 'flex-start' },
   statusText: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
   mapPreview: {
     width: '100%',
     height: 180,
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
   },
   statsRow: {
     flexDirection: 'row',
@@ -505,49 +517,49 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderRadius: 12,
     paddingVertical: 14,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
   },
-  statValue: { color: '#e8e8f0', fontSize: 16, fontWeight: '700' },
-  statLabel: { color: '#8888aa', fontSize: 10, textTransform: 'uppercase' },
+  statValue: { color: '#F0F0F5', fontSize: 16, fontWeight: '700' },
+  statLabel: { color: '#606070', fontSize: 10, textTransform: 'uppercase' },
   section: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     marginHorizontal: 16,
     marginTop: 12,
     borderRadius: 14,
     padding: 16,
     gap: 10,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  sectionTitle: { color: '#9090cc', fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
-  editToggle: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, backgroundColor: '#6c63ff22' },
-  editToggleLabel: { color: '#6c63ff', fontSize: 13, fontWeight: '600' },
+  sectionTitle: { color: '#808090', fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
+  editToggle: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
+  editToggleLabel: { fontSize: 13, fontWeight: '600' },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#14142a',
+    borderBottomColor: '#0D0D12',
   },
-  metaLabel: { color: '#9090cc', fontSize: 12, width: 80 },
-  metaValue: { color: '#e8e8f0', fontSize: 13, fontWeight: '500', flex: 1 },
+  metaLabel: { color: '#808090', fontSize: 12, width: 80 },
+  metaValue: { color: '#F0F0F5', fontSize: 13, fontWeight: '500', flex: 1 },
   metaField: { gap: 4 },
   metaInput: {
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
-    color: '#e8e8f0',
+    borderColor: '#1E1E26',
+    color: '#F0F0F5',
     fontSize: 15,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -582,15 +594,14 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#14142a',
+    borderBottomColor: '#0D0D12',
   },
   versionNumber: {
-    color: '#6c63ff',
     fontSize: 14,
     fontWeight: '700',
     width: 32,
   },
   versionInfo: { flex: 1, gap: 2 },
-  versionDate: { color: '#e8e8f0', fontSize: 13 },
-  versionMeta: { color: '#8888aa', fontSize: 11 },
+  versionDate: { color: '#F0F0F5', fontSize: 13 },
+  versionMeta: { color: '#606070', fontSize: 11 },
 });

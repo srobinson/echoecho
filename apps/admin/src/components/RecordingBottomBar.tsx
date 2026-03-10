@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { RecordingState } from '@echoecho/shared';
 
 import { GpsAccuracyIndicator } from './GpsAccuracyIndicator';
+import { useSectionColor } from '../contexts/SectionColorContext';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,7 @@ export function RecordingBottomBar({
   onWaypoint,
   hazardSlot,
 }: RecordingBottomBarProps) {
+  const accent = useSectionColor();
   const isIdle      = recordingState === null;
   const isRecording = recordingState === 'recording';
   const isPaused    = recordingState === 'paused';
@@ -81,7 +83,7 @@ export function RecordingBottomBar({
       {hasStarted && (
         <View style={styles.stats}>
           <View style={styles.statItem}>
-            <Ionicons name="time-outline" size={13} color="#8888aa" />
+            <Ionicons name="time-outline" size={13} color="#606070" />
             <Text
               style={styles.statValue}
               accessibilityLabel={`Elapsed time: ${formatElapsed(elapsedMs)}`}
@@ -90,7 +92,7 @@ export function RecordingBottomBar({
             </Text>
           </View>
           <View style={styles.statItem}>
-            <Ionicons name="footsteps-outline" size={13} color="#8888aa" />
+            <Ionicons name="footsteps-outline" size={13} color="#606070" />
             <Text
               style={styles.statValue}
               accessibilityLabel={`Distance: ${formatDistance(distanceMeters)}`}
@@ -108,7 +110,7 @@ export function RecordingBottomBar({
           <RecordBtn
             icon="radio-button-on"
             label="Start Recording"
-            color="#e53e3e"
+            color="#F06292"
             onPress={onStart}
           />
         )}
@@ -118,13 +120,13 @@ export function RecordingBottomBar({
             <RecordBtn
               icon="pause"
               label="Pause Recording"
-              color="#ed8936"
+              color="#FFA726"
               onPress={onPause}
             />
             <RecordBtn
               icon="flag"
               label="Mark Waypoint"
-              color="#6c63ff"
+              color={accent}
               onPress={onWaypoint}
             />
             {/* Hazard button injected by ALP-952 */}
@@ -136,7 +138,7 @@ export function RecordingBottomBar({
           <RecordBtn
             icon="play"
             label="Resume Recording"
-            color="#48bb78"
+            color="#66BB6A"
             onPress={onResume}
           />
         )}
@@ -145,7 +147,7 @@ export function RecordingBottomBar({
           <RecordBtn
             icon="stop"
             label="Stop Recording"
-            color="#2a2a3e"
+            color="#1E1E26"
             onPress={onStop}
           />
         )}
@@ -184,9 +186,9 @@ function RecordBtn({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderTopWidth: 1,
-    borderTopColor: '#2a2a3e',
+    borderTopColor: '#1E1E26',
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: Platform.OS === 'ios' ? 24 : 16,
@@ -204,7 +206,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   statValue: {
-    color: '#e8e8f0',
+    color: '#F0F0F5',
     fontSize: 13,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],

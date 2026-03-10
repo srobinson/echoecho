@@ -10,7 +10,7 @@ export function CoverageCard({ data }: Props) {
     ? Math.round((data.publishedPairs / data.totalPairs) * 100)
     : 0;
 
-  const barColor = percent >= 75 ? '#22C55E' : percent >= 40 ? '#F59E0B' : '#EF4444';
+  const barColor = percent >= 75 ? '#81C784' : percent >= 40 ? '#FFB74D' : '#F06292';
 
   return (
     <View
@@ -43,26 +43,26 @@ export function CoverageCard({ data }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
     padding: 16,
     gap: 8,
   },
-  title: { color: '#e8e8f0', fontSize: 16, fontWeight: '700' },
-  subtitle: { color: '#8888aa', fontSize: 12 },
+  title: { color: '#F0F0F5', fontSize: 16, fontWeight: '700' },
+  subtitle: { color: '#606070', fontSize: 12 },
   metricRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
     gap: 12,
     marginTop: 4,
   },
-  percentText: { color: '#e8e8f0', fontSize: 36, fontWeight: '800' },
-  pairsText: { color: '#8888aa', fontSize: 14 },
+  percentText: { color: '#F0F0F5', fontSize: 36, fontWeight: '800' },
+  pairsText: { color: '#606070', fontSize: 14 },
   barTrack: {
     height: 8,
-    backgroundColor: '#22223a',
+    backgroundColor: '#18181F',
     borderRadius: 4,
     overflow: 'hidden',
     marginTop: 4,

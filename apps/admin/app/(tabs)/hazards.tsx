@@ -22,6 +22,8 @@ import { useCampusStore } from '../../src/stores/campusStore';
 import { supabase } from '../../src/lib/supabase';
 import { HazardPickerSheet } from '@echoecho/ui';
 import type { Hazard, HazardType, Route } from '@echoecho/shared';
+import { tabColors } from '@echoecho/ui';
+import { SectionColorProvider, useSectionColor } from '../../src/contexts/SectionColorContext';
 
 type ViewMode = 'list' | 'map';
 type ExpiryFilter = 'active' | 'expiring_soon' | 'expired' | 'all';
@@ -47,9 +49,9 @@ const HAZARD_LABELS: Record<HazardType, string> = {
 };
 
 const SEVERITY_COLOR: Record<string, string> = {
-  low: '#F59E0B',
-  medium: '#F97316',
-  high: '#EF4444',
+  low: '#FFB74D',
+  medium: '#FFB74D',
+  high: '#F06292',
 };
 
 const EXPIRY_FILTERS: { value: ExpiryFilter; label: string }[] = [
@@ -62,6 +64,15 @@ const EXPIRY_FILTERS: { value: ExpiryFilter; label: string }[] = [
 const FORTY_EIGHT_HOURS_MS = 48 * 60 * 60 * 1000;
 
 export default function HazardsScreen() {
+  return (
+    <SectionColorProvider value={tabColors.hazards}>
+      <HazardsScreenInner />
+    </SectionColorProvider>
+  );
+}
+
+function HazardsScreenInner() {
+  const accent = useSectionColor();
   const [hazards, setHazards] = useState<Hazard[]>([]);
   const [routes, setRoutes] = useState<Route[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -264,24 +275,24 @@ export default function HazardsScreen() {
       <View style={styles.header}>
         <View style={styles.viewToggle}>
           <Pressable
-            style={[styles.toggleBtn, viewMode === 'list' && styles.toggleBtnActive]}
+            style={[styles.toggleBtn, viewMode === 'list' && { backgroundColor: accent + '22' }]}
             onPress={() => setViewMode('list')}
             accessibilityLabel="List view"
             accessibilityRole="radio"
             accessibilityState={{ selected: viewMode === 'list' }}
           >
-            <Ionicons name="list" size={18} color={viewMode === 'list' ? '#6c63ff' : '#8888aa'} />
-            <Text style={[styles.toggleText, viewMode === 'list' && styles.toggleTextActive]}>List</Text>
+            <Ionicons name="list" size={18} color={viewMode === 'list' ? accent : '#606070'} />
+            <Text style={[styles.toggleText, viewMode === 'list' && { color: accent }]}>List</Text>
           </Pressable>
           <Pressable
-            style={[styles.toggleBtn, viewMode === 'map' && styles.toggleBtnActive]}
+            style={[styles.toggleBtn, viewMode === 'map' && { backgroundColor: accent + '22' }]}
             onPress={() => setViewMode('map')}
             accessibilityLabel="Map view"
             accessibilityRole="radio"
             accessibilityState={{ selected: viewMode === 'map' }}
           >
-            <Ionicons name="map" size={18} color={viewMode === 'map' ? '#6c63ff' : '#8888aa'} />
-            <Text style={[styles.toggleText, viewMode === 'map' && styles.toggleTextActive]}>Map</Text>
+            <Ionicons name="map" size={18} color={viewMode === 'map' ? accent : '#606070'} />
+            <Text style={[styles.toggleText, viewMode === 'map' && { color: accent }]}>Map</Text>
           </Pressable>
         </View>
       </View>
@@ -291,13 +302,13 @@ export default function HazardsScreen() {
         {EXPIRY_FILTERS.map((f) => (
           <Pressable
             key={f.value}
-            style={[styles.filterChip, expiryFilter === f.value && styles.filterChipActive]}
+            style={[styles.filterChip, expiryFilter === f.value && { backgroundColor: accent + '22', borderColor: accent }]}
             onPress={() => setExpiryFilter(f.value)}
             accessibilityLabel={`Filter: ${f.label}`}
             accessibilityRole="radio"
             accessibilityState={{ selected: expiryFilter === f.value }}
           >
-            <Text style={[styles.filterLabel, expiryFilter === f.value && styles.filterLabelActive]}>
+            <Text style={[styles.filterLabel, expiryFilter === f.value && { color: accent }]}>
               {f.label}
             </Text>
           </Pressable>
@@ -307,25 +318,25 @@ export default function HazardsScreen() {
       {/* Type filter chips */}
       <View style={styles.filterRow}>
         <Pressable
-          style={[styles.filterChip, !typeFilter && styles.filterChipActive]}
+          style={[styles.filterChip, !typeFilter && { backgroundColor: accent + '22', borderColor: accent }]}
           onPress={() => setTypeFilter(null)}
           accessibilityLabel="All types"
           accessibilityRole="radio"
           accessibilityState={{ selected: !typeFilter }}
         >
-          <Text style={[styles.filterLabel, !typeFilter && styles.filterLabelActive]}>All Types</Text>
+          <Text style={[styles.filterLabel, !typeFilter && { color: accent }]}>All Types</Text>
         </Pressable>
         {(Object.keys(HAZARD_LABELS) as HazardType[]).map((type) => (
           <Pressable
             key={type}
-            style={[styles.filterChip, typeFilter === type && styles.filterChipActive]}
+            style={[styles.filterChip, typeFilter === type && { backgroundColor: accent + '22', borderColor: accent }]}
             onPress={() => setTypeFilter(typeFilter === type ? null : type)}
             accessibilityLabel={`Type: ${HAZARD_LABELS[type]}`}
             accessibilityRole="radio"
             accessibilityState={{ selected: typeFilter === type }}
           >
-            <Ionicons name={HAZARD_ICONS[type]} size={14} color={typeFilter === type ? '#6c63ff' : '#8888aa'} />
-            <Text style={[styles.filterLabel, typeFilter === type && styles.filterLabelActive]}>
+            <Ionicons name={HAZARD_ICONS[type]} size={14} color={typeFilter === type ? accent : '#606070'} />
+            <Text style={[styles.filterLabel, typeFilter === type && { color: accent }]}>
               {HAZARD_LABELS[type]}
             </Text>
           </Pressable>
@@ -336,25 +347,25 @@ export default function HazardsScreen() {
       {routes.length > 0 && (
         <View style={styles.filterRow}>
           <Pressable
-            style={[styles.filterChip, !routeFilter && styles.filterChipActive]}
+            style={[styles.filterChip, !routeFilter && { backgroundColor: accent + '22', borderColor: accent }]}
             onPress={() => setRouteFilter(null)}
             accessibilityLabel="All routes"
             accessibilityRole="radio"
             accessibilityState={{ selected: !routeFilter }}
           >
-            <Text style={[styles.filterLabel, !routeFilter && styles.filterLabelActive]}>All Routes</Text>
+            <Text style={[styles.filterLabel, !routeFilter && { color: accent }]}>All Routes</Text>
           </Pressable>
           {routes.slice(0, 5).map((r) => (
             <Pressable
               key={r.id}
-              style={[styles.filterChip, routeFilter === r.id && styles.filterChipActive]}
+              style={[styles.filterChip, routeFilter === r.id && { backgroundColor: accent + '22', borderColor: accent }]}
               onPress={() => setRouteFilter(routeFilter === r.id ? null : r.id)}
               accessibilityLabel={`Route: ${r.name}`}
               accessibilityRole="radio"
               accessibilityState={{ selected: routeFilter === r.id }}
             >
               <Text
-                style={[styles.filterLabel, routeFilter === r.id && styles.filterLabelActive]}
+                style={[styles.filterLabel, routeFilter === r.id && { color: accent }]}
                 numberOfLines={1}
               >
                 {r.name}
@@ -366,7 +377,7 @@ export default function HazardsScreen() {
 
       {isLoading ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#6c63ff" />
+          <ActivityIndicator size="large" color={accent} />
         </View>
       ) : viewMode === 'list' ? (
         <FlatList
@@ -376,7 +387,7 @@ export default function HazardsScreen() {
           accessibilityRole="list"
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Ionicons name="shield-checkmark-outline" size={64} color="#2a2a3e" />
+              <Ionicons name="shield-checkmark-outline" size={64} color="#1E1E26" />
               <Text style={styles.emptyTitle}>No hazards found</Text>
               <Text style={styles.emptyBody}>
                 {typeFilter || expiryFilter !== 'all'
@@ -421,13 +432,13 @@ export default function HazardsScreen() {
                   circleRadius: 10,
                   circleColor: [
                     'match', ['get', 'severity'],
-                    'low', '#F59E0B',
-                    'medium', '#F97316',
-                    'high', '#EF4444',
-                    '#F97316',
+                    'low', '#FFB74D',
+                    'medium', '#FFB74D',
+                    'high', '#F06292',
+                    '#FFB74D',
                   ],
                   circleStrokeWidth: 2,
-                  circleStrokeColor: '#0f0f1a',
+                  circleStrokeColor: '#0A0A0F',
                 }}
               />
               <MapboxGL.SymbolLayer
@@ -438,9 +449,9 @@ export default function HazardsScreen() {
                   iconAllowOverlap: true,
                   textField: ['get', 'title'],
                   textSize: 10,
-                  textColor: '#e8e8f0',
+                  textColor: '#F0F0F5',
                   textOffset: [0, 1.8],
-                  textHaloColor: '#0f0f1a',
+                  textHaloColor: '#0A0A0F',
                   textHaloWidth: 1,
                 }}
               />
@@ -448,7 +459,7 @@ export default function HazardsScreen() {
           </MapboxGL.MapView>
 
           <View style={styles.mapHint}>
-            <Ionicons name="hand-left-outline" size={14} color="#8888aa" />
+            <Ionicons name="hand-left-outline" size={14} color="#606070" />
             <Text style={styles.mapHintText}>Long-press to add a hazard</Text>
           </View>
         </View>
@@ -520,7 +531,7 @@ const HazardListItem = memo(function HazardListItem({
     ? expiresMs - nowMs <= FORTY_EIGHT_HOURS_MS && expiresMs > nowMs
     : false;
 
-  const severityColor = SEVERITY_COLOR[hazard.severity] ?? '#F97316';
+  const severityColor = SEVERITY_COLOR[hazard.severity] ?? '#FFB74D';
 
   return (
     <Pressable
@@ -556,7 +567,7 @@ const HazardListItem = memo(function HazardListItem({
           accessibilityRole="button"
           hitSlop={8}
         >
-          <Ionicons name="checkmark-circle-outline" size={24} color="#22C55E" />
+          <Ionicons name="checkmark-circle-outline" size={24} color="#81C784" />
         </Pressable>
       </View>
     </Pressable>
@@ -593,7 +604,7 @@ const HazardDetailSheet = forwardRef<
     ? routes.find((r) => r.id === hazard.routeId)?.name ?? 'Unknown route'
     : 'Campus-wide';
 
-  const severityColor = hazard ? (SEVERITY_COLOR[hazard.severity] ?? '#F97316') : '#F97316';
+  const severityColor = hazard ? (SEVERITY_COLOR[hazard.severity] ?? '#FFB74D') : '#FFB74D';
 
   const expiryOptions = [
     { label: 'Permanent', value: null },
@@ -611,7 +622,7 @@ const HazardDetailSheet = forwardRef<
       onClose={handleClose}
       backdropComponent={renderBackdrop}
       handleIndicatorStyle={{ backgroundColor: '#4a4a6a' }}
-      backgroundStyle={{ backgroundColor: '#1a1a2e' }}
+      backgroundStyle={{ backgroundColor: '#111116' }}
     >
       {hazard && (
       <BottomSheetView style={detailStyles.container}>
@@ -690,21 +701,21 @@ const detailStyles = StyleSheet.create({
   container: { paddingHorizontal: 20, gap: 14 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   headerContent: { flex: 1 },
-  title: { color: '#e8e8f0', fontSize: 18, fontWeight: '700' },
-  subtitle: { color: '#8888aa', fontSize: 13, marginTop: 2 },
-  description: { color: '#9090cc', fontSize: 14, lineHeight: 20 },
+  title: { color: '#F0F0F5', fontSize: 18, fontWeight: '700' },
+  subtitle: { color: '#606070', fontSize: 13, marginTop: 2 },
+  description: { color: '#808090', fontSize: 14, lineHeight: 20 },
   metaRow: { flexDirection: 'row', gap: 16 },
   metaItem: { gap: 4 },
   metaLabel: {
-    color: '#5555aa',
+    color: '#404050',
     fontSize: 11,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  metaValue: { color: '#c0c0d8', fontSize: 13 },
+  metaValue: { color: '#C0C0C8', fontSize: 13 },
   sectionLabel: {
-    color: '#8888aa',
+    color: '#606070',
     fontSize: 12,
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -715,19 +726,19 @@ const detailStyles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 14,
     borderRadius: 20,
-    backgroundColor: '#22223a',
+    backgroundColor: '#18181F',
     borderWidth: 1,
     borderColor: '#3a3a5a',
     minHeight: 36,
     justifyContent: 'center',
   },
-  expiryChipText: { color: '#8888aa', fontSize: 12 },
+  expiryChipText: { color: '#606070', fontSize: 12 },
   resolveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#22C55E',
+    backgroundColor: '#81C784',
     paddingVertical: 14,
     borderRadius: 12,
     minHeight: 48,
@@ -738,7 +749,7 @@ const detailStyles = StyleSheet.create({
 // ── Main styles ────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f0f1a' },
+  container: { flex: 1, backgroundColor: '#0A0A0F' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: {
     flexDirection: 'row',
@@ -748,10 +759,10 @@ const styles = StyleSheet.create({
   },
   viewToggle: {
     flexDirection: 'row',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
     overflow: 'hidden',
   },
   toggleBtn: {
@@ -763,9 +774,9 @@ const styles = StyleSheet.create({
     minHeight: 44,
     justifyContent: 'center',
   },
-  toggleBtnActive: { backgroundColor: '#6c63ff22' },
-  toggleText: { color: '#8888aa', fontSize: 13, fontWeight: '600' },
-  toggleTextActive: { color: '#6c63ff' },
+  toggleBtnActive: {},
+  toggleText: { color: '#606070', fontSize: 13, fontWeight: '600' },
+  toggleTextActive: {},
   filterRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -780,25 +791,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
     minHeight: 36,
     justifyContent: 'center',
   },
-  filterChipActive: {
-    backgroundColor: '#6c63ff22',
-    borderColor: '#6c63ff',
-  },
-  filterLabel: { color: '#8888aa', fontSize: 12, fontWeight: '600' },
-  filterLabelActive: { color: '#6c63ff' },
+  filterChipActive: {},
+  filterLabel: { color: '#606070', fontSize: 12, fontWeight: '600' },
+  filterLabelActive: {},
   list: { padding: 16, paddingBottom: 40 },
   separator: { height: 8 },
   card: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
     padding: 14,
   },
   cardPressed: { opacity: 0.8 },
@@ -811,17 +819,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cardContent: { flex: 1, gap: 4 },
-  cardTitle: { color: '#e8e8f0', fontSize: 15, fontWeight: '700' },
+  cardTitle: { color: '#F0F0F5', fontSize: 15, fontWeight: '700' },
   cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  metaText: { color: '#8888aa', fontSize: 12 },
+  metaText: { color: '#606070', fontSize: 12 },
   severityBadge: {
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
   severityText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase' },
-  expiryText: { color: '#5555aa', fontSize: 11 },
-  expiryTextWarning: { color: '#F59E0B' },
+  expiryText: { color: '#404050', fontSize: 11 },
+  expiryTextWarning: { color: '#FFB74D' },
   resolveBtn: {
     padding: 8,
     minWidth: 44,
@@ -836,8 +844,8 @@ const styles = StyleSheet.create({
     paddingTop: 80,
     gap: 12,
   },
-  emptyTitle: { color: '#8888aa', fontSize: 20, fontWeight: '700' },
-  emptyBody: { color: '#5555aa', fontSize: 14, textAlign: 'center', maxWidth: 280 },
+  emptyTitle: { color: '#606070', fontSize: 20, fontWeight: '700' },
+  emptyBody: { color: '#404050', fontSize: 14, textAlign: 'center', maxWidth: 280 },
   mapContainer: { flex: 1 },
   map: { flex: 1 },
   mapHint: {
@@ -847,10 +855,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#1a1a2ecc',
+    backgroundColor: '#111116cc',
     paddingVertical: 8,
     paddingHorizontal: 14,
     borderRadius: 20,
   },
-  mapHintText: { color: '#8888aa', fontSize: 12 },
+  mapHintText: { color: '#606070', fontSize: 12 },
 });

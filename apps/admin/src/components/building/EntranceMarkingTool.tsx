@@ -88,7 +88,7 @@ export function EntranceMarkingTool({
           <MapboxGL.LineLayer
             id={TAP_LINE_LAYER_ID}
             style={{
-              lineColor: '#22C55E',
+              lineColor: '#81C784',
               lineWidth: 6,
               lineOpacity: 0.6,
               lineDasharray: [2, 2],
@@ -105,10 +105,10 @@ export function EntranceMarkingTool({
             textSize: 16,
             textColor: [
               'case',
-              ['get', 'isMain'], '#22C55E',
-              '#fbbf24',
+              ['get', 'isMain'], '#81C784',
+              '#FFA726',
             ],
-            textHaloColor: '#0f0f1a',
+            textHaloColor: '#0A0A0F',
             textHaloWidth: 1.5,
             textAnchor: 'center',
             textAllowOverlap: true,

@@ -49,10 +49,10 @@ export default function RootLayout() {
         <EmergencyOverlay>
           <Stack
             screenOptions={{
-              headerStyle: { backgroundColor: '#0a0a14' },
-              headerTintColor: '#f0f0ff',
+              headerStyle: { backgroundColor: '#060608' },
+              headerTintColor: '#F5F5FA',
               headerTitleStyle: { fontWeight: '700', fontSize: 20 },
-              contentStyle: { backgroundColor: '#0a0a14' },
+              contentStyle: { backgroundColor: '#060608' },
               headerBackButtonDisplayMode: 'minimal',
             }}
           >
@@ -70,8 +70,8 @@ export default function RootLayout() {
               options={{
                 title: 'Emergency',
                 presentation: 'fullScreenModal',
-                headerStyle: { backgroundColor: '#1A0000' },
-                headerTintColor: '#FF5252',
+                headerStyle: { backgroundColor: '#1A080E' },
+                headerTintColor: '#FF4081',
               }}
             />
           </Stack>

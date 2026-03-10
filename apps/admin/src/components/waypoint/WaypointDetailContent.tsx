@@ -8,6 +8,7 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Waypoint, WaypointType } from '@echoecho/shared';
+import { useSectionColor } from '../../contexts/SectionColorContext';
 
 interface Props {
   waypoint: Waypoint;
@@ -44,6 +45,7 @@ const TYPE_LABEL: Record<WaypointType, string> = {
 };
 
 export function WaypointDetailContent({ waypoint }: Props) {
+  const accent = useSectionColor();
   const emoji = TYPE_EMOJI[waypoint.type] ?? '⬤';
   const typeLabel = TYPE_LABEL[waypoint.type] ?? waypoint.type;
 
@@ -53,7 +55,7 @@ export function WaypointDetailContent({ waypoint }: Props) {
         <Text style={styles.typeEmoji} accessibilityElementsHidden>
           {emoji}
         </Text>
-        <View style={styles.typeBadge}>
+        <View style={[styles.typeBadge, { backgroundColor: accent + '22', borderColor: accent + '44' }]}>
           <Text style={styles.typeText}>{typeLabel}</Text>
         </View>
         <Text
@@ -125,14 +127,15 @@ function AttachmentBadge({
   label: string;
   active: boolean;
 }) {
+  const accent = useSectionColor();
   return (
     <View
-      style={[styles.attachment, active && styles.attachmentActive]}
+      style={[styles.attachment, active && { backgroundColor: accent + '11', borderColor: accent + '44' }]}
       accessible
       accessibilityLabel={`${label} ${active ? 'attached' : 'not attached'}`}
     >
-      <Ionicons name={icon} size={14} color={active ? '#6c63ff' : '#4444aa'} />
-      <Text style={[styles.attachmentLabel, active && styles.attachmentLabelActive]}>
+      <Ionicons name={icon} size={14} color={active ? accent : '#1A5F7A'} />
+      <Text style={[styles.attachmentLabel, active && { color: accent }]}>
         {label}
       </Text>
     </View>
@@ -149,26 +152,24 @@ const styles = StyleSheet.create({
   },
   typeEmoji: { fontSize: 20 },
   typeBadge: {
-    backgroundColor: '#6c63ff22',
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: '#6c63ff44',
   },
   typeText: { color: '#a0a0ff', fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
-  seqBadge: { color: '#9090cc', fontSize: 13, fontWeight: '600', marginLeft: 'auto' },
+  seqBadge: { color: '#808090', fontSize: 13, fontWeight: '600', marginLeft: 'auto' },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#2a2a3e',
+    borderBottomColor: '#1E1E26',
   },
-  metaLabel: { color: '#9090cc', fontSize: 12, width: 52, paddingTop: 1 },
-  metaValue: { color: '#e8e8f0', fontSize: 13, fontWeight: '500', flex: 1 },
-  coordValue: { color: '#8888aa', fontSize: 12, fontFamily: 'monospace', flex: 1 },
+  metaLabel: { color: '#808090', fontSize: 12, width: 52, paddingTop: 1 },
+  metaValue: { color: '#F0F0F5', fontSize: 13, fontWeight: '500', flex: 1 },
+  coordValue: { color: '#606070', fontSize: 12, fontFamily: 'monospace', flex: 1 },
   attachmentRow: {
     flexDirection: 'row',
     gap: 8,
@@ -178,17 +179,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
   },
-  attachmentActive: {
-    backgroundColor: '#6c63ff11',
-    borderColor: '#6c63ff44',
-  },
-  attachmentLabel: { color: '#4444aa', fontSize: 12, fontWeight: '600' },
-  attachmentLabelActive: { color: '#6c63ff' },
+  attachmentLabel: { color: '#1A5F7A', fontSize: 12, fontWeight: '600' },
 });

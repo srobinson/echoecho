@@ -17,6 +17,7 @@ import {
   ScrollView,
 } from 'react-native';
 import type { BuildingCategory } from '@echoecho/shared';
+import { useSectionColor } from '../../contexts/SectionColorContext';
 
 interface Props {
   visible: boolean;
@@ -48,6 +49,7 @@ export function BuildingCreateMetadataSheet({
   onSave,
   onDiscard,
 }: Props) {
+  const accent = useSectionColor();
   const [name, setName] = useState('');
   const [shortName, setShortName] = useState('');
   const [description, setDescription] = useState('');
@@ -85,7 +87,7 @@ export function BuildingCreateMetadataSheet({
           value={name}
           onChangeText={setName}
           placeholder="e.g. Administration Building"
-          placeholderTextColor="#5555aa"
+          placeholderTextColor="#404050"
           maxLength={100}
           accessibilityLabel="Building name, required"
         />
@@ -96,7 +98,7 @@ export function BuildingCreateMetadataSheet({
           value={shortName}
           onChangeText={(t) => setShortName(t.slice(0, 20))}
           placeholder="e.g. Admin, Library"
-          placeholderTextColor="#5555aa"
+          placeholderTextColor="#404050"
           maxLength={20}
           accessibilityLabel="Short name for voice matching, maximum 20 characters"
         />
@@ -106,7 +108,10 @@ export function BuildingCreateMetadataSheet({
           {CATEGORIES.map((c) => (
             <Pressable
               key={c.value}
-              style={[styles.categoryChip, category === c.value && styles.categoryChipActive]}
+              style={[
+                styles.categoryChip,
+                category === c.value && { backgroundColor: accent + '22', borderColor: accent },
+              ]}
               onPress={() => setCategory(c.value)}
               accessibilityLabel={`Category: ${c.label}`}
               accessibilityRole="radio"
@@ -115,7 +120,7 @@ export function BuildingCreateMetadataSheet({
               <Text
                 style={[
                   styles.categoryLabel,
-                  category === c.value && styles.categoryLabelActive,
+                  category === c.value && { color: accent },
                 ]}
               >
                 {c.label}
@@ -130,7 +135,7 @@ export function BuildingCreateMetadataSheet({
           value={description}
           onChangeText={setDescription}
           placeholder="Optional description"
-          placeholderTextColor="#5555aa"
+          placeholderTextColor="#404050"
           multiline
           accessibilityLabel="Building description"
         />
@@ -145,7 +150,7 @@ export function BuildingCreateMetadataSheet({
             <Text style={styles.discardLabel}>Discard</Text>
           </Pressable>
           <Pressable
-            style={[styles.saveBtn, isSaving && styles.saveBtnDisabled]}
+            style={[styles.saveBtn, { backgroundColor: accent }, isSaving && styles.saveBtnDisabled]}
             onPress={handleSave}
             disabled={isSaving}
             accessibilityLabel="Save building"
@@ -180,12 +185,12 @@ const styles = StyleSheet.create({
     maxHeight: '70%',
   },
   sheet: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     borderWidth: 1,
     borderBottomWidth: 0,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
   },
   content: {
     padding: 20,
@@ -193,23 +198,23 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   title: {
-    color: '#e8e8f0',
+    color: '#F0F0F5',
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 4,
   },
   fieldLabel: {
-    color: '#9090cc',
+    color: '#808090',
     fontSize: 12,
     fontWeight: '600',
     marginTop: 4,
   },
   input: {
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
-    color: '#e8e8f0',
+    borderColor: '#1E1E26',
+    color: '#F0F0F5',
     fontSize: 15,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -228,24 +233,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
     minHeight: 36,
     justifyContent: 'center',
   },
-  categoryChipActive: {
-    backgroundColor: '#6c63ff22',
-    borderColor: '#6c63ff',
-  },
+  categoryChipActive: {},
   categoryLabel: {
-    color: '#8888aa',
+    color: '#606070',
     fontSize: 12,
     fontWeight: '600',
   },
-  categoryLabelActive: {
-    color: '#6c63ff',
-  },
+  categoryLabelActive: {},
   actions: {
     flexDirection: 'row',
     gap: 12,
@@ -255,17 +255,16 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     borderRadius: 10,
-    backgroundColor: '#2a2a3e',
+    backgroundColor: '#1E1E26',
     alignItems: 'center',
     minHeight: 44,
     justifyContent: 'center',
   },
-  discardLabel: { color: '#9090cc', fontSize: 15, fontWeight: '600' },
+  discardLabel: { color: '#808090', fontSize: 15, fontWeight: '600' },
   saveBtn: {
     flex: 2,
     paddingVertical: 14,
     borderRadius: 10,
-    backgroundColor: '#6c63ff',
     alignItems: 'center',
     minHeight: 44,
     justifyContent: 'center',

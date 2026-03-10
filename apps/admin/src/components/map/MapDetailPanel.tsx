@@ -102,7 +102,7 @@ export const MapDetailPanel = memo(function MapDetailPanel({ feature, detailCont
             accessibilityLabel="Close detail panel"
             accessibilityRole="button"
           >
-            <Ionicons name="close" size={22} color="#9090cc" />
+            <Ionicons name="close" size={22} color="#808090" />
           </Pressable>
         </View>
 
@@ -119,12 +119,12 @@ export const MapDetailPanel = memo(function MapDetailPanel({ feature, detailCont
 
 const styles = StyleSheet.create({
   background: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
   },
   handle: {
-    backgroundColor: '#4444aa',
+    backgroundColor: '#1A5F7A',
   },
   content: {
     flex: 1,
@@ -136,11 +136,11 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#2a2a3e',
+    borderBottomColor: '#1E1E26',
     gap: 12,
   },
   featureType: {
-    color: '#9090cc',
+    color: '#808090',
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   featureName: {
-    color: '#e8e8f0',
+    color: '#F0F0F5',
     fontSize: 18,
     fontWeight: '700',
     flex: 1,
@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#2a2a3e',
+    backgroundColor: '#1E1E26',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 2,

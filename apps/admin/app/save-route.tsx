@@ -36,6 +36,8 @@ import {
   type RouteSaveMetadata,
   type SaveStage,
 } from '../src/services/routeSaveService';
+import { tabColors } from '@echoecho/ui';
+import { SectionColorProvider, useSectionColor } from '../src/contexts/SectionColorContext';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -66,6 +68,15 @@ const STAGE_LABELS: Record<SaveStage, string> = {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function SaveRouteScreen() {
+  return (
+    <SectionColorProvider value={tabColors.routes}>
+      <SaveRouteScreenInner />
+    </SectionColorProvider>
+  );
+}
+
+function SaveRouteScreenInner() {
+  const accent = useSectionColor();
   const { session, clearSession } = useRecordingStore();
 
   // Form state
@@ -271,7 +282,7 @@ export default function SaveRouteScreen() {
         {/* ── Start building ────────────────────────────────────────────── */}
         <Text style={styles.label}>Start building *</Text>
         {buildingsLoading ? (
-          <ActivityIndicator style={styles.loader} color="#6c63ff" />
+          <ActivityIndicator style={styles.loader} color={accent} />
         ) : (
           <BuildingPicker
             value={startBuildingId}
@@ -285,7 +296,7 @@ export default function SaveRouteScreen() {
         {/* ── End building ──────────────────────────────────────────────── */}
         <Text style={styles.label}>End building *</Text>
         {buildingsLoading ? (
-          <ActivityIndicator style={styles.loader} color="#6c63ff" />
+          <ActivityIndicator style={styles.loader} color={accent} />
         ) : (
           <BuildingPicker
             value={endBuildingId}
@@ -393,7 +404,7 @@ export default function SaveRouteScreen() {
         {/* ── Save progress ─────────────────────────────────────────────── */}
         {saving && (
           <View style={styles.progressBox} accessibilityLiveRegion="polite">
-            <ActivityIndicator color="#6c63ff" />
+            <ActivityIndicator color={accent} />
             <Text style={styles.progressText}>{saveStageLabel}</Text>
           </View>
         )}
@@ -491,14 +502,14 @@ function BuildingPicker({ value, buildings, placeholder, onSelect, onNew }: Buil
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const C = {
-  bg:         '#0f0f1a',
-  surface:    '#1a1a2e',
+  bg:         '#0A0A0F',
+  surface:    '#111116',
   border:     '#2d2d4a',
-  accent:     '#6c63ff',
-  accentDim:  '#3d3878',
-  text:       '#f0f0ff',
+  accent:     tabColors.routes,
+  accentDim:  tabColors.routes + '88',
+  text:       '#F5F5FA',
   textMuted:  '#888',
-  error:      '#e53e3e',
+  error:      '#F06292',
   errorBg:    '#2d1515',
 };
 

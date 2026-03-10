@@ -6,9 +6,9 @@ interface Props {
 }
 
 function completionColor(percent: number): string {
-  if (percent >= 80) return '#22C55E';
-  if (percent >= 50) return '#F59E0B';
-  return '#EF4444';
+  if (percent >= 80) return '#81C784';
+  if (percent >= 50) return '#FFB74D';
+  return '#F06292';
 }
 
 export function CompletionRateList({ data }: Props) {
@@ -67,24 +67,24 @@ export function CompletionRateList({ data }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
     padding: 16,
     gap: 8,
   },
-  title: { color: '#e8e8f0', fontSize: 16, fontWeight: '700' },
-  subtitle: { color: '#8888aa', fontSize: 12 },
-  emptyText: { color: '#5555aa', fontSize: 13, paddingVertical: 16 },
+  title: { color: '#F0F0F5', fontSize: 16, fontWeight: '700' },
+  subtitle: { color: '#606070', fontSize: 12 },
+  emptyText: { color: '#404050', fontSize: 13, paddingVertical: 16 },
   headerRow: {
     flexDirection: 'row',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#2a2a3e',
+    borderBottomColor: '#1E1E26',
   },
   headerCell: {
-    color: '#5555aa',
+    color: '#404050',
     fontSize: 11,
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
   },
-  cell: { color: '#c0c0d8', fontSize: 13 },
+  cell: { color: '#C0C0C8', fontSize: 13 },
   separator: { height: 1, backgroundColor: '#1e1e38' },
   rateBadge: {
     width: 52,

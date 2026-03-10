@@ -83,7 +83,7 @@ export default function FavoritesScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.loadingState} accessibilityLiveRegion="polite">
-          <ActivityIndicator size="large" color="#6c63ff" accessibilityLabel="Loading your routes" />
+          <ActivityIndicator size="large" color="#4FC3F7" accessibilityLabel="Loading your routes" />
           <Text style={styles.loadingText}>Loading your routes…</Text>
         </View>
       </SafeAreaView>
@@ -223,7 +223,7 @@ function RouteItem({
         accessibilityHint="Double tap to start navigation to this destination"
       >
         <View style={styles.routeIcon}>
-          <Ionicons name="navigate" size={20} color="#6c63ff" />
+          <Ionicons name="navigate" size={20} color="#4FC3F7" />
         </View>
         <View style={styles.routeText}>
           <Text style={styles.routeName} numberOfLines={1}>
@@ -233,7 +233,7 @@ function RouteItem({
             {fromLabel} → {toLabel}
           </Text>
         </View>
-        <Ionicons name="chevron-forward" size={18} color="#4444aa" />
+        <Ionicons name="chevron-forward" size={18} color="#1A5F7A" />
       </Pressable>
 
       <FavoriteToggle
@@ -271,7 +271,7 @@ function FavoriteToggle({
       <Ionicons
         name={isFavorite ? 'star' : 'star-outline'}
         size={22}
-        color={isFavorite ? '#eab308' : '#4444aa'}
+        color={isFavorite ? '#FFD54F' : '#1A5F7A'}
       />
     </Pressable>
   );
@@ -298,7 +298,7 @@ function FavoritesEmpty() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0a14',
+    backgroundColor: '#060608',
   },
   listContent: {
     paddingBottom: 40,
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   loadingText: {
-    color: '#9090cc',
+    color: '#808090',
     fontSize: 16,
   },
   sectionHeader: {
@@ -322,7 +322,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sectionTitle: {
-    color: '#9090cc',
+    color: '#808090',
     fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -330,7 +330,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sectionCount: {
-    color: '#4444aa',
+    color: '#1A5F7A',
     fontSize: 13,
     fontWeight: '600',
   },
@@ -341,7 +341,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   clearBtnLabel: {
-    color: '#6666aa',
+    color: '#505060',
     fontSize: 13,
     fontWeight: '600',
   },
@@ -349,10 +349,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: 16,
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#2a2a4e',
+    borderColor: '#22222C',
     overflow: 'hidden',
   },
   routeMain: {
@@ -370,7 +370,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: '#1e1e44',
+    backgroundColor: '#16161C',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -379,12 +379,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   routeName: {
-    color: '#e0e0f8',
+    color: '#E0E0E8',
     fontSize: 16,
     fontWeight: '600',
   },
   routeBuildings: {
-    color: '#6666aa',
+    color: '#505060',
     fontSize: 13,
     fontWeight: '400',
   },
@@ -395,7 +395,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 60,
     borderLeftWidth: 1,
-    borderLeftColor: '#2a2a4e',
+    borderLeftColor: '#22222C',
   },
   favTogglePressed: { opacity: 0.7 },
   separator: { height: 8 },
@@ -404,10 +404,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
     paddingVertical: 16,
     paddingHorizontal: 20,
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#2a2a4e',
+    borderColor: '#22222C',
     borderStyle: 'dashed',
   },
   emptyHistory: {
@@ -416,7 +416,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyText: {
-    color: '#4444aa',
+    color: '#1A5F7A',
     fontSize: 15,
     textAlign: 'center',
     lineHeight: 22,

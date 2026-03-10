@@ -36,7 +36,7 @@ export function WaypointEditToolbar({
           accessibilityLabel="Cancel waypoint editing"
           accessibilityRole="button"
         >
-          <Ionicons name="close" size={18} color="#ef4444" />
+          <Ionicons name="close" size={18} color="#F06292" />
           <Text style={styles.cancelLabel}>Cancel</Text>
         </Pressable>
 
@@ -46,7 +46,7 @@ export function WaypointEditToolbar({
           accessibilityLabel="Open reorder list"
           accessibilityRole="button"
         >
-          <Ionicons name="swap-vertical" size={18} color="#e8e8f0" />
+          <Ionicons name="swap-vertical" size={18} color="#F0F0F5" />
           <Text style={styles.reorderLabel}>Reorder</Text>
         </Pressable>
 
@@ -73,15 +73,15 @@ export function WaypointEditToolbar({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#1a1a2eee',
+    backgroundColor: '#111116ee',
     borderRadius: 14,
     padding: 12,
     gap: 10,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
   },
   hint: {
-    color: '#9090cc',
+    color: '#808090',
     fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
@@ -103,19 +103,19 @@ const styles = StyleSheet.create({
   btnPressed: { opacity: 0.75 },
   btnDisabled: { opacity: 0.4 },
   cancelBtn: {
-    backgroundColor: '#ef444422',
+    backgroundColor: '#F0629222',
     borderWidth: 1,
-    borderColor: '#ef444444',
+    borderColor: '#F0629244',
   },
-  cancelLabel: { color: '#ef4444', fontSize: 13, fontWeight: '600' },
+  cancelLabel: { color: '#F06292', fontSize: 13, fontWeight: '600' },
   reorderBtn: {
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
   },
-  reorderLabel: { color: '#e8e8f0', fontSize: 13, fontWeight: '600' },
+  reorderLabel: { color: '#F0F0F5', fontSize: 13, fontWeight: '600' },
   saveBtn: {
-    backgroundColor: '#22C55E',
+    backgroundColor: '#81C784',
   },
   saveLabel: { color: '#fff', fontSize: 13, fontWeight: '700' },
   saveLabelDisabled: { color: '#555577' },

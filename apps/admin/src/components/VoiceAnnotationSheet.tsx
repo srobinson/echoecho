@@ -23,6 +23,7 @@ import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useVoiceAnnotation } from '../hooks/useVoiceAnnotation';
+import { useSectionColor } from '../contexts/SectionColorContext';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -50,6 +51,7 @@ export const VoiceAnnotationSheet = forwardRef<BottomSheet, VoiceAnnotationSheet
       reRecord,
       openMicSettings,
     } = useVoiceAnnotation();
+    const accent = useSectionColor();
 
     const handleSave = useCallback(async () => {
       const result = await confirm(waypointLocalId);
@@ -114,12 +116,12 @@ export const VoiceAnnotationSheet = forwardRef<BottomSheet, VoiceAnnotationSheet
           {/* Error state */}
           {state.phase === 'error' && (
             <View style={styles.errorContainer}>
-              <Ionicons name="alert-circle" size={32} color="#e53e3e" />
+              <Ionicons name="alert-circle" size={32} color="#F06292" />
               <Text style={styles.errorText}>{state.errorMessage}</Text>
               {state.errorMessage?.includes('permission') ? (
-                <ActionButton label="Open Settings" onPress={handlePermissionError} color="#6c63ff" />
+                <ActionButton label="Open Settings" onPress={handlePermissionError} color={accent} />
               ) : (
-                <ActionButton label="Try Again" onPress={() => void startRecording()} color="#6c63ff" />
+                <ActionButton label="Try Again" onPress={() => void startRecording()} color={accent} />
               )}
             </View>
           )}
@@ -128,7 +130,7 @@ export const VoiceAnnotationSheet = forwardRef<BottomSheet, VoiceAnnotationSheet
           {state.phase === 'idle' && (
             <View style={styles.centeredContent}>
               <Pressable
-                style={styles.micButton}
+                style={[styles.micButton, { backgroundColor: accent }]}
                 onPress={() => void startRecording()}
                 accessibilityLabel="Record voice annotation"
                 accessibilityRole="button"
@@ -178,8 +180,8 @@ export const VoiceAnnotationSheet = forwardRef<BottomSheet, VoiceAnnotationSheet
 
               <View style={styles.actionRow}>
                 <ActionButton label="Re-record" onPress={reRecord} color="#718096" />
-                <ActionButton label="Discard" onPress={handleDiscard} color="#e53e3e" />
-                <ActionButton label="Save" onPress={() => void handleSave()} color="#48bb78" />
+                <ActionButton label="Discard" onPress={handleDiscard} color="#F06292" />
+                <ActionButton label="Save" onPress={() => void handleSave()} color="#66BB6A" />
               </View>
             </View>
           )}
@@ -187,7 +189,7 @@ export const VoiceAnnotationSheet = forwardRef<BottomSheet, VoiceAnnotationSheet
           {/* Uploading */}
           {state.phase === 'uploading' && (
             <View style={styles.centeredContent} accessibilityLiveRegion="polite">
-              <ActivityIndicator size="large" color="#6c63ff" accessibilityLabel="Saving annotation" />
+              <ActivityIndicator size="large" color={accent} accessibilityLabel="Saving annotation" />
               <Text style={styles.hint}>Saving annotation...</Text>
             </View>
           )}
@@ -225,11 +227,11 @@ function ActionButton({
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  sheetBackground: { backgroundColor: '#1a1a2e' },
+  sheetBackground: { backgroundColor: '#111116' },
   handleIndicator: { backgroundColor: '#4a4a6a' },
   container: { flex: 1, paddingHorizontal: 20, paddingTop: 8 },
   title: {
-    color: '#e8e8f0',
+    color: '#F0F0F5',
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 16,
@@ -240,23 +242,22 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#6c63ff',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  micButtonActive: { backgroundColor: '#e53e3e' },
-  hint: { color: '#8888aa', fontSize: 14 },
-  limitText: { color: '#e53e3e', fontSize: 14, fontWeight: '600' },
+  micButtonActive: { backgroundColor: '#F06292' },
+  hint: { color: '#606070', fontSize: 14 },
+  limitText: { color: '#F06292', fontSize: 14, fontWeight: '600' },
   transcriptBox: {
-    backgroundColor: '#0f0f1a',
+    backgroundColor: '#0A0A0F',
     borderRadius: 8,
     padding: 12,
     width: '100%',
     minHeight: 60,
   },
-  transcriptText: { color: '#e8e8f0', fontSize: 15, lineHeight: 22 },
+  transcriptText: { color: '#F0F0F5', fontSize: 15, lineHeight: 22 },
   previewContainer: { gap: 16 },
-  previewLabel: { color: '#8888aa', fontSize: 13, textAlign: 'center' },
+  previewLabel: { color: '#606070', fontSize: 13, textAlign: 'center' },
   actionRow: { flexDirection: 'row', gap: 10, justifyContent: 'center', flexWrap: 'wrap' },
   actionBtn: {
     borderRadius: 10,
@@ -286,5 +287,5 @@ const styles = StyleSheet.create({
   },
   warningText: { color: '#fff', fontSize: 13, flex: 1 },
   errorContainer: { alignItems: 'center', gap: 12, paddingTop: 12 },
-  errorText: { color: '#e8e8f0', fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  errorText: { color: '#F0F0F5', fontSize: 14, textAlign: 'center', lineHeight: 20 },
 });

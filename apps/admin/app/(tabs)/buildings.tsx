@@ -17,6 +17,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCampusStore } from '../../src/stores/campusStore';
 import { supabase } from '../../src/lib/supabase';
 import type { Building, BuildingCategory } from '@echoecho/shared';
+import { tabColors } from '@echoecho/ui';
+import { SectionColorProvider, useSectionColor } from '../../src/contexts/SectionColorContext';
 
 type FilterCategory = 'all' | BuildingCategory;
 
@@ -44,6 +46,15 @@ const CATEGORY_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
 };
 
 export default function BuildingsScreen() {
+  return (
+    <SectionColorProvider value={tabColors.buildings}>
+      <BuildingsScreenInner />
+    </SectionColorProvider>
+  );
+}
+
+function BuildingsScreenInner() {
+  const accent = useSectionColor();
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -108,7 +119,7 @@ export default function BuildingsScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.centered}>
-          <Ionicons name="business-outline" size={64} color="#2a2a3e" />
+          <Ionicons name="business-outline" size={64} color="#1E1E26" />
           <Text style={styles.emptyTitle}>No campus selected</Text>
           <Text style={styles.emptyBody}>
             Select a campus in Settings to manage buildings.
@@ -121,13 +132,13 @@ export default function BuildingsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.searchContainer}>
-        <Ionicons name="search" size={18} color="#8888aa" style={styles.searchIcon} />
+        <Ionicons name="search" size={18} color="#606070" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           value={searchQuery}
           onChangeText={handleSearch}
           placeholder="Search buildings..."
-          placeholderTextColor="#5555aa"
+          placeholderTextColor="#404050"
           accessibilityLabel="Search buildings by name"
           accessibilityHint="Results update as you type"
           returnKeyType="search"
@@ -139,7 +150,7 @@ export default function BuildingsScreen() {
             accessibilityRole="button"
             style={styles.clearBtn}
           >
-            <Ionicons name="close-circle" size={18} color="#8888aa" />
+            <Ionicons name="close-circle" size={18} color="#606070" />
           </Pressable>
         )}
       </View>
@@ -152,7 +163,7 @@ export default function BuildingsScreen() {
         contentContainerStyle={styles.filterRow}
         renderItem={({ item: f }) => (
           <Pressable
-            style={[styles.filterChip, categoryFilter === f.value && styles.filterChipActive]}
+            style={[styles.filterChip, categoryFilter === f.value && { backgroundColor: accent + '22', borderColor: accent }]}
             onPress={() => setCategoryFilter(f.value)}
             accessibilityLabel={`Filter: ${f.label}`}
             accessibilityRole="radio"
@@ -160,7 +171,7 @@ export default function BuildingsScreen() {
           >
             <Text style={[
               styles.filterLabel,
-              categoryFilter === f.value && styles.filterLabelActive,
+              categoryFilter === f.value && { color: accent },
             ]}>
               {f.label}
             </Text>
@@ -170,21 +181,21 @@ export default function BuildingsScreen() {
 
       {error && (
         <View style={styles.errorBanner}>
-          <Ionicons name="alert-circle" size={16} color="#F87171" />
+          <Ionicons name="alert-circle" size={16} color="#F06292" />
           <Text style={styles.errorText}>{error}</Text>
           <Pressable
             onPress={() => void fetchBuildings(searchQuery, categoryFilter)}
             accessibilityLabel="Retry loading buildings"
             accessibilityRole="button"
           >
-            <Text style={styles.retryText}>Retry</Text>
+            <Text style={[styles.retryText, { color: accent }]}>Retry</Text>
           </Pressable>
         </View>
       )}
 
       {isLoading ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#6c63ff" />
+          <ActivityIndicator size="large" color={accent} />
         </View>
       ) : (
         <FlatList
@@ -208,13 +219,14 @@ function Separator() {
 }
 
 const BuildingCard = memo(function BuildingCard({ building }: { building: Building }) {
+  const accent = useSectionColor();
   const icon = CATEGORY_ICON[building.category] ?? 'business-outline';
   const entranceCount = building.entrances?.length ?? 0;
 
   return (
     <View style={styles.card}>
-      <View style={styles.cardIconContainer}>
-        <Ionicons name={icon} size={28} color="#6c63ff" />
+      <View style={[styles.cardIconContainer, { backgroundColor: accent + '14' }]}>
+        <Ionicons name={icon} size={28} color={accent} />
       </View>
       <View style={styles.cardContent}>
         <Text style={styles.cardTitle} numberOfLines={1}>
@@ -226,18 +238,18 @@ const BuildingCard = memo(function BuildingCard({ building }: { building: Buildi
           </Text>
         )}
         <View style={styles.cardMeta}>
-          <View style={styles.categoryBadge}>
-            <Text style={styles.categoryText}>{building.category}</Text>
+          <View style={[styles.categoryBadge, { backgroundColor: accent + '22' }]}>
+            <Text style={[styles.categoryText, { color: accent }]}>{building.category}</Text>
           </View>
           <View style={styles.metaItem}>
-            <Ionicons name="enter-outline" size={14} color="#8888aa" />
+            <Ionicons name="enter-outline" size={14} color="#606070" />
             <Text style={styles.metaText}>
               {entranceCount} {entranceCount === 1 ? 'entrance' : 'entrances'}
             </Text>
           </View>
           {building.floor != null && (
             <View style={styles.metaItem}>
-              <Ionicons name="layers-outline" size={14} color="#8888aa" />
+              <Ionicons name="layers-outline" size={14} color="#606070" />
               <Text style={styles.metaText}>
                 {building.floor} {building.floor === 1 ? 'floor' : 'floors'}
               </Text>
@@ -257,7 +269,7 @@ const BuildingCard = memo(function BuildingCard({ building }: { building: Buildi
 function EmptyState({ hasFilter }: { hasFilter: boolean }) {
   return (
     <View style={styles.empty}>
-      <Ionicons name="business-outline" size={64} color="#2a2a3e" />
+      <Ionicons name="business-outline" size={64} color="#1E1E26" />
       <Text style={styles.emptyTitle}>
         {hasFilter ? 'No matching buildings' : 'No buildings yet'}
       </Text>
@@ -271,24 +283,24 @@ function EmptyState({ hasFilter }: { hasFilter: boolean }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f0f1a' },
+  container: { flex: 1, backgroundColor: '#0A0A0F' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12, padding: 24 },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderRadius: 12,
     marginHorizontal: 16,
     marginTop: 12,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
     minHeight: 44,
   },
   searchIcon: { marginRight: 8 },
   searchInput: {
     flex: 1,
-    color: '#e8e8f0',
+    color: '#F0F0F5',
     fontSize: 15,
     paddingVertical: 10,
   },
@@ -302,25 +314,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
     minHeight: 36,
     justifyContent: 'center',
   },
-  filterChipActive: {
-    backgroundColor: '#6c63ff22',
-    borderColor: '#6c63ff',
-  },
-  filterLabel: { color: '#8888aa', fontSize: 13, fontWeight: '600' },
-  filterLabelActive: { color: '#6c63ff' },
+  filterChipActive: {},
+  filterLabel: { color: '#606070', fontSize: 13, fontWeight: '600' },
+  filterLabelActive: {},
   list: { padding: 16, paddingBottom: 32 },
   separator: { height: 8 },
   card: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
     flexDirection: 'row',
     padding: 14,
     gap: 12,
@@ -329,18 +338,17 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 12,
-    backgroundColor: '#6c63ff14',
     justifyContent: 'center',
     alignItems: 'center',
   },
   cardContent: { flex: 1, gap: 4 },
   cardTitle: {
-    color: '#e8e8f0',
+    color: '#F0F0F5',
     fontSize: 16,
     fontWeight: '700',
   },
   cardShortName: {
-    color: '#8888aa',
+    color: '#606070',
     fontSize: 12,
   },
   cardMeta: { flexDirection: 'row', gap: 10, alignItems: 'center', flexWrap: 'wrap' },
@@ -348,12 +356,11 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    backgroundColor: '#6c63ff22',
   },
-  categoryText: { color: '#6c63ff', fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
+  categoryText: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaText: { color: '#8888aa', fontSize: 12 },
-  cardDescription: { color: '#6888aa', fontSize: 13, marginTop: 2 },
+  metaText: { color: '#606070', fontSize: 12 },
+  cardDescription: { color: '#606070', fontSize: 13, marginTop: 2 },
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -362,14 +369,14 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#2a1a1a',
+    backgroundColor: '#1A080E',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#4a2020',
+    borderColor: '#2A1028',
   },
-  errorText: { color: '#F87171', fontSize: 13, flex: 1 },
-  retryText: { color: '#6c63ff', fontSize: 13, fontWeight: '600' },
+  errorText: { color: '#F06292', fontSize: 13, flex: 1 },
+  retryText: { fontSize: 13, fontWeight: '600' },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 80, gap: 12 },
-  emptyTitle: { color: '#8888aa', fontSize: 20, fontWeight: '700' },
-  emptyBody: { color: '#5555aa', fontSize: 14, textAlign: 'center', maxWidth: 280 },
+  emptyTitle: { color: '#606070', fontSize: 20, fontWeight: '700' },
+  emptyBody: { color: '#404050', fontSize: 14, textAlign: 'center', maxWidth: 280 },
 });

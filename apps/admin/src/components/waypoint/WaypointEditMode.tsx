@@ -11,6 +11,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import MapboxGL from '@rnmapbox/maps';
 import type { Feature, FeatureCollection, LineString } from 'geojson';
 import type { Waypoint } from '@echoecho/shared';
+import { useSectionColor } from '../../contexts/SectionColorContext';
 
 interface Props {
   waypoints: Waypoint[];
@@ -45,6 +46,7 @@ export const WaypointEditMode = memo(function WaypointEditMode({
   onWaypointDragEnd,
   onSegmentPress,
 }: Props) {
+  const accent = useSectionColor();
   const routeLine: FeatureCollection<LineString> = {
     type: 'FeatureCollection',
     features: waypoints.length >= 2
@@ -83,7 +85,7 @@ export const WaypointEditMode = memo(function WaypointEditMode({
         <MapboxGL.LineLayer
           id={ROUTE_LINE_LAYER_ID}
           style={{
-            lineColor: '#6c63ff',
+            lineColor: accent,
             lineWidth: 4,
             lineDasharray: [3, 2],
             lineOpacity: 0.7,
@@ -119,6 +121,7 @@ export const WaypointEditMode = memo(function WaypointEditMode({
           <View
             style={[
               styles.marker,
+              { borderColor: accent },
               selectedIndex === i && styles.markerSelected,
             ]}
             accessible
@@ -128,7 +131,7 @@ export const WaypointEditMode = memo(function WaypointEditMode({
             <Text style={styles.markerEmoji}>
               {TYPE_EMOJI[w.type] ?? '⬤'}
             </Text>
-            <Text style={styles.markerIndex}>{i + 1}</Text>
+            <Text style={[styles.markerIndex, { backgroundColor: accent }]}>{i + 1}</Text>
           </View>
         </MapboxGL.PointAnnotation>
       ))}
@@ -141,15 +144,14 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#1a1a2eee',
+    backgroundColor: '#111116ee',
     borderWidth: 2,
-    borderColor: '#6c63ff',
     alignItems: 'center',
     justifyContent: 'center',
   },
   markerSelected: {
-    borderColor: '#22C55E',
-    backgroundColor: '#22C55E22',
+    borderColor: '#81C784',
+    backgroundColor: '#81C78422',
     transform: [{ scale: 1.15 }],
   },
   markerEmoji: { fontSize: 14 },
@@ -157,7 +159,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -8,
     right: -8,
-    backgroundColor: '#6c63ff',
     color: '#fff',
     fontSize: 9,
     fontWeight: '800',

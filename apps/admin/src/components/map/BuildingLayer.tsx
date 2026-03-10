@@ -15,6 +15,7 @@ import { memo } from 'react';
 import MapboxGL from '@rnmapbox/maps';
 import type { Feature, FeatureCollection, Polygon, Point } from 'geojson';
 import type { Building } from '@echoecho/shared';
+import { useSectionColor } from '../../contexts/SectionColorContext';
 
 interface Props {
   buildings: Building[];
@@ -27,6 +28,7 @@ const LINE_LAYER_ID = 'admin-buildings-line';
 const LABEL_LAYER_ID = 'admin-buildings-labels';
 
 export const BuildingLayer = memo(function BuildingLayer({ buildings, onBuildingPress }: Props) {
+  const accent = useSectionColor();
   const featureCollection: FeatureCollection<Polygon> = {
     type: 'FeatureCollection',
     features: buildings.map((b): Feature<Polygon> => ({
@@ -75,14 +77,14 @@ export const BuildingLayer = memo(function BuildingLayer({ buildings, onBuilding
         <MapboxGL.FillLayer
           id={FILL_LAYER_ID}
           style={{
-            fillColor: '#6c63ff',
+            fillColor: accent,
             fillOpacity: 0.15,
           }}
         />
         <MapboxGL.LineLayer
           id={LINE_LAYER_ID}
           style={{
-            lineColor: '#6c63ff',
+            lineColor: accent,
             lineWidth: 2,
             lineOpacity: 0.7,
           }}
@@ -95,8 +97,8 @@ export const BuildingLayer = memo(function BuildingLayer({ buildings, onBuilding
           style={{
             textField: ['get', 'name'],
             textSize: 12,
-            textColor: '#e8e8f0',
-            textHaloColor: '#0f0f1a',
+            textColor: '#F0F0F5',
+            textHaloColor: '#0A0A0F',
             textHaloWidth: 1.5,
             textAnchor: 'center',
             textMaxWidth: 8,

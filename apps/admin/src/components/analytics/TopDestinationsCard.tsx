@@ -1,6 +1,7 @@
 import { View, Text, FlatList, StyleSheet, type DimensionValue } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { TopDestination } from '@echoecho/shared';
+import { useSectionColor } from '../../contexts/SectionColorContext';
 
 interface Props {
   data: TopDestination[];
@@ -9,6 +10,7 @@ interface Props {
 const MEDAL_COLORS = ['#FFD700', '#C0C0C0', '#CD7F32'];
 
 export function TopDestinationsCard({ data }: Props) {
+  const accent = useSectionColor();
   if (data.length === 0) {
     return (
       <View style={styles.card}>
@@ -49,7 +51,7 @@ export function TopDestinationsCard({ data }: Props) {
               <View style={styles.nameCol}>
                 <Text style={styles.nameText} numberOfLines={1}>{item.name}</Text>
                 <View style={styles.barTrack}>
-                  <View style={[styles.barFill, { width: barWidth }]} />
+                  <View style={[styles.barFill, { width: barWidth, backgroundColor: accent }]} />
                 </View>
               </View>
               <Text style={styles.countText}>{item.count}</Text>
@@ -64,16 +66,16 @@ export function TopDestinationsCard({ data }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
     padding: 16,
     gap: 8,
   },
-  title: { color: '#e8e8f0', fontSize: 16, fontWeight: '700' },
-  subtitle: { color: '#8888aa', fontSize: 12 },
-  emptyText: { color: '#5555aa', fontSize: 13, paddingVertical: 16 },
+  title: { color: '#F0F0F5', fontSize: 16, fontWeight: '700' },
+  subtitle: { color: '#606070', fontSize: 12 },
+  emptyText: { color: '#404050', fontSize: 13, paddingVertical: 16 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -81,16 +83,16 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   rankCol: { width: 28, alignItems: 'center' },
-  rankText: { color: '#5555aa', fontSize: 14, fontWeight: '700' },
+  rankText: { color: '#404050', fontSize: 14, fontWeight: '700' },
   nameCol: { flex: 1, gap: 4 },
-  nameText: { color: '#c0c0d8', fontSize: 14 },
+  nameText: { color: '#C0C0C8', fontSize: 14 },
   barTrack: {
     height: 4,
-    backgroundColor: '#22223a',
+    backgroundColor: '#18181F',
     borderRadius: 2,
     overflow: 'hidden',
   },
-  barFill: { height: 4, borderRadius: 2, backgroundColor: '#6c63ff' },
-  countText: { color: '#8888aa', fontSize: 13, fontWeight: '600', width: 40, textAlign: 'right' },
+  barFill: { height: 4, borderRadius: 2 },
+  countText: { color: '#606070', fontSize: 13, fontWeight: '600', width: 40, textAlign: 'right' },
   separator: { height: 1, backgroundColor: '#1e1e38' },
 });

@@ -3,21 +3,24 @@ import { Ionicons } from '@expo/vector-icons';
 import { useCampusStore } from '../../src/stores/campusStore';
 import { useAuthStore } from '../../src/stores/authStore';
 import { CampusGateScreen } from '../../src/components/CampusGateScreen';
+import { tabColors } from '@echoecho/ui';
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
 function TabIcon({
   name,
   focused,
+  color,
 }: {
   name: IoniconsName;
   focused: boolean;
+  color: string;
 }) {
   return (
     <Ionicons
       name={focused ? name : (`${name}-outline` as IoniconsName)}
       size={24}
-      color={focused ? '#6c63ff' : '#8888aa'}
+      color={color}
     />
   );
 }
@@ -34,13 +37,12 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         tabBarStyle: {
-          backgroundColor: '#1a1a2e',
-          borderTopColor: '#2a2a3e',
+          backgroundColor: '#111116',
+          borderTopColor: '#1E1E26',
         },
-        tabBarActiveTintColor: '#6c63ff',
-        tabBarInactiveTintColor: '#8888aa',
-        headerStyle: { backgroundColor: '#1a1a2e' },
-        headerTintColor: '#e8e8f0',
+        tabBarInactiveTintColor: '#606070',
+        headerStyle: { backgroundColor: '#111116' },
+        headerTintColor: '#F0F0F5',
         headerTitleStyle: { fontWeight: '700' },
       }}
     >
@@ -48,8 +50,9 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: 'Map',
-          tabBarIcon: ({ focused }: { focused: boolean }) => (
-            <TabIcon name="map" focused={focused} />
+          tabBarActiveTintColor: tabColors.map,
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name="map" focused={focused} color={color} />
           ),
         }}
       />
@@ -57,8 +60,9 @@ export default function TabsLayout() {
         name="routes"
         options={{
           title: 'Routes',
-          tabBarIcon: ({ focused }: { focused: boolean }) => (
-            <TabIcon name="navigate" focused={focused} />
+          tabBarActiveTintColor: tabColors.routes,
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name="navigate" focused={focused} color={color} />
           ),
         }}
       />
@@ -66,8 +70,9 @@ export default function TabsLayout() {
         name="buildings"
         options={{
           title: 'Buildings',
-          tabBarIcon: ({ focused }: { focused: boolean }) => (
-            <TabIcon name="business" focused={focused} />
+          tabBarActiveTintColor: tabColors.buildings,
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name="business" focused={focused} color={color} />
           ),
         }}
       />
@@ -75,8 +80,9 @@ export default function TabsLayout() {
         name="hazards"
         options={{
           title: 'Hazards',
-          tabBarIcon: ({ focused }: { focused: boolean }) => (
-            <TabIcon name="warning" focused={focused} />
+          tabBarActiveTintColor: tabColors.hazards,
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name="warning" focused={focused} color={color} />
           ),
         }}
       />
@@ -84,8 +90,9 @@ export default function TabsLayout() {
         name="analytics"
         options={{
           title: 'Analytics',
-          tabBarIcon: ({ focused }: { focused: boolean }) => (
-            <TabIcon name="analytics" focused={focused} />
+          tabBarActiveTintColor: tabColors.analytics,
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name="analytics" focused={focused} color={color} />
           ),
         }}
       />
@@ -93,8 +100,9 @@ export default function TabsLayout() {
         name="settings"
         options={{
           title: 'Settings',
-          tabBarIcon: ({ focused }: { focused: boolean }) => (
-            <TabIcon name="settings" focused={focused} />
+          tabBarActiveTintColor: tabColors.settings,
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name="settings" focused={focused} color={color} />
           ),
         }}
       />

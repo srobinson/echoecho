@@ -33,6 +33,9 @@ import * as player from '../src/services/hapticPatternPlayer';
 import { useLowPowerMode } from '../src/hooks/useLowPowerMode';
 import { useTrialLog } from '../src/hooks/useTrialLog';
 
+import { tabColors } from '@echoecho/ui';
+import { SectionColorProvider, useSectionColor } from '../src/contexts/SectionColorContext';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Pattern scaling
 // ─────────────────────────────────────────────────────────────────────────────
@@ -102,6 +105,7 @@ function ScaleControl({
   value: number;
   onChange: (v: number) => void;
 }) {
+  const accent = useSectionColor();
   const idx = SCALE_STEPS.indexOf(value);
   const dec = () => idx > 0 && onChange(SCALE_STEPS[idx - 1]);
   const inc = () => idx < SCALE_STEPS.length - 1 && onChange(SCALE_STEPS[idx + 1]);
@@ -111,12 +115,12 @@ function ScaleControl({
       <Text style={scaleStyles.label}>{label}</Text>
       <View style={scaleStyles.controls}>
         <Pressable
-          style={({ pressed }) => [scaleStyles.btn, pressed && { opacity: 0.6 }]}
+          style={({ pressed }) => [scaleStyles.btn, { borderColor: accent }, pressed && { opacity: 0.6 }]}
           onPress={dec}
           accessibilityRole="button"
           accessibilityLabel={`Decrease ${label}`}
         >
-          <Text style={scaleStyles.btnText}>−</Text>
+          <Text style={[scaleStyles.btnText, { color: accent }]}>−</Text>
         </Pressable>
         <Text
           style={scaleStyles.value}
@@ -125,12 +129,12 @@ function ScaleControl({
           {value.toFixed(1)}×
         </Text>
         <Pressable
-          style={({ pressed }) => [scaleStyles.btn, pressed && { opacity: 0.6 }]}
+          style={({ pressed }) => [scaleStyles.btn, { borderColor: accent }, pressed && { opacity: 0.6 }]}
           onPress={inc}
           accessibilityRole="button"
           accessibilityLabel={`Increase ${label}`}
         >
-          <Text style={scaleStyles.btnText}>+</Text>
+          <Text style={[scaleStyles.btnText, { color: accent }]}>+</Text>
         </Pressable>
       </View>
     </View>
@@ -144,20 +148,19 @@ const scaleStyles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 4,
   },
-  label: { color: '#b0b0d0', fontSize: 13, fontWeight: '600', flex: 1 },
+  label: { color: '#A8A8B8', fontSize: 13, fontWeight: '600', flex: 1 },
   controls: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   btn: {
     width: 36,
     height: 36,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#6c63ff',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1e1a3e',
+    backgroundColor: '#16161C',
   },
-  btnText: { color: '#a78bfa', fontSize: 20, fontWeight: '700', lineHeight: 24 },
-  value: { color: '#e8e8f0', fontWeight: '700', fontSize: 16, minWidth: 40, textAlign: 'center' },
+  btnText: { fontSize: 20, fontWeight: '700', lineHeight: 24 },
+  value: { color: '#F0F0F5', fontWeight: '700', fontSize: 16, minWidth: 40, textAlign: 'center' },
 });
 
 function LowPowerBanner() {
@@ -165,7 +168,7 @@ function LowPowerBanner() {
   if (!lowPower) return null;
   return (
     <View style={styles.banner} accessibilityRole="alert" accessibilityLiveRegion="assertive">
-      <Ionicons name="warning-outline" size={18} color="#1a1a00" />
+      <Ionicons name="warning-outline" size={18} color="#181808" />
       <Text style={styles.bannerText}>
         Low Power Mode is ON — iOS Taptic Engine is silenced. Results will be null. Disable Low Power Mode before testing.
       </Text>
@@ -182,15 +185,16 @@ function SchemeTab({
   active: boolean;
   onPress: () => void;
 }) {
+  const accent = useSectionColor();
   return (
     <Pressable
-      style={[styles.schemeTab, active && styles.schemeTabActive]}
+      style={[styles.schemeTab, active && { borderColor: accent, backgroundColor: '#16161C' }]}
       onPress={onPress}
       accessibilityRole="tab"
       accessibilityState={{ selected: active }}
       accessibilityLabel={`Scheme ${scheme.id}: ${scheme.name}`}
     >
-      <Text style={[styles.schemeTabId, active && styles.schemeTabIdActive]}>
+      <Text style={[styles.schemeTabId, active && { color: accent }]}>
         S{scheme.id}
       </Text>
       <Text style={[styles.schemeTabName, active && styles.schemeTabNameActive]}>
@@ -205,6 +209,15 @@ function SchemeTab({
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function HapticLabScreen() {
+  return (
+    <SectionColorProvider value={tabColors.map}>
+      <HapticLabScreenInner />
+    </SectionColorProvider>
+  );
+}
+
+function HapticLabScreenInner() {
+  const accent = useSectionColor();
   const [schemeIndex, setSchemeIndex] = useState(0);
   const [lastSchemeIndex, setLastSchemeIndex] = useState(0);
   const [durationScale, setDurationScale] = useState(1.0);
@@ -361,7 +374,7 @@ export default function HapticLabScreen() {
                 key={cue}
                 style={({ pressed }) => [
                   styles.cueButton,
-                  pendingCue?.cueName === cue && styles.cueButtonPending,
+                  pendingCue?.cueName === cue && { borderColor: accent, backgroundColor: '#16161C' },
                   pressed && styles.cueButtonPressed,
                 ]}
                 onPress={() => fireScaled(pattern, cue)}
@@ -399,7 +412,7 @@ export default function HapticLabScreen() {
               accessibilityRole="button"
               accessibilityLabel="Stop proximity loop"
             >
-              <Ionicons name="stop-circle-outline" size={18} color="#ff6b6b" />
+              <Ionicons name="stop-circle-outline" size={18} color="#F06292" />
               <Text style={styles.stopButtonText}>Stop Loop</Text>
             </Pressable>
             <Text style={styles.hint}>
@@ -430,14 +443,14 @@ export default function HapticLabScreen() {
                 {(['auto', 'light', 'medium', 'heavy'] as IntensityOverride[]).map((v) => (
                   <Pressable
                     key={v}
-                    style={[styles.intensityChip, intensityOverride === v && styles.intensityChipActive]}
+                    style={[styles.intensityChip, intensityOverride === v && { borderColor: accent, backgroundColor: '#16161C' }]}
                     onPress={() => setIntensityOverride(v)}
                     accessibilityRole="radio"
                     accessibilityState={{ checked: intensityOverride === v }}
                     accessibilityLabel={v}
                   >
                     <Text
-                      style={[styles.intensityChipText, intensityOverride === v && styles.intensityChipTextActive]}
+                      style={[styles.intensityChipText, intensityOverride === v && { color: accent, fontWeight: '700' }]}
                     >
                       {v.charAt(0).toUpperCase() + v.slice(1)}
                     </Text>
@@ -471,7 +484,7 @@ export default function HapticLabScreen() {
               <Ionicons
                 name={sttActive ? 'mic' : 'mic-off'}
                 size={18}
-                color={sttActive ? '#1a1a00' : '#e8e8f0'}
+                color={sttActive ? '#181808' : '#F0F0F5'}
               />
               <Text style={[styles.sttButtonText, sttActive && styles.sttButtonTextActive]}>
                 {sttActive ? 'STT Active (tap to deactivate)' : 'STT Inactive (tap to activate)'}
@@ -479,13 +492,13 @@ export default function HapticLabScreen() {
             </Pressable>
 
             <Pressable
-              style={({ pressed }) => [styles.queueButton, pressed && { opacity: 0.7 }]}
+              style={({ pressed }) => [styles.queueButton, { borderColor: accent }, pressed && { opacity: 0.7 }]}
               onPress={fireWhileSTTActive}
               accessibilityRole="button"
               accessibilityLabel="Queue pattern behind STT mutex"
             >
-              <Ionicons name="layers-outline" size={16} color="#6c63ff" />
-              <Text style={styles.queueButtonText}>Queue Pattern</Text>
+              <Ionicons name="layers-outline" size={16} color={accent} />
+              <Text style={[styles.queueButtonText, { color: accent }]}>Queue Pattern</Text>
             </Pressable>
           </View>
 
@@ -532,13 +545,13 @@ export default function HapticLabScreen() {
             {([1, 2, 3, 4, 5] as const).map((n) => (
               <Pressable
                 key={n}
-                style={[styles.ratingChip, rating === n && styles.ratingChipActive]}
+                style={[styles.ratingChip, rating === n && { borderColor: accent, backgroundColor: '#16161C' }]}
                 onPress={() => setRating(n)}
                 accessibilityRole="radio"
                 accessibilityState={{ checked: rating === n }}
                 accessibilityLabel={`Rating ${n} out of 5`}
               >
-                <Text style={[styles.ratingChipText, rating === n && styles.ratingChipTextActive]}>
+                <Text style={[styles.ratingChipText, rating === n && { color: accent }]}>
                   {n}
                 </Text>
               </Pressable>
@@ -548,7 +561,7 @@ export default function HapticLabScreen() {
           <TextInput
             style={styles.notesInput}
             placeholder="Optional notes..."
-            placeholderTextColor="#5555aa"
+            placeholderTextColor="#404050"
             value={trialNotes}
             onChangeText={setTrialNotes}
             multiline
@@ -556,13 +569,13 @@ export default function HapticLabScreen() {
           />
 
           <Pressable
-            style={({ pressed }) => [styles.logButton, pressed && { opacity: 0.8 }, !pendingCue && styles.logButtonDisabled]}
+            style={({ pressed }) => [styles.logButton, { backgroundColor: accent }, pressed && { opacity: 0.8 }, !pendingCue && styles.logButtonDisabled]}
             onPress={logTrial}
             disabled={!pendingCue}
             accessibilityRole="button"
             accessibilityLabel="Log trial"
           >
-            <Ionicons name="save-outline" size={16} color={pendingCue ? '#fff' : '#8888aa'} />
+            <Ionicons name="save-outline" size={16} color={pendingCue ? '#fff' : '#606070'} />
             <Text style={[styles.logButtonText, !pendingCue && styles.logButtonTextDisabled]}>
               Log Trial
             </Text>
@@ -588,22 +601,22 @@ export default function HapticLabScreen() {
         <Text style={styles.sectionLabel}>EXPORT</Text>
         <View style={styles.exportRow}>
           <Pressable
-            style={({ pressed }) => [styles.exportButton, pressed && { opacity: 0.7 }]}
+            style={({ pressed }) => [styles.exportButton, { borderColor: accent }, pressed && { opacity: 0.7 }]}
             onPress={exportJSON}
             accessibilityRole="button"
             accessibilityLabel="Export as JSON"
           >
-            <Ionicons name="code-download-outline" size={16} color="#6c63ff" />
-            <Text style={styles.exportButtonText}>JSON</Text>
+            <Ionicons name="code-download-outline" size={16} color={accent} />
+            <Text style={[styles.exportButtonText, { color: accent }]}>JSON</Text>
           </Pressable>
           <Pressable
-            style={({ pressed }) => [styles.exportButton, pressed && { opacity: 0.7 }]}
+            style={({ pressed }) => [styles.exportButton, { borderColor: accent }, pressed && { opacity: 0.7 }]}
             onPress={exportCSV}
             accessibilityRole="button"
             accessibilityLabel="Export as CSV"
           >
-            <Ionicons name="grid-outline" size={16} color="#6c63ff" />
-            <Text style={styles.exportButtonText}>CSV</Text>
+            <Ionicons name="grid-outline" size={16} color={accent} />
+            <Text style={[styles.exportButtonText, { color: accent }]}>CSV</Text>
           </Pressable>
         </View>
         <Text style={styles.hint}>
@@ -622,22 +635,22 @@ export default function HapticLabScreen() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#0f0f1a' },
+  screen: { flex: 1, backgroundColor: '#0A0A0F' },
   scroll: { padding: 16 },
 
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffe066',
+    backgroundColor: '#FFD54F',
     borderRadius: 10,
     padding: 12,
     gap: 10,
     marginBottom: 16,
   },
-  bannerText: { color: '#1a1a00', flex: 1, fontSize: 13, fontWeight: '600' },
+  bannerText: { color: '#181808', flex: 1, fontSize: 13, fontWeight: '600' },
 
   sectionLabel: {
-    color: '#8888aa',
+    color: '#606070',
     fontSize: 10,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -652,22 +665,17 @@ const styles = StyleSheet.create({
   },
   schemeTab: {
     flex: 1,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
     alignItems: 'center',
     padding: 10,
   },
-  schemeTabActive: {
-    borderColor: '#6c63ff',
-    backgroundColor: '#1e1a3e',
-  },
-  schemeTabId: { color: '#6666aa', fontSize: 16, fontWeight: '800' },
-  schemeTabIdActive: { color: '#a78bfa' },
-  schemeTabName: { color: '#5555aa', fontSize: 10, marginTop: 2 },
-  schemeTabNameActive: { color: '#c4b5fd' },
-  schemeDesc: { color: '#6666aa', fontSize: 12, marginTop: 6, marginBottom: 4 },
+  schemeTabId: { color: '#505060', fontSize: 16, fontWeight: '800' },
+  schemeTabName: { color: '#404050', fontSize: 10, marginTop: 2 },
+  schemeTabNameActive: { color: '#81C784' },
+  schemeDesc: { color: '#505060', fontSize: 12, marginTop: 6, marginBottom: 4 },
 
   cueGrid: {
     flexDirection: 'row',
@@ -675,49 +683,45 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   cueButton: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#3a3a5e',
+    borderColor: '#2A2A35',
     paddingVertical: 16,
     paddingHorizontal: 18,
     minWidth: 90,
     alignItems: 'center',
-  },
-  cueButtonPending: {
-    borderColor: '#6c63ff',
-    backgroundColor: '#1e1a3e',
   },
   cueButtonActive: {
     borderColor: '#00d4aa',
     backgroundColor: '#0a2a20',
   },
   cueButtonPressed: { opacity: 0.6 },
-  cueLabel: { color: '#e8e8f0', fontSize: 14, fontWeight: '700' },
+  cueLabel: { color: '#F0F0F5', fontSize: 14, fontWeight: '700' },
 
   stopButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#2a1a1a',
+    backgroundColor: '#1A080E',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#ff6b6b',
+    borderColor: '#F06292',
     padding: 12,
     marginTop: 10,
     alignSelf: 'flex-start',
   },
-  stopButtonText: { color: '#ff6b6b', fontWeight: '600' },
+  stopButtonText: { color: '#F06292', fontWeight: '600' },
 
   paramSection: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
     padding: 14,
     gap: 8,
   },
-  paramLabel: { color: '#b0b0d0', fontSize: 13, fontWeight: '600' },
+  paramLabel: { color: '#A8A8B8', fontSize: 13, fontWeight: '600' },
 
   intensityRow: {
     flexDirection: 'row',
@@ -725,24 +729,22 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   intensityChip: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#3a3a5e',
+    borderColor: '#2A2A35',
     paddingVertical: 6,
     paddingHorizontal: 14,
   },
-  intensityChipActive: { borderColor: '#6c63ff', backgroundColor: '#1e1a3e' },
-  intensityChipText: { color: '#8888aa', fontSize: 13 },
-  intensityChipTextActive: { color: '#a78bfa', fontWeight: '700' },
+  intensityChipText: { color: '#606070', fontSize: 13 },
 
-  hint: { color: '#5555aa', fontSize: 11, lineHeight: 16, marginTop: 4 },
+  hint: { color: '#404050', fontSize: 11, lineHeight: 16, marginTop: 4 },
 
   sttSection: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
     padding: 14,
     gap: 12,
   },
@@ -751,30 +753,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#3a3a5e',
+    borderColor: '#2A2A35',
     padding: 12,
     flex: 1,
   },
   sttButtonActive: {
-    backgroundColor: '#ffe066',
-    borderColor: '#ffe066',
+    backgroundColor: '#FFD54F',
+    borderColor: '#FFD54F',
   },
-  sttButtonText: { color: '#e8e8f0', fontSize: 13, flex: 1 },
-  sttButtonTextActive: { color: '#1a1a00', fontWeight: '700' },
+  sttButtonText: { color: '#F0F0F5', fontSize: 13, flex: 1 },
+  sttButtonTextActive: { color: '#181808', fontWeight: '700' },
   queueButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#1e1a3e',
+    backgroundColor: '#16161C',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#6c63ff',
     padding: 12,
   },
-  queueButtonText: { color: '#a78bfa', fontWeight: '600', fontSize: 13 },
+  queueButtonText: { fontWeight: '600', fontSize: 13 },
 
   latencyBox: {
     backgroundColor: '#0f1a20',
@@ -784,22 +785,22 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 6,
   },
-  latencyTitle: { color: '#a0c0d0', fontWeight: '700', fontSize: 13 },
-  latencyLast: { color: '#e8e8f0', fontSize: 22, fontWeight: '800' },
+  latencyTitle: { color: '#80B0C0', fontWeight: '700', fontSize: 13 },
+  latencyLast: { color: '#F0F0F5', fontSize: 22, fontWeight: '800' },
   latencyStats: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  latencyStat: { color: '#a0c0d0', fontSize: 12 },
+  latencyStat: { color: '#80B0C0', fontSize: 12 },
   latencyPass: { color: '#00d4aa', fontWeight: '700' },
 
   trialSection: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
     padding: 14,
     gap: 10,
   },
   pendingCue: {
-    color: '#c4b5fd',
+    color: '#81C784',
     fontWeight: '700',
     fontSize: 14,
   },
@@ -809,20 +810,18 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#3a3a5e',
-    backgroundColor: '#1a1a2e',
+    borderColor: '#2A2A35',
+    backgroundColor: '#111116',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ratingChipActive: { borderColor: '#6c63ff', backgroundColor: '#1e1a3e' },
-  ratingChipText: { color: '#6666aa', fontWeight: '700', fontSize: 16 },
-  ratingChipTextActive: { color: '#a78bfa' },
+  ratingChipText: { color: '#505060', fontWeight: '700', fontSize: 16 },
   notesInput: {
     backgroundColor: '#0f0f20',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#3a3a5e',
-    color: '#e8e8f0',
+    borderColor: '#2A2A35',
+    color: '#F0F0F5',
     padding: 10,
     fontSize: 13,
     minHeight: 60,
@@ -833,19 +832,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#6c63ff',
     borderRadius: 10,
     padding: 14,
   },
-  logButtonDisabled: { backgroundColor: '#2a2a3e' },
+  logButtonDisabled: { backgroundColor: '#1E1E26' },
   logButtonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  logButtonTextDisabled: { color: '#8888aa' },
+  logButtonTextDisabled: { color: '#606070' },
 
   clearButton: {
     alignItems: 'center',
     padding: 8,
   },
-  clearButtonText: { color: '#6666aa', fontSize: 12 },
+  clearButtonText: { color: '#505060', fontSize: 12 },
 
   exportRow: {
     flexDirection: 'row',
@@ -857,11 +855,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#6c63ff',
     padding: 14,
   },
-  exportButtonText: { color: '#a78bfa', fontWeight: '700', fontSize: 14 },
+  exportButtonText: { fontWeight: '700', fontSize: 14 },
 });

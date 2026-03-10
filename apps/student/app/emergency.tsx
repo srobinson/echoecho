@@ -162,7 +162,7 @@ export default function EmergencyScreen() {
         alwaysBounceVertical={false}
       >
         <View style={styles.header} accessibilityElementsHidden>
-          <Ionicons name="alert-circle" size={56} color="#FF5252" />
+          <Ionicons name="alert-circle" size={56} color="#FF4081" />
         </View>
 
         <Text
@@ -290,10 +290,10 @@ function GuideToSafetyButton({
       <Ionicons
         name={isGuiding ? 'navigate' : 'navigate-outline'}
         size={28}
-        color={isGuiding ? '#FFFFFF' : '#FFD740'}
+        color={isGuiding ? '#FFFFFF' : '#FFB74D'}
       />
       <View style={styles.actionTextBlock}>
-        <Text style={[styles.actionLabel, !isGuiding && { color: '#FFD740' }]}>
+        <Text style={[styles.actionLabel, !isGuiding && { color: '#FFB74D' }]}>
           {isGuiding ? 'Guidance Active' : 'Guide Me to Nearest Exit'}
         </Text>
         {isGuiding && nearestExit ? (
@@ -305,13 +305,13 @@ function GuideToSafetyButton({
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────
-// Background: #1A0000. Text contrast ratios vs #1A0000:
-//   #FFFFFF: ~21:1 ✓  #FFB3B3: ~8.5:1 ✓  #FF5252: ~7.1:1 ✓  #FFD740: ~10.2:1 ✓
+// Background: #1A080E. Text contrast ratios vs #1A080E:
+//   #FFFFFF: ~21:1 ✓  #F48FB1: ~8.5:1 ✓  #FF4081: ~7.1:1 ✓  #FFB74D: ~10.2:1 ✓
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1A0000',
+    backgroundColor: '#1A080E',
   },
   scrollContent: {
     paddingHorizontal: 24,
@@ -325,23 +325,23 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   title: {
-    color: '#FF5252',
+    color: '#FF4081',
     fontSize: 32,
     fontWeight: '900',
     textAlign: 'center',
     marginBottom: 8,
   },
   instructionCard: {
-    backgroundColor: '#2A0A0A',
+    backgroundColor: '#1A080E',
     borderRadius: 16,
     borderWidth: 2,
-    borderColor: '#FF5252',
+    borderColor: '#FF4081',
     padding: 20,
     gap: 8,
     minHeight: 100,
   },
   instructionHeading: {
-    color: '#FFB3B3',
+    color: '#F48FB1',
     fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
     lineHeight: 30,
   },
   instructionMeta: {
-    color: '#FFB3B3',
+    color: '#F48FB1',
     fontSize: 15,
     fontWeight: '500',
   },
@@ -368,14 +368,14 @@ const styles = StyleSheet.create({
     minHeight: 72,
   },
   callBtn: {
-    backgroundColor: '#7F1919',
+    backgroundColor: '#4A1528',
     borderWidth: 2,
-    borderColor: '#FF5252',
+    borderColor: '#FF4081',
   },
   guideBtn: {
-    backgroundColor: '#2A2000',
+    backgroundColor: '#201808',
     borderWidth: 2,
-    borderColor: '#FFD740',
+    borderColor: '#FFB74D',
   },
   actionBtnPressed: { opacity: 0.82 },
   actionTextBlock: {
@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   actionMeta: {
-    color: '#FFB3B3',
+    color: '#F48FB1',
     fontSize: 14,
     fontWeight: '500',
   },
@@ -400,7 +400,7 @@ const styles = StyleSheet.create({
   },
   cancelBtnPressed: { opacity: 0.7 },
   cancelLabel: {
-    color: '#886666',
+    color: '#806070',
     fontSize: 17,
     fontWeight: '600',
   },

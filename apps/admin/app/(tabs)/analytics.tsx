@@ -18,10 +18,21 @@ import { CompletionRateList } from '../../src/components/analytics/CompletionRat
 import { CoverageCard } from '../../src/components/analytics/CoverageCard';
 import { TopDestinationsCard } from '../../src/components/analytics/TopDestinationsCard';
 import { OffRouteHeatmap } from '../../src/components/analytics/OffRouteHeatmap';
+import { tabColors } from '@echoecho/ui';
+import { SectionColorProvider, useSectionColor } from '../../src/contexts/SectionColorContext';
 
 const TSBVI_CENTER: [number, number] = [-97.7468, 30.3495];
 
 export default function AnalyticsDashboardScreen() {
+  return (
+    <SectionColorProvider value={tabColors.analytics}>
+      <AnalyticsDashboardScreenInner />
+    </SectionColorProvider>
+  );
+}
+
+function AnalyticsDashboardScreenInner() {
+  const accent = useSectionColor();
   const { activeCampus } = useCampusStore();
   const campusId = activeCampus?.id ?? null;
 
@@ -63,7 +74,7 @@ export default function AnalyticsDashboardScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.centered} accessibilityLiveRegion="polite">
-          <ActivityIndicator size="large" color="#6c63ff" accessibilityLabel="Loading analytics" />
+          <ActivityIndicator size="large" color={accent} accessibilityLabel="Loading analytics" />
           <Text style={styles.loadingText}>Loading analytics...</Text>
         </View>
       </SafeAreaView>
@@ -74,12 +85,12 @@ export default function AnalyticsDashboardScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.centered} accessibilityRole="alert">
-          <Ionicons name="alert-circle" size={40} color="#F87171" />
+          <Ionicons name="alert-circle" size={40} color="#F06292" />
           <Text style={styles.emptyTitle}>Failed to load analytics</Text>
           <Text style={styles.emptyBody}>{error}</Text>
           <Pressable
             onPress={handleRefresh}
-            style={styles.retryButton}
+            style={[styles.retryButton, { backgroundColor: accent }]}
             accessibilityLabel="Retry loading analytics"
             accessibilityRole="button"
           >
@@ -98,8 +109,8 @@ export default function AnalyticsDashboardScreen() {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            tintColor="#6c63ff"
-            colors={['#6c63ff']}
+            tintColor={accent}
+            colors={[accent]}
           />
         }
       >
@@ -115,17 +126,17 @@ export default function AnalyticsDashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f0f1a' },
+  container: { flex: 1, backgroundColor: '#0A0A0F' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12, padding: 24 },
   scrollContent: { padding: 16, gap: 16, paddingBottom: 32 },
-  emptyTitle: { color: '#8888aa', fontSize: 20, fontWeight: '700' },
-  emptyBody: { color: '#5555aa', fontSize: 14, textAlign: 'center', maxWidth: 280 },
-  loadingText: { color: '#8888aa', fontSize: 14, marginTop: 12 },
+  emptyTitle: { color: '#606070', fontSize: 20, fontWeight: '700' },
+  emptyBody: { color: '#404050', fontSize: 14, textAlign: 'center', maxWidth: 280 },
+  loadingText: { color: '#606070', fontSize: 14, marginTop: 12 },
   retryButton: {
     marginTop: 8,
     paddingHorizontal: 24,
     paddingVertical: 10,
-    backgroundColor: '#6c63ff',
+    backgroundColor: 'transparent', // overridden inline with accent
     borderRadius: 8,
   },
   retryButtonText: { color: '#fff', fontSize: 14, fontWeight: '600' },

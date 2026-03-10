@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Waypoint, WaypointType } from '@echoecho/shared';
+import { useSectionColor } from '../../contexts/SectionColorContext';
 
 interface Props {
   waypoint: Waypoint | null;
@@ -44,6 +45,7 @@ const TYPES: { value: WaypointType; label: string; emoji: string }[] = [
 ];
 
 export function WaypointEditSheet({ waypoint, index, onUpdate, onDelete, onClose }: Props) {
+  const accent = useSectionColor();
   const [syncedWaypoint, setSyncedWaypoint] = useState(waypoint);
   const [audioLabel, setAudioLabel] = useState(waypoint?.audioLabel ?? '');
   const [description, setDescription] = useState(waypoint?.description ?? '');
@@ -102,7 +104,7 @@ export function WaypointEditSheet({ waypoint, index, onUpdate, onDelete, onClose
             accessibilityLabel="Close waypoint editor"
             accessibilityRole="button"
           >
-            <Ionicons name="close" size={20} color="#9090cc" />
+            <Ionicons name="close" size={20} color="#808090" />
           </Pressable>
         </View>
 
@@ -112,7 +114,7 @@ export function WaypointEditSheet({ waypoint, index, onUpdate, onDelete, onClose
           value={audioLabel}
           onChangeText={setAudioLabel}
           placeholder="Short prompt read aloud to student"
-          placeholderTextColor="#5555aa"
+          placeholderTextColor="#404050"
           accessibilityLabel="Audio label for this waypoint"
         />
 
@@ -121,14 +123,14 @@ export function WaypointEditSheet({ waypoint, index, onUpdate, onDelete, onClose
           {TYPES.map((t) => (
             <Pressable
               key={t.value}
-              style={[styles.typeChip, type === t.value && styles.typeChipActive]}
+              style={[styles.typeChip, type === t.value && { backgroundColor: accent + '22', borderColor: accent }]}
               onPress={() => setType(t.value)}
               accessibilityLabel={`Type: ${t.label}`}
               accessibilityRole="radio"
               accessibilityState={{ selected: type === t.value }}
             >
               <Text style={styles.typeEmoji}>{t.emoji}</Text>
-              <Text style={[styles.typeLabel, type === t.value && styles.typeLabelActive]}>
+              <Text style={[styles.typeLabel, type === t.value && { color: accent }]}>
                 {t.label}
               </Text>
             </Pressable>
@@ -141,7 +143,7 @@ export function WaypointEditSheet({ waypoint, index, onUpdate, onDelete, onClose
           value={description}
           onChangeText={setDescription}
           placeholder="Detailed guidance notes"
-          placeholderTextColor="#5555aa"
+          placeholderTextColor="#404050"
           multiline
           accessibilityLabel="Waypoint description"
         />
@@ -159,11 +161,11 @@ export function WaypointEditSheet({ waypoint, index, onUpdate, onDelete, onClose
             accessibilityLabel={`Delete waypoint ${index + 1}`}
             accessibilityRole="button"
           >
-            <Ionicons name="trash" size={16} color="#ef4444" />
+            <Ionicons name="trash" size={16} color="#F06292" />
             <Text style={styles.deleteBtnLabel}>Delete</Text>
           </Pressable>
           <Pressable
-            style={styles.saveBtn}
+            style={[styles.saveBtn, { backgroundColor: accent }]}
             onPress={handleSave}
             accessibilityLabel="Save waypoint changes"
             accessibilityRole="button"
@@ -185,12 +187,12 @@ const styles = StyleSheet.create({
     maxHeight: '70%',
   },
   sheet: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     borderWidth: 1,
     borderBottomWidth: 0,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
   },
   content: {
     padding: 20,
@@ -202,27 +204,27 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  title: { color: '#e8e8f0', fontSize: 18, fontWeight: '700' },
+  title: { color: '#F0F0F5', fontSize: 18, fontWeight: '700' },
   closeBtn: {
     width: 36,
     height: 36,
     borderRadius: 8,
-    backgroundColor: '#2a2a3e',
+    backgroundColor: '#1E1E26',
     alignItems: 'center',
     justifyContent: 'center',
   },
   fieldLabel: {
-    color: '#9090cc',
+    color: '#808090',
     fontSize: 12,
     fontWeight: '600',
     marginTop: 4,
   },
   input: {
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
-    color: '#e8e8f0',
+    borderColor: '#1E1E26',
+    color: '#F0F0F5',
     fontSize: 15,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -241,24 +243,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
     borderWidth: 1,
-    borderColor: '#2a2a3e',
-  },
-  typeChipActive: {
-    backgroundColor: '#6c63ff22',
-    borderColor: '#6c63ff',
+    borderColor: '#1E1E26',
   },
   typeEmoji: { fontSize: 14 },
-  typeLabel: { color: '#8888aa', fontSize: 11, fontWeight: '600' },
-  typeLabelActive: { color: '#6c63ff' },
+  typeLabel: { color: '#606070', fontSize: 11, fontWeight: '600' },
   coords: {
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
     borderRadius: 8,
     padding: 10,
   },
   coordLabel: {
-    color: '#8888aa',
+    color: '#606070',
     fontSize: 11,
     fontFamily: 'monospace',
     textAlign: 'center',
@@ -276,17 +273,16 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 14,
     borderRadius: 10,
-    backgroundColor: '#ef444422',
+    backgroundColor: '#F0629222',
     borderWidth: 1,
-    borderColor: '#ef444444',
+    borderColor: '#F0629244',
     minHeight: 44,
   },
-  deleteBtnLabel: { color: '#ef4444', fontSize: 14, fontWeight: '600' },
+  deleteBtnLabel: { color: '#F06292', fontSize: 14, fontWeight: '600' },
   saveBtn: {
     flex: 2,
     paddingVertical: 14,
     borderRadius: 10,
-    backgroundColor: '#6c63ff',
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 44,

@@ -13,6 +13,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import type { Route } from '@echoecho/shared';
+import { useSectionColor } from '../../contexts/SectionColorContext';
 
 interface Props {
   route: Route;
@@ -21,13 +22,14 @@ interface Props {
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  draft: '#F59E0B',
-  published: '#22C55E',
+  draft: '#FFB74D',
+  published: '#81C784',
   retracted: '#9CA3AF',
   pending_save: '#9CA3AF',
 };
 
 export function RouteDetailContent({ route, onClose, onEditWaypoints }: Props) {
+  const accent = useSectionColor();
   const handleViewDetail = useCallback(() => {
     onClose();
     router.push(`/route/${route.id}`);
@@ -80,7 +82,7 @@ export function RouteDetailContent({ route, onClose, onEditWaypoints }: Props) {
 
       {route.hazards.length > 0 && (
         <View style={styles.hazardBadge}>
-          <Ionicons name="warning" size={14} color="#F59E0B" />
+          <Ionicons name="warning" size={14} color="#FFB74D" />
           <Text style={styles.hazardText}>{route.hazards.length} active hazard{route.hazards.length !== 1 ? 's' : ''}</Text>
         </View>
       )}
@@ -95,20 +97,20 @@ export function RouteDetailContent({ route, onClose, onEditWaypoints }: Props) {
           accessibilityLabel={`Edit waypoints for ${route.name}`}
           accessibilityRole="button"
         >
-          <Ionicons name="create-outline" size={16} color="#22C55E" />
+          <Ionicons name="create-outline" size={16} color="#81C784" />
           <Text style={styles.editWpLabel}>Edit Waypoints</Text>
         </Pressable>
       )}
 
       <Pressable
-        style={({ pressed }) => [styles.viewBtn, pressed && styles.viewBtnPressed]}
+        style={({ pressed }) => [styles.viewBtn, { backgroundColor: accent + '22', borderColor: accent + '44' }, pressed && styles.viewBtnPressed]}
         onPress={handleViewDetail}
         accessibilityLabel={`View full details for ${route.name}`}
         accessibilityRole="button"
         accessibilityHint="Double tap to open route management screen"
       >
-        <Text style={styles.viewBtnLabel}>View & Edit Route</Text>
-        <Ionicons name="chevron-forward" size={16} color="#6c63ff" />
+        <Text style={[styles.viewBtnLabel, { color: accent }]}>View & Edit Route</Text>
+        <Ionicons name="chevron-forward" size={16} color={accent} />
       </Pressable>
     </View>
   );
@@ -125,7 +127,7 @@ function Stat({
 }) {
   return (
     <View style={styles.stat} accessible accessibilityLabel={`${value} ${label}`}>
-      <Ionicons name={icon} size={16} color="#8888aa" />
+      <Ionicons name={icon} size={16} color="#606070" />
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
@@ -143,61 +145,59 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
     borderRadius: 10,
     paddingVertical: 10,
   },
-  statValue: { color: '#e8e8f0', fontSize: 15, fontWeight: '700' },
-  statLabel: { color: '#8888aa', fontSize: 10, textTransform: 'uppercase' },
+  statValue: { color: '#F0F0F5', fontSize: 15, fontWeight: '700' },
+  statLabel: { color: '#606070', fontSize: 10, textTransform: 'uppercase' },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#2a2a3e',
+    borderBottomColor: '#1E1E26',
   },
-  metaLabel: { color: '#9090cc', fontSize: 13, width: 52 },
-  metaValue: { color: '#e8e8f0', fontSize: 13, fontWeight: '500', flex: 1 },
+  metaLabel: { color: '#808090', fontSize: 13, width: 52 },
+  metaValue: { color: '#F0F0F5', fontSize: 13, fontWeight: '500', flex: 1 },
   statusBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   statusText: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
   hazardBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#F59E0B22',
+    backgroundColor: '#FFB74D22',
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
-  hazardText: { color: '#F59E0B', fontSize: 13, fontWeight: '600' },
+  hazardText: { color: '#FFB74D', fontSize: 13, fontWeight: '600' },
   viewBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: '#6c63ff22',
     borderWidth: 1,
-    borderColor: '#6c63ff44',
     borderRadius: 10,
     paddingVertical: 14,
     marginTop: 4,
     minHeight: 44,
   },
   viewBtnPressed: { opacity: 0.75 },
-  viewBtnLabel: { color: '#6c63ff', fontSize: 15, fontWeight: '600' },
+  viewBtnLabel: { fontSize: 15, fontWeight: '600' },
   editWpBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: '#22C55E22',
+    backgroundColor: '#81C78422',
     borderWidth: 1,
-    borderColor: '#22C55E44',
+    borderColor: '#81C78444',
     borderRadius: 10,
     paddingVertical: 14,
     marginTop: 4,
     minHeight: 44,
   },
-  editWpLabel: { color: '#22C55E', fontSize: 15, fontWeight: '600' },
+  editWpLabel: { color: '#81C784', fontSize: 15, fontWeight: '600' },
 });

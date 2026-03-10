@@ -12,6 +12,7 @@
 import { useMemo } from 'react';
 import MapboxGL from '@rnmapbox/maps';
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
+import { useSectionColor } from '../../contexts/SectionColorContext';
 
 interface Props {
   vertices: [number, number][];
@@ -24,6 +25,7 @@ const LINE_LAYER_ID = 'building-draw-line';
 const VERTEX_LAYER_ID = 'building-draw-vertices-layer';
 
 export function BuildingDrawTool({ vertices, isClosed }: Props) {
+  const accent = useSectionColor();
   const lineCollection = useMemo((): FeatureCollection<LineString> => {
     if (vertices.length < 2) return { type: 'FeatureCollection', features: [] };
 
@@ -58,7 +60,7 @@ export function BuildingDrawTool({ vertices, isClosed }: Props) {
         <MapboxGL.LineLayer
           id={LINE_LAYER_ID}
           style={{
-            lineColor: isClosed ? '#6c63ff' : '#fbbf24',
+            lineColor: isClosed ? accent : '#FFA726',
             lineWidth: 2.5,
             lineDasharray: isClosed ? undefined : [4, 3],
             lineOpacity: 0.9,
@@ -77,8 +79,8 @@ export function BuildingDrawTool({ vertices, isClosed }: Props) {
             ],
             circleColor: [
               'case',
-              ['get', 'isFirst'], '#22C55E',
-              '#fbbf24',
+              ['get', 'isFirst'], '#81C784',
+              '#FFA726',
             ],
             circleStrokeColor: '#fff',
             circleStrokeWidth: 2,

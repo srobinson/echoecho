@@ -1,12 +1,14 @@
 import { View, Text, FlatList, StyleSheet, useWindowDimensions } from 'react-native';
 import { BarChart } from '@echoecho/ui';
 import type { RouteUsageStat } from '@echoecho/shared';
+import { useSectionColor } from '../../contexts/SectionColorContext';
 
 interface Props {
   data: RouteUsageStat[];
 }
 
 export function RouteUsageChart({ data }: Props) {
+  const accent = useSectionColor();
   const { width } = useWindowDimensions();
   const chartWidth = width - 64;
 
@@ -35,7 +37,7 @@ export function RouteUsageChart({ data }: Props) {
           data={chartData}
           width={chartWidth}
           height={200}
-          color="#6c63ff"
+          color={accent}
           barRadius={4}
         />
       </View>
@@ -61,16 +63,16 @@ export function RouteUsageChart({ data }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#111116',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#2a2a3e',
+    borderColor: '#1E1E26',
     padding: 16,
     gap: 8,
   },
-  title: { color: '#e8e8f0', fontSize: 16, fontWeight: '700' },
-  subtitle: { color: '#8888aa', fontSize: 12 },
-  emptyText: { color: '#5555aa', fontSize: 13, paddingVertical: 16 },
+  title: { color: '#F0F0F5', fontSize: 16, fontWeight: '700' },
+  subtitle: { color: '#606070', fontSize: 12 },
+  emptyText: { color: '#404050', fontSize: 13, paddingVertical: 16 },
   chartContainer: { height: 200, alignSelf: 'center' },
   srTable: {
     position: 'absolute',
@@ -79,5 +81,5 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     opacity: 0,
   },
-  srRow: { color: '#e8e8f0', fontSize: 1 },
+  srRow: { color: '#F0F0F5', fontSize: 1 },
 });

@@ -251,12 +251,12 @@ function StatusBar({
   positioningMode: 'gps' | 'pdr';
 }) {
   const config: Record<string, { color: string; label: string }> = {
-    navigating: { color: '#22c55e', label: 'Navigating' },
-    off_route: { color: '#f97316', label: 'Off Route' },
-    arrived: { color: '#6c63ff', label: 'Arrived' },
-    searching: { color: '#eab308', label: 'Finding position...' },
-    emergency: { color: '#ef4444', label: 'Emergency Mode' },
-    idle: { color: '#8888aa', label: 'Ready' },
+    navigating: { color: '#81C784', label: 'Navigating' },
+    off_route: { color: '#FFB74D', label: 'Off Route' },
+    arrived: { color: '#4FC3F7', label: 'Arrived' },
+    searching: { color: '#FFD54F', label: 'Finding position...' },
+    emergency: { color: '#F06292', label: 'Emergency Mode' },
+    idle: { color: '#606070', label: 'Ready' },
   };
   const { color, label } = config[status] ?? config['idle'];
   const modeLabel = positioningMode === 'pdr' ? ' (estimated position)' : '';
@@ -272,7 +272,7 @@ function StatusBar({
         {label}
       </Text>
       {positioningMode === 'pdr' && (
-        <Ionicons name="cellular-outline" size={14} color="#eab308" />
+        <Ionicons name="cellular-outline" size={14} color="#FFD54F" />
       )}
     </View>
   );
@@ -292,7 +292,7 @@ function InstructionCard({
   if (status === 'arrived') {
     return (
       <View style={styles.instructionCard}>
-        <Ionicons name="checkmark-circle" size={80} color="#6c63ff" />
+        <Ionicons name="checkmark-circle" size={80} color="#4FC3F7" />
         <Text style={styles.arrivedText}>You have arrived!</Text>
         <Text style={styles.arrivedSubtext}>{destination}</Text>
       </View>
@@ -353,7 +353,7 @@ function ProgressCard({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0a14',
+    backgroundColor: '#060608',
     padding: 16,
     gap: 16,
   },
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 12,
     borderWidth: 1.5,
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
   },
   statusDot: {
     width: 10,
@@ -381,44 +381,44 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   instructionCard: {
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
     borderRadius: 24,
     padding: 32,
     alignItems: 'center',
     gap: 16,
     borderWidth: 1,
-    borderColor: '#2a2a4e',
+    borderColor: '#22222C',
   },
   instructionText: {
-    color: '#e0e0f8',
+    color: '#E0E0E8',
     fontSize: 28,
     fontWeight: '700',
     textAlign: 'center',
     lineHeight: 36,
   },
   distanceText: {
-    color: '#6c63ff',
+    color: '#4FC3F7',
     fontSize: 36,
     fontWeight: '900',
   },
   arrivedText: {
-    color: '#a5b4fc',
+    color: '#4FC3F7',
     fontSize: 32,
     fontWeight: '900',
   },
   arrivedSubtext: {
-    color: '#7070aa',
+    color: '#585868',
     fontSize: 18,
     textAlign: 'center',
   },
   progressArea: {},
   progressCard: {
-    backgroundColor: '#14142a',
+    backgroundColor: '#0D0D12',
     borderRadius: 16,
     padding: 16,
     gap: 12,
     borderWidth: 1,
-    borderColor: '#2a2a4e',
+    borderColor: '#22222C',
   },
   progressMeta: {
     flexDirection: 'row',
@@ -426,12 +426,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   progressLabel: {
-    color: '#9090cc',
+    color: '#808090',
     fontSize: 13,
     fontWeight: '600',
   },
   destinationLabel: {
-    color: '#c0c0e8',
+    color: '#A8A8B8',
     fontSize: 13,
     fontWeight: '600',
     flex: 1,
@@ -440,17 +440,17 @@ const styles = StyleSheet.create({
   },
   progressBarTrack: {
     height: 6,
-    backgroundColor: '#2a2a4e',
+    backgroundColor: '#22222C',
     borderRadius: 3,
     overflow: 'hidden',
   },
   progressBarFill: {
     height: 6,
-    backgroundColor: '#6c63ff',
+    backgroundColor: '#4FC3F7',
     borderRadius: 3,
   },
   endBtn: {
-    backgroundColor: '#3a0a0a',
+    backgroundColor: '#1A080E',
     borderRadius: 16,
     paddingVertical: 18,
     flexDirection: 'row',
@@ -459,11 +459,11 @@ const styles = StyleSheet.create({
     gap: 10,
     minHeight: 58,
     borderWidth: 1,
-    borderColor: '#7f1d1d',
+    borderColor: '#4A1528',
   },
   endBtnPressed: { opacity: 0.8 },
   endBtnLabel: {
-    color: '#fca5a5',
+    color: '#F8BBD0',
     fontSize: 17,
     fontWeight: '700',
   },

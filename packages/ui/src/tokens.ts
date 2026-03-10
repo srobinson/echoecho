@@ -8,68 +8,81 @@
  */
 
 export const colors = {
-  // Backgrounds
-  bg: '#0f0f1a',
-  bgDeep: '#0a0a14',
-  surface: '#1a1a2e',
-  surfaceAlt: '#14142a',
-  surfaceElevated: '#22223a',
+  // Backgrounds — neutral dark, no purple tint
+  bg: '#0A0A0F',
+  bgDeep: '#060608',
+  surface: '#111116',
+  surfaceAlt: '#0D0D12',
+  surfaceElevated: '#18181F',
 
-  // Borders and dividers
-  border: '#2a2a3e',
-  borderAlt: '#2a2a4e',
-  borderSubtle: '#3a3a5e',
-  borderMuted: '#1e1a3e',
+  // Borders and dividers — neutral with slight luminance only
+  border: '#1E1E26',
+  borderAlt: '#22222C',
+  borderSubtle: '#2A2A35',
+  borderMuted: '#16161C',
 
-  // Brand
-  brand: '#6c63ff',
-  brandMuted: '#4444aa',
-  brandOverlay: '#6c63ff22',
-  brandOverlayMedium: '#6c63ff44',
+  // Brand — sky blue (was purple)
+  brand: '#4FC3F7',
+  brandMuted: '#1A5F7A',
+  brandOverlay: '#4FC3F722',
+  brandOverlayMedium: '#4FC3F744',
 
-  // Text
-  textPrimary: '#e8e8f0',
-  textSecondary: '#c0c0e8',
-  textMuted: '#8888aa',
-  textSubtle: '#5555aa',
-  textFaint: '#6666aa',
-  textLabel: '#9090cc',
-  textLight: '#e0e0f8',
-  textDim: '#7070aa',
-  textHighlight: '#a5b4fc',
-  textPale: '#c0c0d8',
-  textGhost: '#f0f0ff',
+  // Text — neutral whites, no purple cast
+  textPrimary: '#F0F0F5',
+  textSecondary: '#A8A8B8',
+  textMuted: '#606070',
+  textSubtle: '#404050',
+  textFaint: '#505060',
+  textLabel: '#808090',
+  textLight: '#E0E0E8',
+  textDim: '#585868',
+  textHighlight: '#4FC3F7',
+  textPale: '#C0C0C8',
+  textGhost: '#F5F5FA',
   white: '#fff',
   whiteHex: '#FFFFFF',
 
   // Status
-  success: '#22C55E',
-  successDark: '#48bb78',
-  warning: '#F59E0B',
-  warningAlt: '#fbbf24',
-  warningGold: '#ffe066',
-  warningAmber: '#FFD740',
-  danger: '#e53e3e',
-  dangerAlt: '#ef4444',
-  dangerBright: '#EF4444',
-  dangerAccent: '#FF5252',
-  dangerLight: '#FFB3B3',
-  dangerRed: '#ff6b6b',
-  dangerMuted: '#fca5a5',
-  orange: '#F97316',
-  orangeAlt: '#ed8936',
-  neutral: '#9CA3AF',
-  yellowAlert: '#eab308',
+  success: '#81C784',
+  successDark: '#66BB6A',
+  warning: '#FFB74D',
+  warningAlt: '#FFA726',
+  warningGold: '#FFD54F',
+  warningAmber: '#FFB74D',
+  danger: '#F06292',
+  dangerAlt: '#EC407A',
+  dangerBright: '#F06292',
+  dangerAccent: '#FF4081',
+  dangerLight: '#F48FB1',
+  dangerRed: '#F06292',
+  dangerMuted: '#F8BBD0',
+  orange: '#FFB74D',
+  orangeAlt: '#FFA726',
+  neutral: '#9E9EAE',
+  yellowAlert: '#FFD54F',
 
   // Interactive
-  dangerBg: '#3a0a0a',
-  dangerBorder: '#7f1d1d',
+  dangerBg: '#1A080E',
+  dangerBorder: '#4A1528',
 
   // Transparent overlays
-  surfaceTranslucent: '#1a1a2eee',
+  surfaceTranslucent: '#111116EE',
 } as const;
 
 export type ColorToken = keyof typeof colors;
+
+// Per-section accent colors for the admin tab bar.
+// Each maps to the semantic meaning of that area.
+export const tabColors = {
+  map:       '#4FC3F7', // sky blue   — spatial / navigation
+  routes:    '#81C784', // soft green — paths / movement
+  buildings: '#FFB74D', // warm amber — physical structures
+  hazards:   '#F06292', // pink       — danger / alerts
+  analytics: '#CE93D8', // violet     — data / insights
+  settings:  '#9E9EAE', // neutral    — system / config
+} as const;
+
+export type TabColorKey = keyof typeof tabColors;
 
 export const spacing = {
   xs: 4,

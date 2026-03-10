@@ -8,14 +8,14 @@ interface Props {
 }
 
 function accuracyColor(accuracy: number | null): string {
-  if (accuracy === null) return '#8888aa';
-  if (accuracy < 5)  return '#48bb78';
-  if (accuracy < 15) return '#ed8936';
-  return '#e53e3e';
+  if (accuracy === null) return '#606070';
+  if (accuracy < 5)  return '#66BB6A';
+  if (accuracy < 15) return '#FFA726';
+  return '#F06292';
 }
 
 export function GpsAccuracyIndicator({ accuracy, isDegraded }: Props) {
-  const color = isDegraded ? '#e53e3e' : accuracyColor(accuracy);
+  const color = isDegraded ? '#F06292' : accuracyColor(accuracy);
   const label =
     accuracy !== null
       ? `GPS accuracy: ${Math.round(accuracy)} meters`
