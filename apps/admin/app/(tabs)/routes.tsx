@@ -212,7 +212,7 @@ function staticMapUrl(route: Route): string | null {
     if (w.coordinate.latitude < minLat) minLat = w.coordinate.latitude;
     if (w.coordinate.latitude > maxLat) maxLat = w.coordinate.latitude;
   }
-  const bbox = `${minLng - 0.001},${minLat - 0.001},${maxLng + 0.001},${maxLat + 0.001}`;
+  const bbox = `${minLng - 0.0003},${minLat - 0.0003},${maxLng + 0.0003},${maxLat + 0.0003}`;
 
   return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${path}/[${bbox}]/300x120@2x?access_token=${token}`;
 }
