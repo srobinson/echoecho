@@ -6,6 +6,7 @@
   "build": {
     "preview-admin": {
       "distribution": "internal",
+      "corepack": true,
       "env": {
         "APP_VARIANT": "admin"
       },
@@ -15,7 +16,7 @@
     },
     "production-admin": {
       "distribution": "store",
-
+      "corepack": true,
       "env": {
         "APP_VARIANT": "admin"
       }

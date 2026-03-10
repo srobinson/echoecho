@@ -7,7 +7,6 @@
     "packages/*"
   ],
   "scripts": {
-    "eas-build-pre-install": "corepack enable",
     "admin": "yarn workspace @echoecho/admin start",
     "student": "yarn workspace @echoecho/student start",
     "typecheck": "turbo typecheck",
