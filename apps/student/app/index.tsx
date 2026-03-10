@@ -55,7 +55,7 @@ interface AssistRoute {
 export default function HomeScreen() {
   const { userId, setCurrentSession } = useNavigationStore();
   const { favorites, isFavorite, toggleFavorite } = useRouteHistory(userId);
-  const { campus, isLoaded: campusLoaded, loadFailed } = useCampus();
+  const { campus, nearestCampus, isLoaded: campusLoaded, loadFailed } = useCampus();
   const [showKeyboardFallback, setShowKeyboardFallback] = useState(false);
   const [keyboardQuery, setKeyboardQuery] = useState('');
   const [showLocationPermissionHelp, setShowLocationPermissionHelp] = useState(false);
@@ -71,7 +71,6 @@ export default function HomeScreen() {
   const startRouteNavigation = useCallback(async (
     routeId: string,
     routeName: string,
-    fromLabel = '',
     toLabel = '',
   ) => {
     await preloadRoute(routeId);
@@ -102,9 +101,14 @@ export default function HomeScreen() {
     router.push(`/navigate/${routeId}`);
   }, [setCurrentSession, userId]);
 
-  const resolveRouteForDestination = useCallback(async (buildingId: string, name: string) => {
+  const resolveRouteForDestination = useCallback(async (destinationBuildingId: string, name: string) => {
     if (!campus?.id) {
-      throw new Error('Campus not ready');
+      if (nearestCampus) {
+        throw new Error(
+          `No nearby campus detected. The nearest campus is ${nearestCampus.name}, ${formatCampusDistance(nearestCampus.distanceMeters)} away.`,
+        );
+      }
+      throw new Error('No nearby campus detected.');
     }
 
     let permission = await Location.getForegroundPermissionsAsync();
@@ -133,7 +137,7 @@ export default function HomeScreen() {
       throw new Error(matched.error.message);
     }
 
-    const bestRoute = matched.data.matches.find((route) => route.endBuildingId === buildingId)
+    const bestRoute = matched.data.matches.find((route) => route.endBuildingId === destinationBuildingId)
       ?? matched.data.matches[0];
 
     if (!bestRoute) {
@@ -146,14 +150,14 @@ export default function HomeScreen() {
       bestRoute.startBuildingName,
       bestRoute.endBuildingName,
     );
-  }, [campus?.id, startRouteNavigation]);
+  }, [campus, nearestCampus, startRouteNavigation]);
 
   const handleDestinationSelect = useCallback((routeId: string, label: string) => {
     void startRouteNavigation(routeId, label);
   }, [startRouteNavigation]);
 
-  const handleDestinationConfirmed = useCallback((buildingId: string, name: string) => {
-    void resolveRouteForDestination(buildingId, name).catch((error: unknown) => {
+  const handleDestinationConfirmed = useCallback((destinationBuildingId: string, name: string) => {
+    void resolveRouteForDestination(destinationBuildingId, name).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : 'Could not start navigation.';
       Speech.stop();
       Speech.speak(message);
@@ -401,9 +405,17 @@ export default function HomeScreen() {
               ? 'Detecting...'
               : loadFailed
                 ? 'Unavailable'
-                : campus?.name ?? 'No campus detected'}
+                : campus?.name ?? 'No nearby campus detected'}
           </Text>
         </View>
+        {!campus && nearestCampus && (
+          <View style={styles.assistRowStack}>
+            <Text style={styles.assistLabel}>Nearest campus</Text>
+            <Text style={styles.assistTranscript}>
+              {`The nearest campus is ${nearestCampus.name}, ${formatCampusDistance(nearestCampus.distanceMeters)} away`}
+            </Text>
+          </View>
+        )}
         <View style={styles.assistRow}>
           <Text style={styles.assistLabel}>Routes on device</Text>
           <Text style={styles.assistValue}>{availableRoutes.length}</Text>
@@ -603,6 +615,14 @@ export default function HomeScreen() {
       </Pressable>
     </SafeAreaView>
   );
+}
+
+function formatCampusDistance(distanceMeters: number): string {
+  if (distanceMeters < 1000) {
+    return `${Math.round(distanceMeters)} meters`;
+  }
+
+  return `${(distanceMeters / 1000).toFixed(1)} kilometers`;
 }
 
 function FavoriteSeparator() {

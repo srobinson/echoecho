@@ -25,7 +25,6 @@ import { fuzzySearch, type FuseMatch } from '../lib/buildingIndex';
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const NO_SPEECH_TIMEOUT_MS = 8_000;
-const CONFIRMATION_TIMEOUT_MS = 5_000;
 /** Fuse score delta within which two results are considered ambiguous. */
 const AMBIGUITY_SCORE_DELTA = 0.1;
 

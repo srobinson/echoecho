@@ -42,6 +42,7 @@ export interface CampusInfo {
 
 export interface CampusContextValue {
   campus: CampusInfo | null;
+  nearestCampus: { name: string; distanceMeters: number } | null;
   entrances: Entrance[];
   securityWaypoints: Waypoint[];
   isLoaded: boolean;
@@ -61,6 +62,7 @@ const STORAGE_KEY_SECURITY_WPS = '@echoecho/security_waypoints';
 
 const CampusContext = createContext<CampusContextValue>({
   campus: null,
+  nearestCampus: null,
   entrances: [],
   securityWaypoints: [],
   isLoaded: false,
@@ -80,6 +82,7 @@ interface CampusProviderProps {
 
 export function CampusProvider({ children }: CampusProviderProps) {
   const [campus, setCampus] = useState<CampusInfo | null>(null);
+  const [nearestCampus, setNearestCampus] = useState<{ name: string; distanceMeters: number } | null>(null);
   const [entrances, setEntrances] = useState<Entrance[]>([]);
   const [securityWaypoints, setSecurityWaypoints] = useState<Waypoint[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -103,12 +106,37 @@ export function CampusProvider({ children }: CampusProviderProps) {
         return false;
       }
 
-      const selectedCampus = selectCampusForDevice(campusRows as Array<Campus & { securityPhone?: string | null }>, deviceCoords);
+      const campusSelection = selectCampusForDevice(
+        campusRows as Array<Campus & { securityPhone?: string | null }>,
+        deviceCoords,
+      );
+
+      setNearestCampus(
+        campusSelection
+          ? {
+              name: campusSelection.nearestCampus.name,
+              distanceMeters: campusSelection.nearestDistanceMeters,
+            }
+          : null,
+      );
+
+      if (!campusSelection || !campusSelection.selectedCampus) {
+        setCampus(null);
+        setEntrances([]);
+        setSecurityWaypoints([]);
+        await Promise.all([
+          AsyncStorage.removeItem(STORAGE_KEY_CAMPUS),
+          AsyncStorage.removeItem(STORAGE_KEY_ENTRANCES),
+          AsyncStorage.removeItem(STORAGE_KEY_SECURITY_WPS),
+        ]);
+        setLoadFailed(false);
+        return true;
+      }
 
       const campusInfo: CampusInfo = {
-        id: selectedCampus.id,
-        name: selectedCampus.name,
-        securityPhone: selectedCampus.securityPhone ?? null,
+        id: campusSelection.selectedCampus.id,
+        name: campusSelection.selectedCampus.name,
+        securityPhone: campusSelection.selectedCampus.securityPhone ?? null,
       };
 
       // Fetch all buildings with entrances for this campus
@@ -258,11 +286,13 @@ export function CampusProvider({ children }: CampusProviderProps) {
   }, [fetchFromNetwork]);
 
   return (
-    <CampusContext.Provider value={{ campus, entrances, securityWaypoints, isLoaded, loadFailed, refresh }}>
+    <CampusContext.Provider value={{ campus, nearestCampus, entrances, securityWaypoints, isLoaded, loadFailed, refresh }}>
       {children}
     </CampusContext.Provider>
   );
 }
+
+const NEARBY_CAMPUS_RADIUS_M = 1_500;
 
 async function getDeviceCoords(): Promise<{ latitude: number; longitude: number } | null> {
   try {
@@ -288,9 +318,13 @@ async function getDeviceCoords(): Promise<{ latitude: number; longitude: number 
 function selectCampusForDevice(
   campuses: Array<Campus & { securityPhone?: string | null }>,
   coords: { latitude: number; longitude: number } | null,
-): Campus & { securityPhone?: string | null } {
-  if (!coords || campuses.length === 1) {
-    return campuses[0];
+): {
+  selectedCampus: (Campus & { securityPhone?: string | null }) | null;
+  nearestCampus: Campus & { securityPhone?: string | null };
+  nearestDistanceMeters: number;
+} | null {
+  if (campuses.length === 0 || !coords) {
+    return null;
   }
 
   let nearest = campuses[0];
@@ -314,5 +348,9 @@ function selectCampusForDevice(
     }
   }
 
-  return nearest;
+  return {
+    selectedCampus: nearestDistance <= NEARBY_CAMPUS_RADIUS_M ? nearest : null,
+    nearestCampus: nearest,
+    nearestDistanceMeters: nearestDistance,
+  };
 }
