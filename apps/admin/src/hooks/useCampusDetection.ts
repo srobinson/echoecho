@@ -4,6 +4,22 @@ import { supabase } from '../lib/supabase';
 import { useCampusStore } from '../stores/campusStore';
 import { haversineM, type Campus } from '@echoecho/shared';
 
+// Accuracy.High uses GPS directly and accepts mock locations on emulator.
+// Accuracy.Balanced uses Wi-Fi/cell towers which are unavailable on emulator,
+// causing getCurrentPositionAsync to hang indefinitely with no timeout.
+const LOCATION_ACCURACY = Location.Accuracy.High;
+
+const LOCATION_TIMEOUT_MS = 10_000;
+
+function getCurrentPosition(): Promise<Location.LocationObject> {
+  return Promise.race([
+    Location.getCurrentPositionAsync({ accuracy: LOCATION_ACCURACY }),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Location timed out')), LOCATION_TIMEOUT_MS)
+    ),
+  ]);
+}
+
 const NEARBY_RADIUS_KM = 5;
 
 type DetectionState =
@@ -34,9 +50,8 @@ export function useCampusDetection() {
     setState({ phase: 'locating' });
     let coords: Location.LocationObjectCoords;
     try {
-      const loc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
+      const cached = await Location.getLastKnownPositionAsync({ maxAge: 30_000 });
+      const loc = cached ?? await getCurrentPosition();
       coords = loc.coords;
     } catch {
       setState({ phase: 'error', message: 'Could not determine your location.' });
