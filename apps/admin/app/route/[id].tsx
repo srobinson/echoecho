@@ -461,17 +461,21 @@ function buildStaticMapUrl(route: Route, token: string, routeBuildings: Building
     `${w.coordinate.longitude.toFixed(5)},${w.coordinate.latitude.toFixed(5)}`,
   );
 
-  // Build overlay layers: building outlines + route path
+  // Build overlay layers: building outlines first, route path on top
   const overlays: string[] = [];
+  const buildingFootprints: [number, number][][] = [];
 
   for (const b of routeBuildings) {
     if (b.footprint && b.footprint.length >= 3) {
       overlays.push(buildingPathOverlay(b.footprint));
+      buildingFootprints.push(b.footprint);
     }
   }
 
   overlays.push(`path-3+6c63ff-0.8(${encodeURIComponent(coords.join(','))})`);
 
+  // Bbox includes both waypoints and building footprints so the viewport
+  // contains the full building outline even when it extends beyond the route.
   let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
   for (const w of wps) {
     if (w.coordinate.longitude < minLng) minLng = w.coordinate.longitude;
@@ -479,7 +483,16 @@ function buildStaticMapUrl(route: Route, token: string, routeBuildings: Building
     if (w.coordinate.latitude < minLat) minLat = w.coordinate.latitude;
     if (w.coordinate.latitude > maxLat) maxLat = w.coordinate.latitude;
   }
-  const bbox = `${minLng - 0.0001},${minLat - 0.0001},${maxLng + 0.0001},${maxLat + 0.0001}`;
+  for (const fp of buildingFootprints) {
+    for (const [lng, lat] of fp) {
+      if (lng < minLng) minLng = lng;
+      if (lng > maxLng) maxLng = lng;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+    }
+  }
+  const pad = 0.0002;
+  const bbox = `${minLng - pad},${minLat - pad},${maxLng + pad},${maxLat + pad}`;
 
   return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${overlays.join(',')}/[${bbox}]/600x200@2x?access_token=${token}`;
 }
