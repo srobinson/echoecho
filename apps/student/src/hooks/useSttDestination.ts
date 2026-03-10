@@ -13,10 +13,7 @@
  * receive sttUnavailable=true and should surface the keyboard fallback.
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
-import {
-  AccessibilityInfo,
-  Platform,
-} from 'react-native';
+import { AccessibilityInfo } from 'react-native';
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
@@ -166,8 +163,9 @@ export function useSttDestination(
   const handleError = useCallback((event: { error: string; message: string }) => {
     clearTimers();
     if (event.error === 'no-speech') {
-      AccessibilityInfo.announceForAccessibility('No speech detected.');
-      resetToIdle();
+      setError('No speech detected. Tap to try again.');
+      AccessibilityInfo.announceForAccessibility('No speech detected. Tap to try again.');
+      setSttState('error');
     } else {
       setError(`Recognition error: ${event.message}`);
       setSttState('error');
@@ -175,7 +173,7 @@ export function useSttDestination(
     isPausedRef.current = false;
     pauseResolverRef.current?.();
     pauseResolverRef.current = null;
-  }, [clearTimers, resetToIdle]);
+  }, [clearTimers]);
 
   const handleEnd = useCallback(() => {
     isPausedRef.current = false;
@@ -212,14 +210,15 @@ export function useSttDestination(
       AccessibilityInfo.announceForAccessibility('Listening. Speak your destination.');
 
       noSpeechTimerRef.current = setTimeout(() => {
-        AccessibilityInfo.announceForAccessibility('No speech detected.');
         ExpoSpeechRecognitionModule.abort();
-        resetToIdle();
+        setError('No speech detected. Tap to try again.');
+        AccessibilityInfo.announceForAccessibility('No speech detected. Tap to try again.');
+        setSttState('error');
       }, NO_SPEECH_TIMEOUT_MS);
     } catch {
       setSttUnavailable(true);
     }
-  }, [resetToIdle]);
+  }, []);
 
   const stopListening = useCallback(() => {
     clearTimers();
@@ -274,14 +273,12 @@ export function useSttDestination(
     },
   };
 
-  // iOS: request permissions eagerly on mount so the permission prompt does
+  // Request permissions eagerly on mount so the permission prompt does
   // not surprise the user mid-dictation on their first tap.
   useEffect(() => {
-    if (Platform.OS === 'ios') {
-      void ExpoSpeechRecognitionModule.requestPermissionsAsync().then((r) => {
-        if (!r.granted) setSttUnavailable(true);
-      });
-    }
+    void ExpoSpeechRecognitionModule.requestPermissionsAsync().then((r) => {
+      if (!r.granted) setSttUnavailable(true);
+    });
   }, []);
 
   return {
