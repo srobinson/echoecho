@@ -245,12 +245,22 @@ function unsubscribeBattery(): void {
  * Start the GPS location updates background task.
  * Caller is responsible for confirming permissions before calling this.
  */
+let _starting = false;
+
 export async function startLocationTask(): Promise<void> {
-  const options = await applyBatteryAwareOptions();
-  await Location.startLocationUpdatesAsync(GPS_TASK_ID, options);
-  subscribeBattery();
-  _isPaused = false;
-  _sampleCountSinceFlush = 0;
+  // Guard against concurrent calls (auto-start + manual tap race).
+  if (_starting) return;
+  _starting = true;
+
+  try {
+    const options = await applyBatteryAwareOptions();
+    await Location.startLocationUpdatesAsync(GPS_TASK_ID, options);
+    subscribeBattery();
+    _isPaused = false;
+    _sampleCountSinceFlush = 0;
+  } finally {
+    _starting = false;
+  }
 }
 
 /** Pause location collection without stopping the OS task (keeps background entitlement alive). */

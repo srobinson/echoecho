@@ -50,6 +50,7 @@
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "EchoEcho Admin needs location access to record campus routes.",
+          "isIosBackgroundLocationEnabled": true,
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
         }

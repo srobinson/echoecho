@@ -29,6 +29,7 @@ import { useCampusStore } from '../src/stores/campusStore';
 import { useMapViewportStore } from '../src/stores/mapViewportStore';
 import { useGpsRecording } from '../src/hooks/useGpsRecording';
 import { computeDistance } from '@echoecho/shared';
+import { clearPersistedBuffer } from '../src/services/gpsRecordingService';
 
 import { RecordingBottomBar } from '../src/components/RecordingBottomBar';
 import { VoiceAnnotationSheet } from '../src/components/VoiceAnnotationSheet';
@@ -64,13 +65,11 @@ export default function RecordScreen() {
   const {
     permissionStatus,
     isDegraded,
-    hasPersistedBuffer,
     requestPermissions,
     startRecording: gpsStart,
     pauseRecording: gpsPause,
     resumeRecording: gpsResume,
     stopRecording: gpsStop,
-    recoverPersistedSession,
     openSettings,
   } = useGpsRecording();
 
@@ -159,7 +158,7 @@ export default function RecordScreen() {
     }
   }, [elapsedMs, distanceMeters, isRecording]);
 
-  // ── Permission + persisted buffer prompts ─────────────────────────────────
+  // ── Permission request ───────────────────────────────────────────────────
 
   useEffect(() => {
     if (permissionStatus === 'unknown') {
@@ -167,22 +166,13 @@ export default function RecordScreen() {
     }
   }, [permissionStatus, requestPermissions]);
 
-  useEffect(() => {
-    if (hasPersistedBuffer) {
-      Alert.alert(
-        'Resume Previous Session?',
-        'A previous recording session was interrupted. Recover it?',
-        [
-          { text: 'Discard', style: 'destructive', onPress: () => store.clearSession() },
-          { text: 'Recover', onPress: recoverPersistedSession },
-        ],
-      );
-    }
-  }, [hasPersistedBuffer, recoverPersistedSession, store]);
-
   // ── Recording control ─────────────────────────────────────────────────────
 
+  const startInFlight = useRef(false);
+
   const handleStart = useCallback(async () => {
+    if (permissionStatus === 'unknown') return;
+
     if (permissionStatus === 'denied' || permissionStatus === 'restricted') {
       Alert.alert(
         'Location Permission Required',
@@ -195,8 +185,6 @@ export default function RecordScreen() {
       return;
     }
 
-    // Background location is required for the OS location task. Foreground-
-    // only grants will cause startLocationUpdatesAsync to throw.
     if (permissionStatus === 'foreground_only') {
       Alert.alert(
         'Background Location Required',
@@ -209,15 +197,35 @@ export default function RecordScreen() {
       return;
     }
 
+    // Prevent concurrent calls (auto-start + manual tap race)
+    if (startInFlight.current) return;
+    startInFlight.current = true;
+
     try {
+      // Clear any stale persisted buffer before starting fresh
+      await clearPersistedBuffer();
       await gpsStart();
     } catch (e) {
+      store.clearSession();
       Alert.alert(
         'Could Not Start Recording',
         e instanceof Error ? e.message : 'GPS service failed to start. Check location permissions and try again.',
       );
+    } finally {
+      startInFlight.current = false;
     }
-  }, [permissionStatus, gpsStart, openSettings]);
+  }, [permissionStatus, gpsStart, openSettings, store]);
+
+  // Auto-start recording once permissions are confirmed.
+  // Skips only if there's already an active session (e.g. returning to screen mid-recording).
+  const autoStartFired = useRef(false);
+  useEffect(() => {
+    if (autoStartFired.current) return;
+    if (permissionStatus === 'granted' && !session) {
+      autoStartFired.current = true;
+      void handleStart();
+    }
+  }, [permissionStatus, session, handleStart]);
 
   const handleStop = useCallback(() => {
     Alert.alert('Stop Recording', 'What would you like to do with this route?', [
@@ -284,28 +292,18 @@ export default function RecordScreen() {
         logoEnabled={false}
         attributionPosition={{ bottom: 8, right: 8 }}
       >
-        {/* When recording: follow user location exclusively — never combine
-            followUserLocation with centerCoordinate (rnmapbox native conflict).
-            When idle: pin to campus center on first mount (animationMode="none"
-            so it's instant, no fly animation), then leave the camera free for
-            manual pan/zoom. */}
-        {isRecording ? (
-          <MapboxGL.Camera
-            followUserLocation
-            followZoomLevel={18}
-            animationMode="easeTo"
-            animationDuration={500}
-          />
-        ) : initialCenter ? (
-          <MapboxGL.Camera
-            centerCoordinate={initialCenter}
-            zoomLevel={initialZoom}
-            animationMode="none"
-            animationDuration={0}
-          />
-        ) : (
-          <MapboxGL.Camera />
-        )}
+        <MapboxGL.Camera
+          defaultSettings={{
+            centerCoordinate: initialCenter ?? undefined,
+            zoomLevel: initialZoom,
+          }}
+          followUserLocation={isRecording}
+          followZoomLevel={initialZoom}
+          centerCoordinate={initialCenter ?? undefined}
+          zoomLevel={initialZoom}
+          animationMode="moveTo"
+          animationDuration={0}
+        />
 
         <MapboxGL.UserLocation visible animated />
 
