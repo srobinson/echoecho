@@ -53,7 +53,10 @@ export default function RootLayout() {
         />
         <Stack.Screen
           name="record"
-          options={{ title: 'Record Route', presentation: 'fullScreenModal' }}
+          options={{
+            title: 'Record Route',
+            presentation: 'fullScreenModal',
+          }}
         />
         <Stack.Screen
           name="haptic-lab"

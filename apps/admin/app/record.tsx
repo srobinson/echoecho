@@ -35,6 +35,9 @@ import { RecordingBottomBar } from '../src/components/RecordingBottomBar';
 import { VoiceAnnotationSheet } from '../src/components/VoiceAnnotationSheet';
 import { HazardButton } from '../src/components/HazardButton';
 
+// Fallback center when stores are empty (TSBVI campus, Austin TX)
+const FALLBACK_CENTER: [number, number] = [-97.7468, 30.3495];
+
 // Waypoint type → color for marker dot
 const WAYPOINT_COLORS: Record<string, string> = {
   turn:          '#4FC3F7',
@@ -82,11 +85,11 @@ export default function RecordScreen() {
 
   // Inherit the viewport the user was looking at on the main map.
   // Falls back to campus center if the store has no captured position yet.
-  const initialCenter = useMemo<[number, number] | null>(
+  const initialCenter = useMemo<[number, number]>(
     () => savedCenter
       ?? (activeCampus
         ? [activeCampus.center.longitude, activeCampus.center.latitude]
-        : null),
+        : FALLBACK_CENTER),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeCampus?.id],
   );
@@ -292,14 +295,17 @@ export default function RecordScreen() {
         logoEnabled={false}
         attributionPosition={{ bottom: 8, right: 8 }}
       >
+        {/* centerCoordinate always present (never undefined). followUserLocation
+            takes priority when isRecording is true. Matches the working pattern
+            from commit 2c3766c. */}
         <MapboxGL.Camera
           defaultSettings={{
-            centerCoordinate: initialCenter ?? undefined,
+            centerCoordinate: initialCenter,
             zoomLevel: initialZoom,
           }}
           followUserLocation={isRecording}
           followZoomLevel={initialZoom}
-          centerCoordinate={initialCenter ?? undefined}
+          centerCoordinate={initialCenter}
           zoomLevel={initialZoom}
           animationMode="moveTo"
           animationDuration={0}
