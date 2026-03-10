@@ -20,7 +20,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../src/lib/supabase';
-import type { Route, RouteStatus } from '@echoecho/shared';
+import type { Building, Route, RouteStatus } from '@echoecho/shared';
 
 import { tabColors } from '@echoecho/ui';
 import { SectionColorProvider, useSectionColor } from '../../src/contexts/SectionColorContext';
@@ -52,6 +52,7 @@ function RouteDetailScreenInner() {
   const accent = useSectionColor();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [route, setRoute] = useState<Route | null>(null);
+  const [buildings, setBuildings] = useState<Building[]>([]);
   const [versions, setVersions] = useState<RouteVersion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -75,6 +76,16 @@ function RouteDetailScreenInner() {
       setRoute(r);
       setEditName(r.name);
       setEditDescription(r.description ?? '');
+
+      // Fetch buildings for map overlay
+      const buildingIds = [r.fromBuildingId, r.toBuildingId].filter(Boolean) as string[];
+      if (buildingIds.length > 0) {
+        const { data: bData } = await supabase
+          .from('v_buildings' as 'buildings')
+          .select('*')
+          .in('id', buildingIds);
+        if (bData) setBuildings(bData as Building[]);
+      }
     }
     setIsLoading(false);
   }, [id]);
@@ -219,7 +230,7 @@ function RouteDetailScreenInner() {
   const statusColor = STATUS_COLOR[route.status] ?? '#9CA3AF';
   const mapToken = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
   const mapUrl = route.waypoints.length >= 2 && mapToken
-    ? buildStaticMapUrl(route, mapToken)
+    ? buildStaticMapUrl(route, mapToken, buildings)
     : null;
 
   return (
@@ -403,8 +414,21 @@ function RouteDetailScreenInner() {
 }
 
 const MAX_STATIC_MAP_COORDS = 50;
+const MAX_BUILDING_COORDS = 20;
 
-function buildStaticMapUrl(route: Route, token: string): string {
+function buildingPathOverlay(footprint: [number, number][]): string {
+  const step = footprint.length <= MAX_BUILDING_COORDS ? 1 : Math.ceil(footprint.length / MAX_BUILDING_COORDS);
+  const sampled = footprint.filter((_, i) => i % step === 0 || i === footprint.length - 1);
+  const first = sampled[0];
+  const last = sampled[sampled.length - 1];
+  if (first && last && (first[0] !== last[0] || first[1] !== last[1])) {
+    sampled.push(first);
+  }
+  const coords = sampled.map(([lng, lat]) => `${lng.toFixed(5)},${lat.toFixed(5)}`);
+  return `path-2+00BFFF-0.9(${encodeURIComponent(coords.join(','))})`;
+}
+
+function buildStaticMapUrl(route: Route, token: string, routeBuildings: Building[] = []): string {
   const wps = route.waypoints;
   const step = wps.length <= MAX_STATIC_MAP_COORDS ? 1 : Math.ceil(wps.length / MAX_STATIC_MAP_COORDS);
   const sampled = wps.filter((_, i) => i % step === 0 || i === wps.length - 1);
@@ -412,7 +436,17 @@ function buildStaticMapUrl(route: Route, token: string): string {
   const coords = sampled.map((w) =>
     `${w.coordinate.longitude.toFixed(5)},${w.coordinate.latitude.toFixed(5)}`,
   );
-  const path = `path-3+6c63ff-0.8(${encodeURIComponent(coords.join(','))})`;
+
+  // Build overlay layers: building outlines + route path
+  const overlays: string[] = [];
+
+  for (const b of routeBuildings) {
+    if (b.footprint && b.footprint.length >= 3) {
+      overlays.push(buildingPathOverlay(b.footprint));
+    }
+  }
+
+  overlays.push(`path-3+6c63ff-0.8(${encodeURIComponent(coords.join(','))})`);
 
   let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
   for (const w of wps) {
@@ -421,9 +455,9 @@ function buildStaticMapUrl(route: Route, token: string): string {
     if (w.coordinate.latitude < minLat) minLat = w.coordinate.latitude;
     if (w.coordinate.latitude > maxLat) maxLat = w.coordinate.latitude;
   }
-  const bbox = `${minLng - 0.0003},${minLat - 0.0003},${maxLng + 0.0003},${maxLat + 0.0003}`;
+  const bbox = `${minLng - 0.0001},${minLat - 0.0001},${maxLng + 0.0001},${maxLat + 0.0001}`;
 
-  return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${path}/[${bbox}]/600x200@2x?access_token=${token}`;
+  return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${overlays.join(',')}/[${bbox}]/600x200@2x?access_token=${token}`;
 }
 
 function StatBox({ value, label }: { value: string; label: string }) {

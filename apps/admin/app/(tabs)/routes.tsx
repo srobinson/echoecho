@@ -19,7 +19,7 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCampusStore } from '../../src/stores/campusStore';
 import { supabase } from '../../src/lib/supabase';
-import type { Route, RouteStatus } from '@echoecho/shared';
+import type { Building, Route, RouteStatus } from '@echoecho/shared';
 import { tabColors } from '@echoecho/ui';
 import { SectionColorProvider, useSectionColor } from '../../src/contexts/SectionColorContext';
 
@@ -50,6 +50,7 @@ export default function RoutesScreen() {
 function RoutesScreenInner() {
   const accent = useSectionColor();
   const [routes, setRoutes] = useState<Route[]>([]);
+  const [buildings, setBuildings] = useState<Map<string, Building>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -88,10 +89,26 @@ function RoutesScreenInner() {
     setIsLoading(false);
   }, [activeCampus]);
 
+  const fetchBuildings = useCallback(async () => {
+    if (!activeCampus) return;
+    const { data } = await supabase
+      .from('v_buildings' as 'buildings')
+      .select('*')
+      .eq('campusId' as 'campus_id', activeCampus.id);
+    if (data) {
+      const map = new Map<string, Building>();
+      for (const b of data as Building[]) {
+        map.set(b.id, b);
+      }
+      setBuildings(map);
+    }
+  }, [activeCampus]);
+
   /* eslint-disable react-hooks/exhaustive-deps -- searchQuery excluded: search uses debounced handleSearch */
   useEffect(() => {
     void fetchRoutes(searchQuery, statusFilter);
-  }, [fetchRoutes, statusFilter]);
+    void fetchBuildings();
+  }, [fetchRoutes, fetchBuildings, statusFilter]);
   /* eslint-enable react-hooks/exhaustive-deps */
 
   useEffect(() => {
@@ -102,9 +119,9 @@ function RoutesScreenInner() {
 
   const renderRouteItem = useCallback(
     ({ item }: { item: Route }) => (
-      <RouteCard route={item} onPress={() => router.push(`/route/${item.id}`)} />
+      <RouteCard route={item} buildings={buildings} onPress={() => router.push(`/route/${item.id}`)} />
     ),
-    [],
+    [buildings],
   );
 
   const handleSearch = useCallback((text: string) => {
@@ -190,8 +207,23 @@ function RoutesScreenInner() {
 }
 
 const MAX_STATIC_MAP_COORDS = 50;
+const MAX_BUILDING_COORDS = 20;
 
-function staticMapUrl(route: Route): string | null {
+function buildingPathOverlay(footprint: [number, number][]): string {
+  // Sample building footprint coordinates if too many
+  const step = footprint.length <= MAX_BUILDING_COORDS ? 1 : Math.ceil(footprint.length / MAX_BUILDING_COORDS);
+  const sampled = footprint.filter((_, i) => i % step === 0 || i === footprint.length - 1);
+  // Close the ring
+  const first = sampled[0];
+  const last = sampled[sampled.length - 1];
+  if (first && last && (first[0] !== last[0] || first[1] !== last[1])) {
+    sampled.push(first);
+  }
+  const coords = sampled.map(([lng, lat]) => `${lng.toFixed(5)},${lat.toFixed(5)}`);
+  return `path-2+00BFFF-0.9(${encodeURIComponent(coords.join(','))})`;
+}
+
+function staticMapUrl(route: Route, buildingMap?: Map<string, Building>): string | null {
   if (route.waypoints.length < 2) return null;
   const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
   if (!token) return null;
@@ -203,7 +235,25 @@ function staticMapUrl(route: Route): string | null {
   const coords = sampled.map((w) =>
     `${w.coordinate.longitude.toFixed(5)},${w.coordinate.latitude.toFixed(5)}`,
   );
-  const path = `path-3+6c63ff-0.8(${encodeURIComponent(coords.join(','))})`;
+
+  // Build overlay layers: route path + building outlines
+  const overlays: string[] = [];
+
+  // Add building footprint outlines if available
+  if (buildingMap) {
+    const buildingIds = new Set<string>();
+    if (route.fromBuildingId) buildingIds.add(route.fromBuildingId);
+    if (route.toBuildingId) buildingIds.add(route.toBuildingId);
+    for (const bid of buildingIds) {
+      const b = buildingMap.get(bid);
+      if (b && b.footprint && b.footprint.length >= 3) {
+        overlays.push(buildingPathOverlay(b.footprint));
+      }
+    }
+  }
+
+  // Route path on top
+  overlays.push(`path-3+6c63ff-0.8(${encodeURIComponent(coords.join(','))})`);
 
   let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
   for (const w of wps) {
@@ -212,18 +262,18 @@ function staticMapUrl(route: Route): string | null {
     if (w.coordinate.latitude < minLat) minLat = w.coordinate.latitude;
     if (w.coordinate.latitude > maxLat) maxLat = w.coordinate.latitude;
   }
-  const bbox = `${minLng - 0.0003},${minLat - 0.0003},${maxLng + 0.0003},${maxLat + 0.0003}`;
+  const bbox = `${minLng - 0.0001},${minLat - 0.0001},${maxLng + 0.0001},${maxLat + 0.0001}`;
 
-  return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${path}/[${bbox}]/300x120@2x?access_token=${token}`;
+  return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${overlays.join(',')}/[${bbox}]/300x120@2x?access_token=${token}`;
 }
 
 function ListSeparator() {
   return <View style={styles.separator} />;
 }
 
-const RouteCard = memo(function RouteCard({ route, onPress }: { route: Route; onPress: () => void }) {
+const RouteCard = memo(function RouteCard({ route, buildings, onPress }: { route: Route; buildings: Map<string, Building>; onPress: () => void }) {
   const statusColor = STATUS_COLOR[route.status] ?? '#9CA3AF';
-  const mapUrl = staticMapUrl(route);
+  const mapUrl = staticMapUrl(route, buildings);
   const dateStr = route.recordedAt
     ? new Date(route.recordedAt).toLocaleDateString()
     : new Date(route.createdAt).toLocaleDateString();
