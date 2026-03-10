@@ -147,7 +147,6 @@ export default function HomeScreen() {
     await startRouteNavigation(
       bestRoute.routeId,
       bestRoute.routeName,
-      bestRoute.startBuildingName,
       bestRoute.endBuildingName,
     );
   }, [campus, nearestCampus, startRouteNavigation]);
