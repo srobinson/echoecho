@@ -32,8 +32,6 @@ import { RecordingBottomBar } from '../src/components/RecordingBottomBar';
 import { VoiceAnnotationSheet } from '../src/components/VoiceAnnotationSheet';
 import { HazardButton } from '../src/components/HazardButton';
 
-const TSBVI_CENTER: [number, number] = [-97.7468, 30.3495];
-
 // Waypoint type → color for marker dot
 const WAYPOINT_COLORS: Record<string, string> = {
   turn:          '#4FC3F7',
@@ -246,14 +244,19 @@ export default function RecordScreen() {
         logoEnabled={false}
         attributionPosition={{ bottom: 8, right: 8 }}
       >
-        <MapboxGL.Camera
-          followUserLocation={isRecording}
-          followZoomLevel={18}
-          centerCoordinate={TSBVI_CENTER}
-          zoomLevel={16}
-          animationMode="flyTo"
-          animationDuration={800}
-        />
+        {/* When recording: follow user location exclusively — no centerCoordinate
+            alongside followUserLocation (rnmapbox native conflict → crash).
+            When idle: camera is free; user can pan/zoom without interference. */}
+        {isRecording ? (
+          <MapboxGL.Camera
+            followUserLocation
+            followZoomLevel={18}
+            animationMode="easeTo"
+            animationDuration={500}
+          />
+        ) : (
+          <MapboxGL.Camera />
+        )}
 
         <MapboxGL.UserLocation visible animated />
 
