@@ -47,6 +47,7 @@ function BuildingDetailScreenInner() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [building, setBuilding] = useState<Building | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
@@ -63,7 +64,11 @@ function BuildingDetailScreenInner() {
       .eq('id', id)
       .single();
 
-    if (!error && data) {
+    if (error) {
+      setLoadError(error.message);
+    } else if (!data) {
+      setLoadError('Building not found.');
+    } else {
       const b = data as Building;
       setBuilding(b);
       setEditName(b.name);
@@ -115,6 +120,7 @@ function BuildingDetailScreenInner() {
       `Delete "${building.name}"?`,
       'This will remove the building and all its entrances. This cannot be undone.',
       [
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
@@ -131,16 +137,34 @@ function BuildingDetailScreenInner() {
             router.back();
           },
         },
-        { text: 'Cancel', style: 'cancel' },
       ],
     );
   }, [building]);
 
-  if (isLoading || !building) {
+  if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={accent} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!building) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centered}>
+          <Ionicons name="alert-circle-outline" size={48} color="#F06292" />
+          <Text style={styles.errorTitle}>{loadError ?? 'Building not found'}</Text>
+          <Pressable
+            style={styles.backBtn}
+            onPress={() => router.back()}
+            accessibilityLabel="Go back"
+            accessibilityRole="button"
+          >
+            <Ionicons name="arrow-back" size={22} color="#F0F0F5" />
+          </Pressable>
         </View>
       </SafeAreaView>
     );
@@ -372,7 +396,8 @@ function ActionButton({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A0A0F' },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
+  errorTitle: { color: '#F06292', fontSize: 15, fontWeight: '600', textAlign: 'center', maxWidth: 280 },
   scroll: { paddingBottom: 40 },
   header: {
     flexDirection: 'row',
