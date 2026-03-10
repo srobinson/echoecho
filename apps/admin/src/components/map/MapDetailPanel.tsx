@@ -26,6 +26,7 @@ import {
   StyleSheet,
   ScrollView,
   AccessibilityInfo,
+  findNodeHandle,
 } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { Ionicons } from '@expo/vector-icons';
@@ -49,14 +50,17 @@ const SNAP_POINTS = ['40%', '80%'];
 export const MapDetailPanel = memo(function MapDetailPanel({ feature, detailContent, onClose }: Props) {
   const sheetRef = useRef<BottomSheet>(null);
   const headingRef = useRef<View>(null);
+  const featureId = feature?.id ?? null;
+  const featureType = feature?.type ?? null;
 
   useEffect(() => {
-    if (feature) {
+    if (featureId) {
       sheetRef.current?.snapToIndex(0);
       const timer = setTimeout(() => {
-        if (headingRef.current) {
+        const reactTag = headingRef.current ? findNodeHandle(headingRef.current) : null;
+        if (reactTag != null) {
           AccessibilityInfo.setAccessibilityFocus(
-            headingRef.current as unknown as number,
+            reactTag,
           );
         }
       }, 350);
@@ -64,7 +68,7 @@ export const MapDetailPanel = memo(function MapDetailPanel({ feature, detailCont
     } else {
       sheetRef.current?.close();
     }
-  }, [feature]);
+  }, [featureId, featureType]);
 
   const featureTypeLabel =
     feature?.type === 'building'

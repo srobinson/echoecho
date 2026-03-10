@@ -18,13 +18,16 @@ interface Props {
   polygonRing: [number, number][];
   /** Existing entrances */
   entrances: Entrance[];
-  /** Called when user taps near the polygon edge */
-  onAddEntrance: (coordinate: [number, number]) => void;
+  /** Pending unsaved entrance tap position */
+  previewCoordinate?: [number, number] | null;
+  /** Unique token for the current preview tap so the preview remounts when repositioned */
+  previewToken?: string | null;
   /** Whether entrance marking mode is active */
   active: boolean;
 }
 
 const SOURCE_ID = 'entrance-markers';
+const CIRCLE_LAYER_ID = 'entrance-markers-circle-layer';
 const SYMBOL_LAYER_ID = 'entrance-markers-layer';
 const TAP_SOURCE_ID = 'entrance-tap-area';
 const TAP_LINE_LAYER_ID = 'entrance-tap-line';
@@ -47,24 +50,47 @@ export function snapToPolygonEdge(
 export function EntranceMarkingTool({
   polygonRing,
   entrances,
+  previewCoordinate = null,
+  previewToken = null,
   active,
 }: Props) {
-  const entranceCollection = useMemo((): FeatureCollection<Point> => ({
-    type: 'FeatureCollection',
-    features: entrances.map((e, i): Feature<Point> => ({
+  const entranceCollection = useMemo((): FeatureCollection<Point> => {
+    const features = entrances.map((e, i): Feature<Point> => ({
       type: 'Feature',
       id: e.id ?? `entrance-${i}`,
       properties: {
         name: e.name,
         isMain: e.isMain,
-        label: e.isMain ? '★' : '⬤',
+        isPreview: false,
       },
       geometry: {
         type: 'Point',
         coordinates: [e.coordinate.longitude, e.coordinate.latitude],
       },
-    })),
-  }), [entrances]);
+    }));
+
+    if (previewCoordinate) {
+      const snapped = snapToPolygonEdge(polygonRing, previewCoordinate);
+      features.push({
+        type: 'Feature',
+        id: previewToken ?? 'entrance-preview',
+        properties: {
+          name: 'Pending entrance',
+          isMain: false,
+          isPreview: true,
+        },
+        geometry: {
+          type: 'Point',
+          coordinates: snapped,
+        },
+      });
+    }
+
+    return {
+      type: 'FeatureCollection',
+      features,
+    };
+  }, [entrances, polygonRing, previewCoordinate, previewToken]);
 
   // Highlight polygon edge when in marking mode
   const edgeLine = useMemo(() => {
@@ -98,18 +124,38 @@ export function EntranceMarkingTool({
       )}
 
       <MapboxGL.ShapeSource id={SOURCE_ID} shape={entranceCollection}>
-        <MapboxGL.SymbolLayer
-          id={SYMBOL_LAYER_ID}
+        <MapboxGL.CircleLayer
+          id={CIRCLE_LAYER_ID}
           style={{
-            textField: ['get', 'label'],
-            textSize: 16,
-            textColor: [
+            circleRadius: [
               'case',
+              ['get', 'isPreview'], 8,
+              ['get', 'isMain'], 8,
+              6,
+            ],
+            circleColor: [
+              'case',
+              ['get', 'isPreview'], '#F0F0F5',
               ['get', 'isMain'], '#81C784',
               '#FFA726',
             ],
+            circleStrokeColor: '#0A0A0F',
+            circleStrokeWidth: 2,
+            circleOpacity: [
+              'case',
+              ['get', 'isPreview'], 0.9,
+              0.95,
+            ],
+          }}
+        />
+        <MapboxGL.SymbolLayer
+          id={SYMBOL_LAYER_ID}
+          style={{
+            textField: ['case', ['get', 'isMain'], '★', ''],
+            textSize: 11,
+            textColor: '#0A0A0F',
             textHaloColor: '#0A0A0F',
-            textHaloWidth: 1.5,
+            textHaloWidth: 0,
             textAnchor: 'center',
             textAllowOverlap: true,
           }}

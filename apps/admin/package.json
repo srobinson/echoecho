@@ -18,7 +18,7 @@
     "@expo/vector-icons": "~14.0.4",
     "@gorhom/bottom-sheet": "^4.6.1",
     "@react-native-async-storage/async-storage": "1.23.1",
-    "@rnmapbox/maps": "10.1.33",
+    "@rnmapbox/maps": "^10.2.10",
     "@supabase/supabase-js": "^2.43.4",
     "@turf/distance": "^7.3.4",
     "@turf/helpers": "^7.3.4",

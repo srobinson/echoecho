@@ -35,6 +35,15 @@ import {
 } from '../services/waypointDetectionService';
 import { useRecordingStore } from '../stores/recordingStore';
 
+function logGpsHookDebug(step: string, details?: unknown) {
+  if (!__DEV__) return;
+  if (details === undefined) {
+    console.log(`[GpsRecordingDebug] ${step}`);
+    return;
+  }
+  console.log(`[GpsRecordingDebug] ${step}`, details);
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type PermissionStatus =
@@ -131,7 +140,9 @@ export function useGpsRecording(): UseGpsRecordingReturn {
   // ── Permission ──────────────────────────────────────────────────────────────
 
   const requestPermissions = useCallback(async (): Promise<PermissionStatus> => {
+    logGpsHookDebug('requestPermissions:start');
     const result = await requestLocationPermissions();
+    logGpsHookDebug('requestPermissions:result', result);
 
     if (!result.foreground.granted) {
       const status: PermissionStatus = result.foreground.canAskAgain ? 'denied' : 'restricted';
@@ -151,12 +162,19 @@ export function useGpsRecording(): UseGpsRecordingReturn {
   // ── Recording control ───────────────────────────────────────────────────────
 
   const startRecording = useCallback(async (): Promise<void> => {
+    logGpsHookDebug('startRecording:start');
     // Reset waypoint detection state for the new session
     detectionStateRef.current = createWaypointDetectionState();
     prevLengthRef.current = 0;
 
+    logGpsHookDebug('startRecording:store.startRecording:before');
     store.startRecording();
+    logGpsHookDebug('startRecording:store.startRecording:after', {
+      sessionState: useRecordingStore.getState().session?.state ?? null,
+    });
+    logGpsHookDebug('startRecording:startLocationTask:before');
     await startLocationTask();
+    logGpsHookDebug('startRecording:startLocationTask:after');
   }, [store]);
 
   const pauseRecording = useCallback((): void => {

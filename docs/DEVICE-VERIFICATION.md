@@ -28,40 +28,27 @@ Step-by-step instructions for verifying Supabase and Mapbox integration on a phy
 ## Pre-verification: Seed Staging Data
 
 Before verifying data queries (ALP-1001) or student E2E (ALP-1003), staging needs test data.
+Requires `STAGING_DB_URL` set to the Postgres connection string from the Supabase dashboard
+(Project Settings > Database > Connection string > URI).
 
-### Step 1: Create a test user
+### Step 1: Run the seed
 
-1. Build and run the admin app on device (see build steps below)
-2. On the login screen, you cannot self-register (no sign-up UI). Create a user via the **Supabase Dashboard**:
-   - Go to Authentication > Users > Add User
-   - Email: `test@echoecho.dev`, Password: `TestPass123!`
-   - The `handle_new_user` trigger (migration 001) auto-creates a profile row with role `volunteer`
-
-### Step 2: Promote to admin
-
-In the Supabase SQL Editor, run:
-```sql
-UPDATE profiles
-SET role = 'admin', campus_id = '00000000-0000-0000-0000-000000000001'
-WHERE id = (SELECT id FROM auth.users WHERE email = 'test@echoecho.dev');
+```bash
+just supabase-seed-staging
 ```
 
-### Step 3: Run the staging seed
+This is fully automated and idempotent. It creates both test users, promotes them to the
+correct roles, and inserts all reference data. No Supabase dashboard SQL steps are required.
 
-The seed script requires at least one `auth.users` row (the test user above). Run via SQL Editor or psql:
+| Credential | Role | Campus |
+|---|---|---|
+| `seed-admin@echoecho.test` / `test1234` | `admin` | TSBVI |
+| `seed-student@echoecho.test` / `test1234` | `student` | TSBVI |
 
-```sql
--- Copy contents of supabase/seed_staging.sql and execute
-```
+Also inserted: TSBVI campus, 3 buildings with entrances, 2 published routes with waypoints,
+1 hazard, 1 POI.
 
-The seed inserts:
-- 1 campus (TSBVI) with security phone
-- 3 buildings (Main Building, Gymnasium, Student Center) with entrances
-- 2 published routes with waypoints (Main→Gym, Main→Student Center)
-- 1 hazard on Route 1
-- 1 POI (security office)
-
-### Step 4: Build and install
+### Step 2: Build and install
 
 ```bash
 # Admin app
@@ -87,7 +74,7 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 1. Open the admin app
 2. You should see the login screen (dark background, "EchoEcho Admin" heading)
-3. Enter `test@echoecho.dev` / `TestPass123!`
+3. Enter `seed-admin@echoecho.test` / `test1234`
 4. Tap "Sign In"
 
 **Expected**: The app navigates to the Map tab. The Supabase dashboard (Authentication > Users) should show a `last_sign_in_at` timestamp for the test user.
@@ -247,15 +234,9 @@ Both should return data if the seed was applied.
 
 ### Prerequisites
 
-- Staging seed data applied
+- Staging seed data applied (`just supabase-seed-staging`)
 - Student app built and installed
-- A student profile exists. Create via SQL Editor:
-  ```sql
-  -- Create a student user via Supabase Auth dashboard first, then:
-  UPDATE profiles
-  SET role = 'student', campus_id = '00000000-0000-0000-0000-000000000001'
-  WHERE id = (SELECT id FROM auth.users WHERE email = 'student@echoecho.dev');
-  ```
+- Student credentials: `seed-student@echoecho.test` / `test1234`
 
 ### Test 1: App Launch and Campus Load
 

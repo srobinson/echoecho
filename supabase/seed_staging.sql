@@ -1,51 +1,17 @@
 -- Staging seed data for device verification (ALP-1000 through ALP-1003)
 --
--- Run against the staging Supabase instance after applying all migrations:
---   supabase db push --project-ref $STAGING_PROJECT_REF
+-- Run via:
+--   just supabase-seed-staging
+--
+-- Or manually:
 --   psql $STAGING_DB_URL -f supabase/seed_staging.sql
 --
--- Or via the Supabase SQL Editor in the dashboard.
---
--- Prerequisites:
---   1. All migrations applied
---
--- This script is idempotent (uses ON CONFLICT DO NOTHING).
+-- This script is fully automated and idempotent once the auth users have been
+-- created by supabase/seed_staging_auth.cjs. It promotes those users to the
+-- correct roles and inserts all reference data. No manual SQL steps in the
+-- Supabase dashboard are required.
 
 SET search_path TO public, extensions;
-
--- ============================================================
--- TEST USER: create the well-known seed admin directly in auth.users
--- ============================================================
-
-INSERT INTO auth.users (
-  id,
-  instance_id,
-  aud,
-  role,
-  email,
-  encrypted_password,
-  email_confirmed_at,
-  created_at,
-  updated_at,
-  confirmation_token,
-  raw_app_meta_data,
-  raw_user_meta_data
-)
-VALUES (
-  '00000000-0000-0000-0000-000000000099',
-  '00000000-0000-0000-0000-000000000000',
-  'authenticated',
-  'authenticated',
-  'seed-admin@echoecho.test',
-  crypt('test1234', gen_salt('bf')),
-  now(),
-  now(),
-  now(),
-  '',
-  '{"provider": "email", "providers": ["email"]}',
-  '{}'
-)
-ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================
 -- CLEANUP: delete previous seed data (dependency order)
@@ -78,6 +44,26 @@ VALUES (
 )
 ON CONFLICT (id) DO UPDATE SET
   security_phone = EXCLUDED.security_phone;
+
+-- ============================================================
+-- PROFILE PROMOTIONS
+-- Done after campus insert so the campus_id FK constraint is satisfied.
+-- Uses UPSERT to handle both first-run and re-run cases.
+-- ============================================================
+
+INSERT INTO profiles (id, role, campus_id, is_active)
+VALUES ('00000000-0000-0000-0000-000000000099', 'admin', '00000000-0000-0000-0000-000000000001', true)
+ON CONFLICT (id) DO UPDATE SET
+  role      = 'admin',
+  campus_id = '00000000-0000-0000-0000-000000000001',
+  is_active = true;
+
+INSERT INTO profiles (id, role, campus_id, is_active)
+VALUES ('00000000-0000-0000-0000-000000000098', 'student', '00000000-0000-0000-0000-000000000001', true)
+ON CONFLICT (id) DO UPDATE SET
+  role      = 'student',
+  campus_id = '00000000-0000-0000-0000-000000000001',
+  is_active = true;
 
 -- ============================================================
 -- BUILDINGS: 3 real TSBVI campus buildings
@@ -209,7 +195,7 @@ VALUES (
   'Main Building', 'Gymnasium',
   '00000000-0000-0000-0000-000000000010',
   '00000000-0000-0000-0000-000000000011',
-  'easy', ARRAY['outdoor', 'accessible'], 'published',
+  'easy', ARRAY['outdoor', 'accessible'], 'draft',
   '00000000-0000-0000-0000-000000000099',
   now(), 180
 )
@@ -269,8 +255,9 @@ UPDATE routes SET
   published_at = now()
 WHERE id = '00000000-0000-0000-0000-000000000100';
 
--- Force content_hash recompute
+-- Force content_hash recompute then publish
 DO $$ BEGIN PERFORM recompute_route_content_hash('00000000-0000-0000-0000-000000000100'); END $$;
+UPDATE routes SET status = 'published' WHERE id = '00000000-0000-0000-0000-000000000100';
 
 
 -- Route 2: Main Building → Student Center
@@ -287,7 +274,7 @@ VALUES (
   'Main Building', 'Student Center',
   '00000000-0000-0000-0000-000000000010',
   '00000000-0000-0000-0000-000000000012',
-  'easy', ARRAY['outdoor'], 'published',
+  'easy', ARRAY['outdoor'], 'draft',
   '00000000-0000-0000-0000-000000000099',
   now(), 120
 )
@@ -341,6 +328,7 @@ UPDATE routes SET
 WHERE id = '00000000-0000-0000-0000-000000000200';
 
 DO $$ BEGIN PERFORM recompute_route_content_hash('00000000-0000-0000-0000-000000000200'); END $$;
+UPDATE routes SET status = 'published' WHERE id = '00000000-0000-0000-0000-000000000200';
 
 -- ============================================================
 -- HAZARDS: One test hazard on Route 1

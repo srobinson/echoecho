@@ -7,6 +7,9 @@ interface AuthState {
   session: Session | null;
   profile: AdminUser | null;
   isLoading: boolean;
+  // True while refreshProfile() is in-flight. Prevents useProtectedRoute from
+  // treating a null profile as "no profile" before the fetch completes.
+  profileLoading: boolean;
   // True after the initial getSession() call resolves. Guards useProtectedRoute
   // from redirecting before the persisted session is known.
   initialized: boolean;
@@ -24,15 +27,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
   profile: null,
   isLoading: false,
+  profileLoading: false,
   initialized: false,
   error: null,
 
   setSession: (session) => {
     set({ session, initialized: true });
     if (session) {
-      get().refreshProfile();
+      set({ profileLoading: true });
+      get().refreshProfile().finally(() => set({ profileLoading: false }));
     } else {
-      set({ profile: null });
+      set({ profile: null, profileLoading: false });
     }
   },
 
@@ -42,6 +47,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
       get().setSession(data.session);
+      await get().refreshProfile();
+
+      if (!get().profile) {
+        const accessError = 'This account does not have admin access.';
+        await supabase.auth.signOut();
+        set({ session: null, profile: null, error: accessError });
+        throw new Error(accessError);
+      }
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'Sign in failed' });
       throw err;

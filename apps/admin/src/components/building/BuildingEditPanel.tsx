@@ -31,9 +31,10 @@ import { useSectionColor } from '../../contexts/SectionColorContext';
 interface Props {
   building: Building;
   onClose: () => void;
+  onDeleted?: () => void;
 }
 
-export function BuildingEditPanel({ building, onClose }: Props) {
+export function BuildingEditPanel({ building, onClose, onDeleted }: Props) {
   const accent = useSectionColor();
   const [isDeleting, setIsDeleting] = useState(false);
   const [editBuilding, setEditBuilding] = useState<Building>(building);
@@ -61,13 +62,14 @@ export function BuildingEditPanel({ building, onClose }: Props) {
             AccessibilityInfo.announceForAccessibility(
               `${editBuilding.name} deleted.`,
             );
+            onDeleted?.();
             onClose();
           },
         },
         { text: 'Cancel', style: 'cancel' },
       ],
     );
-  }, [editBuilding, onClose]);
+  }, [editBuilding, onClose, onDeleted]);
 
   return (
     <View style={styles.container}>

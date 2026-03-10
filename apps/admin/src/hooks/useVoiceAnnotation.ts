@@ -148,7 +148,11 @@ export function useVoiceAnnotation(): UseVoiceAnnotationReturn {
       const message =
         result.reason === 'permission_denied'
           ? 'Microphone permission is required for voice annotation.'
-          : 'Failed to start audio recording.';
+          : result.reason === 'speech_permission_denied'
+            ? 'Speech recognition permission is required for transcription.'
+            : result.reason === 'recognition_unavailable'
+              ? 'Speech recognition is not available on this device right now.'
+              : 'Failed to start voice annotation.';
       setState((s) => ({ ...s, phase: 'error', errorMessage: message }));
       return;
     }

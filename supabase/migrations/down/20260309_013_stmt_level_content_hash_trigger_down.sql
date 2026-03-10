@@ -4,7 +4,8 @@
 SET search_path TO public, extensions;
 
 -- Drop statement-level triggers and their functions
-DROP TRIGGER IF EXISTS waypoints_content_hash_insert_update ON waypoints;
+DROP TRIGGER IF EXISTS waypoints_content_hash_insert ON waypoints;
+DROP TRIGGER IF EXISTS waypoints_content_hash_update ON waypoints;
 DROP TRIGGER IF EXISTS waypoints_content_hash_delete ON waypoints;
 DROP FUNCTION IF EXISTS waypoints_after_insert_update_stmt();
 DROP FUNCTION IF EXISTS waypoints_after_delete_stmt();

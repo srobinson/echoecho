@@ -3,7 +3,7 @@
  * static map preview, and version history (read-only).
  * ALP-968.
  */
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -19,8 +19,9 @@ import {
 import { useLocalSearchParams, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Audio } from 'expo-av';
 import { supabase } from '../../src/lib/supabase';
-import type { Building, Route, RouteStatus } from '@echoecho/shared';
+import type { Building, Route, RouteStatus, Waypoint, WaypointType } from '@echoecho/shared';
 
 import { tabColors } from '@echoecho/ui';
 import { SectionColorProvider, useSectionColor } from '../../src/contexts/SectionColorContext';
@@ -256,6 +257,9 @@ function RouteDetailScreenInner() {
   const mapUrl = route.waypoints.length >= 2 && mapToken
     ? buildStaticMapUrl(route, mapToken, buildings)
     : null;
+  const orderedWaypoints = [...route.waypoints].sort(
+    (a, b) => a.sequenceIndex - b.sequenceIndex,
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -357,6 +361,8 @@ function RouteDetailScreenInner() {
           )}
         </View>
 
+        <WaypointAnnotationTable waypoints={orderedWaypoints} />
+
         {/* Actions */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle} accessibilityRole="header">Actions</Text>
@@ -435,6 +441,169 @@ function RouteDetailScreenInner() {
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+const AUDIO_BUCKET = 'route-audio';
+
+const WAYPOINT_TYPE_LABEL: Record<WaypointType, string> = {
+  start: 'Start',
+  end: 'End',
+  turn: 'Turn',
+  decision_point: 'Decision Point',
+  landmark: 'Landmark',
+  hazard: 'Hazard',
+  door: 'Door',
+  elevator: 'Elevator',
+  stairs: 'Stairs',
+  ramp: 'Ramp',
+  crossing: 'Crossing',
+  regular: 'Waypoint',
+};
+
+function WaypointAnnotationTable({ waypoints }: { waypoints: Waypoint[] }) {
+  const accent = useSectionColor();
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
+
+  const stopPlayback = useCallback(async () => {
+    if (soundRef.current) {
+      await soundRef.current.unloadAsync();
+      soundRef.current = null;
+    }
+    setPlayingId(null);
+    setLoadingId(null);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      void stopPlayback();
+    };
+  }, [stopPlayback]);
+
+  const handleToggleAudio = useCallback(async (waypoint: Waypoint) => {
+    if (!waypoint.audioAnnotationUrl) return;
+
+    if (playingId === waypoint.id) {
+      await stopPlayback();
+      return;
+    }
+
+    setLoadingId(waypoint.id);
+    try {
+      await stopPlayback();
+      const audioUri = await resolveWaypointAudioUrl(waypoint.audioAnnotationUrl);
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: audioUri },
+        { shouldPlay: true },
+        (status) => {
+          if (!status.isLoaded) return;
+          if (status.didJustFinish) {
+            void stopPlayback();
+          }
+        },
+      );
+
+      soundRef.current = sound;
+      setPlayingId(waypoint.id);
+    } catch (error) {
+      Alert.alert(
+        'Playback unavailable',
+        error instanceof Error ? error.message : 'Unable to play this audio annotation.',
+      );
+    } finally {
+      setLoadingId((current) => (current === waypoint.id ? null : current));
+    }
+  }, [playingId, stopPlayback]);
+
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle} accessibilityRole="header">Waypoint Annotations</Text>
+      {waypoints.length === 0 ? (
+        <Text style={styles.emptySectionText}>No waypoints recorded for this route yet.</Text>
+      ) : (
+        <View style={styles.annotationTable}>
+          <View style={styles.annotationHeaderRow}>
+            <Text style={[styles.annotationHeaderCell, styles.annotationStepCol]}>#</Text>
+            <Text style={[styles.annotationHeaderCell, styles.annotationTypeCol]}>Type</Text>
+            <Text style={[styles.annotationHeaderCell, styles.annotationTranscriptCol]}>Transcript</Text>
+            <Text style={[styles.annotationHeaderCell, styles.annotationAudioCol]}>Audio</Text>
+          </View>
+          {waypoints.map((waypoint) => {
+            const hasAudio = waypoint.audioAnnotationUrl != null;
+            const isLoading = loadingId === waypoint.id;
+            const isPlaying = playingId === waypoint.id;
+            const isAnotherClipActive =
+              (playingId != null && playingId !== waypoint.id) ||
+              (loadingId != null && loadingId !== waypoint.id);
+            return (
+              <View key={waypoint.id} style={styles.annotationRow}>
+                <Text style={[styles.annotationCell, styles.annotationStepCol, styles.annotationStepText]}>
+                  {waypoint.sequenceIndex + 1}
+                </Text>
+                <Text style={[styles.annotationCell, styles.annotationTypeCol, styles.annotationTypeText]}>
+                  {WAYPOINT_TYPE_LABEL[waypoint.type] ?? waypoint.type}
+                </Text>
+                <View style={[styles.annotationCell, styles.annotationTranscriptCol]}>
+                  <Text style={styles.annotationTranscriptText}>
+                    {waypoint.audioLabel?.trim() || 'No transcript'}
+                  </Text>
+                </View>
+                <View style={[styles.annotationCell, styles.annotationAudioCol]}>
+                  {hasAudio ? (
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.audioButton,
+                        { borderColor: accent + '44', backgroundColor: accent + '18' },
+                        isAnotherClipActive && styles.audioButtonDisabled,
+                        pressed && styles.audioButtonPressed,
+                      ]}
+                      onPress={() => void handleToggleAudio(waypoint)}
+                      disabled={isAnotherClipActive}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${isPlaying ? 'Stop' : 'Play'} audio for waypoint ${waypoint.sequenceIndex + 1}`}
+                      accessibilityState={{ disabled: isAnotherClipActive }}
+                    >
+                      {isLoading ? (
+                        <ActivityIndicator size="small" color={accent} />
+                      ) : (
+                        <>
+                          <Ionicons
+                            name={isPlaying ? 'stop-circle' : 'play-circle'}
+                            size={18}
+                            color={accent}
+                          />
+                          <Text style={[styles.audioButtonLabel, { color: accent }]}>
+                            {isPlaying ? 'Playing' : 'Play'}
+                          </Text>
+                        </>
+                      )}
+                    </Pressable>
+                  ) : (
+                    <Text style={styles.annotationEmptyAudio}>No audio</Text>
+                  )}
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+}
+
+async function resolveWaypointAudioUrl(audioPath: string): Promise<string> {
+  if (/^https?:\/\//i.test(audioPath)) return audioPath;
+
+  const { data, error } = await supabase.storage
+    .from(AUDIO_BUCKET)
+    .createSignedUrl(audioPath, 60 * 10);
+
+  if (error || !data?.signedUrl) {
+    throw new Error(error?.message ?? 'Audio file could not be resolved.');
+  }
+
+  return data.signedUrl;
 }
 
 const MAX_STATIC_MAP_COORDS = 50;
@@ -574,7 +743,7 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
   mapPreview: {
     width: '100%',
-    height: 180,
+    height: 360,
     backgroundColor: '#0D0D12',
   },
   statsRow: {
@@ -673,4 +842,61 @@ const styles = StyleSheet.create({
   versionInfo: { flex: 1, gap: 2 },
   versionDate: { color: '#F0F0F5', fontSize: 13 },
   versionMeta: { color: '#606070', fontSize: 11 },
+  emptySectionText: { color: '#606070', fontSize: 13, lineHeight: 20 },
+  annotationTable: {
+    borderWidth: 1,
+    borderColor: '#1E1E26',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  annotationHeaderRow: {
+    flexDirection: 'row',
+    backgroundColor: '#0D0D12',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1E1E26',
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  annotationHeaderCell: {
+    color: '#808090',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  annotationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 12,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1E1E26',
+  },
+  annotationCell: {
+    justifyContent: 'center',
+  },
+  annotationStepCol: { width: 30 },
+  annotationTypeCol: { width: 88 },
+  annotationTranscriptCol: { flex: 1 },
+  annotationAudioCol: { width: 86, alignItems: 'flex-end' },
+  annotationStepText: { color: '#F0F0F5', fontSize: 13, fontWeight: '700' },
+  annotationTypeText: { color: '#D6D6E5', fontSize: 12, fontWeight: '600' },
+  annotationTranscriptText: { color: '#F0F0F5', fontSize: 13, lineHeight: 18 },
+  annotationEmptyAudio: { color: '#606070', fontSize: 12, fontWeight: '600' },
+  audioButton: {
+    minWidth: 74,
+    minHeight: 36,
+    borderWidth: 1,
+    borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+  },
+  audioButtonPressed: { opacity: 0.72 },
+  audioButtonDisabled: { opacity: 0.35 },
+  audioButtonLabel: { fontSize: 12, fontWeight: '700' },
 });

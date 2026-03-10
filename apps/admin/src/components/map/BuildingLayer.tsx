@@ -26,6 +26,9 @@ const SOURCE_ID = 'admin-buildings';
 const FILL_LAYER_ID = 'admin-buildings-fill';
 const LINE_LAYER_ID = 'admin-buildings-line';
 const LABEL_LAYER_ID = 'admin-buildings-labels';
+const ENTRANCE_SOURCE_ID = 'admin-building-entrances';
+const ENTRANCE_CIRCLE_LAYER_ID = 'admin-building-entrances-circle';
+const ENTRANCE_SYMBOL_LAYER_ID = 'admin-building-entrances-symbol';
 
 export const BuildingLayer = memo(function BuildingLayer({ buildings, onBuildingPress }: Props) {
   const accent = useSectionColor();
@@ -58,6 +61,26 @@ export const BuildingLayer = memo(function BuildingLayer({ buildings, onBuilding
         coordinates: buildingCentroid(b.footprint),
       },
     })),
+  };
+
+  const entranceCollection: FeatureCollection<Point> = {
+    type: 'FeatureCollection',
+    features: buildings.flatMap((b) =>
+      (b.entrances ?? []).map((entrance): Feature<Point> => ({
+        type: 'Feature',
+        id: entrance.id,
+        properties: {
+          id: entrance.id,
+          buildingId: b.id,
+          name: entrance.name,
+          isMain: entrance.isMain,
+        },
+        geometry: {
+          type: 'Point',
+          coordinates: [entrance.coordinate.longitude, entrance.coordinate.latitude],
+        },
+      })),
+    ),
   };
 
   function handlePress(event: { features?: Feature[] }) {
@@ -102,6 +125,37 @@ export const BuildingLayer = memo(function BuildingLayer({ buildings, onBuilding
             textHaloWidth: 1.5,
             textAnchor: 'center',
             textMaxWidth: 8,
+          }}
+        />
+      </MapboxGL.ShapeSource>
+
+      <MapboxGL.ShapeSource id={ENTRANCE_SOURCE_ID} shape={entranceCollection}>
+        <MapboxGL.CircleLayer
+          id={ENTRANCE_CIRCLE_LAYER_ID}
+          style={{
+            circleRadius: [
+              'case',
+              ['get', 'isMain'], 7,
+              5,
+            ],
+            circleColor: [
+              'case',
+              ['get', 'isMain'], '#81C784',
+              '#FFA726',
+            ],
+            circleStrokeColor: '#0A0A0F',
+            circleStrokeWidth: 2,
+            circleOpacity: 0.95,
+          }}
+        />
+        <MapboxGL.SymbolLayer
+          id={ENTRANCE_SYMBOL_LAYER_ID}
+          style={{
+            textField: ['case', ['get', 'isMain'], '★', ''],
+            textSize: 10,
+            textColor: '#0A0A0F',
+            textAllowOverlap: true,
+            textAnchor: 'center',
           }}
         />
       </MapboxGL.ShapeSource>

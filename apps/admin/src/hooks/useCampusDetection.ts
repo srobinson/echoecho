@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import * as Location from 'expo-location';
 import { supabase } from '../lib/supabase';
 import { useCampusStore } from '../stores/campusStore';
+import { useAuthStore } from '../stores/authStore';
 import { haversineM, type Campus } from '@echoecho/shared';
 
 // Accuracy.High uses GPS directly and accepts mock locations on emulator.
@@ -37,6 +38,7 @@ export function useCampusDetection() {
   const setCampuses = useCampusStore((s) => s.setCampuses);
   const addCampus = useCampusStore((s) => s.addCampus);
   const setActiveCampus = useCampusStore((s) => s.setActiveCampus);
+  const refreshProfile = useAuthStore((s) => s.refreshProfile);
 
   const detect = useCallback(async () => {
     setState({ phase: 'requesting_permission' });
@@ -93,26 +95,52 @@ export function useCampusDetection() {
   }, [setActiveCampus]);
 
   const createCampus = useCallback(async (name: string, latitude: number, longitude: number) => {
-    const BOUNDS_OFFSET = 0.005;
-    const { data, error } = await supabase
-      .from('campuses')
-      .insert({
-        name,
-        short_name: name,
-        location: `SRID=4326;POINT(${longitude} ${latitude})`,
-        bounds: `SRID=4326;POLYGON((${longitude - BOUNDS_OFFSET} ${latitude - BOUNDS_OFFSET}, ${longitude + BOUNDS_OFFSET} ${latitude - BOUNDS_OFFSET}, ${longitude + BOUNDS_OFFSET} ${latitude + BOUNDS_OFFSET}, ${longitude - BOUNDS_OFFSET} ${latitude + BOUNDS_OFFSET}, ${longitude - BOUNDS_OFFSET} ${latitude - BOUNDS_OFFSET}))`,
-      })
-      .select('id')
-      .single();
+    // Determine whether this is the first campus (bootstrap path).
+    // useCampusStore is populated by detect() before createCampus is ever called.
+    const isBootstrap = useCampusStore.getState().campuses.length === 0;
 
-    if (error || !data) {
-      throw new Error(error?.message ?? 'Failed to create campus');
+    let campusId: string;
+
+    if (isBootstrap) {
+      // Bootstrap path: RPC creates the campus and promotes caller to admin
+      // in a single SECURITY DEFINER transaction, bypassing the campuses_insert
+      // RLS policy that normally requires role='admin'.
+      const { data, error } = await supabase.rpc('create_bootstrap_campus', {
+        p_name: name,
+        p_latitude: latitude,
+        p_longitude: longitude,
+      });
+
+      if (error || !data) {
+        throw new Error(error?.message ?? 'Failed to create campus');
+      }
+
+      campusId = data as string;
+    } else {
+      // Standard path: direct insert (requires role='admin' via RLS)
+      const BOUNDS_OFFSET = 0.005;
+      const { data, error } = await supabase
+        .from('campuses')
+        .insert({
+          name,
+          short_name: name,
+          location: `SRID=4326;POINT(${longitude} ${latitude})`,
+          bounds: `SRID=4326;POLYGON((${longitude - BOUNDS_OFFSET} ${latitude - BOUNDS_OFFSET}, ${longitude + BOUNDS_OFFSET} ${latitude - BOUNDS_OFFSET}, ${longitude + BOUNDS_OFFSET} ${latitude + BOUNDS_OFFSET}, ${longitude - BOUNDS_OFFSET} ${latitude + BOUNDS_OFFSET}, ${longitude - BOUNDS_OFFSET} ${latitude - BOUNDS_OFFSET}))`,
+        })
+        .select('id')
+        .single();
+
+      if (error || !data) {
+        throw new Error(error?.message ?? 'Failed to create campus');
+      }
+
+      campusId = data.id;
     }
 
     const { data: created, error: fetchErr } = await supabase
       .from('v_campuses' as 'campuses')
       .select('*')
-      .eq('id', data.id)
+      .eq('id', campusId)
       .single();
 
     if (fetchErr || !created) {
@@ -124,8 +152,14 @@ export function useCampusDetection() {
     setActiveCampus(campus);
     setState({ phase: 'found', campus });
 
+    // Bootstrap case: the RPC promoted the caller to admin. Refresh the auth
+    // profile so the rest of the app reflects the new role immediately.
+    if (isBootstrap) {
+      await refreshProfile();
+    }
+
     return campus;
-  }, [addCampus, setActiveCampus]);
+  }, [addCampus, setActiveCampus, refreshProfile]);
 
   return { state, detect, selectCampus, createCampus };
 }

@@ -7,13 +7,14 @@
  *
  * MapDetailPanel's `detailContent` slot is the extension point for ALP-966/967/968.
  */
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { View, StyleSheet, Pressable, Text, Platform, ActivityIndicator } from 'react-native';
 import MapboxGL from '@rnmapbox/maps';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import * as Location from 'expo-location';
 
 import { MapLayerControl } from '../../src/components/MapLayerControl';
 import { BuildingLayer } from '../../src/components/map/BuildingLayer';
@@ -72,8 +73,11 @@ function MapScreenInner() {
   });
   const [selected, setSelected] = useState<SelectedFeature>(null);
   const [pendingEntranceCoord, setPendingEntranceCoord] = useState<[number, number] | null>(null);
+  const [pendingEntranceToken, setPendingEntranceToken] = useState<string | null>(null);
   const { activeCampus } = useCampusStore();
   const setViewport = useMapViewportStore((s) => s.setViewport);
+  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
+  const [hasInitializedViewport, setHasInitializedViewport] = useState(false);
 
   const { buildings, routes, annotationWaypoints, isLoading, error, refresh } = useAdminMapData(
     activeCampus?.id ?? null,
@@ -82,9 +86,54 @@ function MapScreenInner() {
   const draw = useBuildingDraw(activeCampus?.id ?? null);
   const wpEdit = useWaypointEdit();
 
-  const center: [number, number] = activeCampus?.center
+  const campusCenter: [number, number] = activeCampus?.center
     ? [activeCampus.center.longitude, activeCampus.center.latitude]
     : TSBVI_CENTER;
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function initializeFromCurrentLocation() {
+      if (hasInitializedViewport) return;
+
+      try {
+        const foreground = await Location.getForegroundPermissionsAsync();
+        if (foreground.status !== 'granted') {
+          if (!isCancelled) {
+            setMapCenter(campusCenter);
+            setHasInitializedViewport(true);
+          }
+          return;
+        }
+
+        const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: 60_000 });
+        const current = lastKnown ?? await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        });
+
+        if (!isCancelled) {
+          setMapCenter([current.coords.longitude, current.coords.latitude]);
+          setHasInitializedViewport(true);
+        }
+      } catch {
+        if (!isCancelled) {
+          setMapCenter(campusCenter);
+          setHasInitializedViewport(true);
+        }
+      }
+    }
+
+    void initializeFromCurrentLocation();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [campusCenter, hasInitializedViewport]);
+
+  useEffect(() => {
+    if (!mapCenter) return;
+    setViewport(mapCenter, DEFAULT_ZOOM);
+  }, [mapCenter, setViewport]);
 
   const handleClose = useCallback(() => setSelected(null), []);
 
@@ -129,6 +178,7 @@ function MapScreenInner() {
       draw.addVertex(coord);
     } else if (draw.phase === 'entrances') {
       setPendingEntranceCoord(coord);
+      setPendingEntranceToken(`${coord[0]}:${coord[1]}:${Date.now()}`);
     }
   }, [draw]);
 
@@ -136,6 +186,7 @@ function MapScreenInner() {
     if (pendingEntranceCoord) {
       void draw.addEntrance(pendingEntranceCoord, name, isMain);
       setPendingEntranceCoord(null);
+      setPendingEntranceToken(null);
     }
   }, [pendingEntranceCoord, draw]);
 
@@ -143,6 +194,11 @@ function MapScreenInner() {
     draw.finishEntrances();
     void refresh();
   }, [draw, refresh]);
+
+  const handleBuildingDeleted = useCallback(() => {
+    setSelected(null);
+    void refresh();
+  }, [refresh]);
 
   const handleEditWaypoints = useCallback((route: Route) => {
     wpEdit.startEditing(route);
@@ -167,7 +223,11 @@ function MapScreenInner() {
   // Content slot for MapDetailPanel
   const detailContent =
     selected?.kind === 'building' ? (
-      <BuildingEditPanel building={selected.data} onClose={handleClose} />
+      <BuildingEditPanel
+        building={selected.data}
+        onClose={handleClose}
+        onDeleted={handleBuildingDeleted}
+      />
     ) : selected?.kind === 'route' ? (
       <RouteDetailContent
         route={selected.data}
@@ -199,11 +259,17 @@ function MapScreenInner() {
         >
           <MapboxGL.Camera
             ref={cameraRef}
-            centerCoordinate={center}
+            defaultSettings={{
+              centerCoordinate: mapCenter ?? campusCenter,
+              zoomLevel: DEFAULT_ZOOM,
+            }}
+            centerCoordinate={mapCenter ?? campusCenter}
             zoomLevel={DEFAULT_ZOOM}
-            animationMode="flyTo"
-            animationDuration={1200}
+            animationMode="moveTo"
+            animationDuration={0}
           />
+
+          <MapboxGL.UserLocation visible animated />
 
           {activeLayers.buildings && (
             <BuildingLayer
@@ -236,7 +302,8 @@ function MapScreenInner() {
             <EntranceMarkingTool
               polygonRing={draw.savedBuilding.footprint}
               entrances={draw.pendingEntrances}
-              onAddEntrance={() => {}}
+              previewCoordinate={pendingEntranceCoord}
+              previewToken={pendingEntranceToken}
               active
             />
           )}
@@ -324,7 +391,10 @@ function MapScreenInner() {
               onDone={handleEntranceDone}
               pendingCoordinate={pendingEntranceCoord}
               onConfirmEntrance={handleEntranceConfirm}
-              onCancelEntrance={() => setPendingEntranceCoord(null)}
+              onCancelEntrance={() => {
+                setPendingEntranceCoord(null);
+                setPendingEntranceToken(null);
+              }}
             />
           </View>
         )}

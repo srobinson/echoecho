@@ -56,7 +56,7 @@ export const RouteLayer = memo(function RouteLayer({ routes, onRoutePress }: Pro
     'published', '#81C784',
     'archived', '#9CA3AF',
     '#9CA3AF',
-  ];
+  ] as const;
 
   function handlePress(event: { features?: Feature[] }) {
     const feature = event.features?.[0];

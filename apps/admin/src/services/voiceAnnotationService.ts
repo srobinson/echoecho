@@ -105,7 +105,16 @@ export type StartRecordingResult =
       autoStopTimer: ReturnType<typeof setTimeout>;
       silenceCheckTimer: ReturnType<typeof setTimeout>;
     }
-  | { ok: false; reason: 'permission_denied' | 'audio_session_error' | 'already_recording' };
+  | {
+      ok: false;
+      reason:
+        | 'permission_denied'
+        | 'speech_permission_denied'
+        | 'recognition_unavailable'
+        | 'audio_session_error'
+        | 'start_failed'
+        | 'already_recording';
+    };
 
 /**
  * Start simultaneous Audio.Recording and STT recognition.
@@ -129,49 +138,78 @@ export async function startVoiceAnnotationRecording(options: {
   }
 
   try {
+    const speechPermission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    if (!speechPermission.granted) {
+      return { ok: false, reason: 'speech_permission_denied' };
+    }
+  } catch {
+    return { ok: false, reason: 'speech_permission_denied' };
+  }
+
+  if (!ExpoSpeechRecognitionModule.isRecognitionAvailable()) {
+    return { ok: false, reason: 'recognition_unavailable' };
+  }
+
+  try {
     await activateRecordingAudioSession();
   } catch {
     return { ok: false, reason: 'audio_session_error' };
   }
 
   const recording = new Audio.Recording();
-  await recording.prepareToRecordAsync(RECORDING_OPTIONS);
-  await recording.startAsync();
+  try {
+    await recording.prepareToRecordAsync(RECORDING_OPTIONS);
+    await recording.startAsync();
 
-  // STT runs in parallel
-  const sttSubs = [
-    ExpoSpeechRecognitionModule.addListener('result', (event) => {
-      const text = event.results[0]?.transcript ?? '';
-      if (text) onTranscriptUpdate(text);
-    }),
-    ExpoSpeechRecognitionModule.addListener('error', (event) => {
-      onSTTError(event.message ?? 'Speech recognition error');
-    }),
-  ];
+    // STT runs in parallel
+    const sttSubs = [
+      ExpoSpeechRecognitionModule.addListener('result', (event) => {
+        const text = event.results[0]?.transcript ?? '';
+        if (text) onTranscriptUpdate(text);
+      }),
+      ExpoSpeechRecognitionModule.addListener('error', (event) => {
+        onSTTError(event.message ?? 'Speech recognition error');
+      }),
+    ];
 
-  ExpoSpeechRecognitionModule.start({
-    lang: 'en-US',
-    interimResults: true,
-    maxAlternatives: 1,
-    continuous: true,
-  });
+    ExpoSpeechRecognitionModule.start({
+      lang: 'en-US',
+      interimResults: true,
+      maxAlternatives: 1,
+      continuous: true,
+    });
 
-  // Auto-stop at 60 s
-  const autoStopTimer = setTimeout(() => {
-    onAutoStop();
-  }, MAX_DURATION_MS);
+    const autoStopTimer = setTimeout(() => {
+      onAutoStop();
+    }, MAX_DURATION_MS);
 
-  // Silence check at 3 s
-  const silenceCheckTimer = setTimeout(async () => {
-    const status = await recording.getStatusAsync();
-    // metering level in dBFS; values near 0 dBFS indicate silence
-    const level = status.metering ?? -160;
-    if (level < -60) {
-      onSilenceDetected();
+    const silenceCheckTimer = setTimeout(async () => {
+      try {
+        const status = await recording.getStatusAsync();
+        const level = status.metering ?? -160;
+        if (level < -60) {
+          onSilenceDetected();
+        }
+      } catch {
+        // Ignore status reads after the recorder has already been torn down.
+      }
+    }, SILENCE_CHECK_MS);
+
+    return { ok: true, recording, sttSubscriptions: sttSubs, autoStopTimer, silenceCheckTimer };
+  } catch {
+    try {
+      ExpoSpeechRecognitionModule.stop();
+    } catch {
+      // best-effort cleanup only
     }
-  }, SILENCE_CHECK_MS);
-
-  return { ok: true, recording, sttSubscriptions: sttSubs, autoStopTimer, silenceCheckTimer };
+    try {
+      await recording.stopAndUnloadAsync();
+    } catch {
+      // recording may not have started
+    }
+    await deactivateRecordingAudioSession();
+    return { ok: false, reason: 'start_failed' };
+  }
 }
 
 export interface StopRecordingResult {
@@ -192,7 +230,11 @@ export async function stopVoiceAnnotationRecording(
   clearTimeout(autoStopTimer);
   clearTimeout(silenceCheckTimer);
 
-  ExpoSpeechRecognitionModule.stop();
+  try {
+    ExpoSpeechRecognitionModule.stop();
+  } catch {
+    // recognizer may already be stopped or unavailable
+  }
   sttSubscriptions.forEach((s) => s.remove());
 
   let audioUri: string | null = null;
@@ -207,7 +249,11 @@ export async function stopVoiceAnnotationRecording(
     // Recording may have already stopped
   }
 
-  await deactivateRecordingAudioSession();
+  try {
+    await deactivateRecordingAudioSession();
+  } catch {
+    // no-op cleanup failure
+  }
 
   return { audioUri, durationMs };
 }

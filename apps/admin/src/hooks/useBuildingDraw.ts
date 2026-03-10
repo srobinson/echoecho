@@ -42,8 +42,10 @@ const INITIAL_STATE: DrawState = {
   showCoordinateInput: false,
 };
 
-// Distance in meters for snap-to-close on the first vertex
-const SNAP_RADIUS_METERS = 15;
+// Keep auto-close conservative so nearby taps while zoomed in do not
+// prematurely finish the footprint after only a few vertices.
+const SNAP_RADIUS_METERS = 5;
+const MIN_VERTICES_BEFORE_AUTO_CLOSE = 4;
 
 export function useBuildingDraw(campusId: string | null) {
   const [state, setState] = useState<DrawState>(INITIAL_STATE);
@@ -62,8 +64,10 @@ export function useBuildingDraw(campusId: string | null) {
     setState((prev) => {
       if (prev.phase !== 'drawing') return prev;
 
-      // Check snap-to-close: if tapping near the first vertex and we have >= 3 vertices
-      if (prev.vertices.length >= 3) {
+      // Auto-close only after the user has clearly started shaping a polygon.
+      // This avoids accidental closure when the third tap lands near the first
+      // point at close zoom levels.
+      if (prev.vertices.length >= MIN_VERTICES_BEFORE_AUTO_CLOSE) {
         const first = prev.vertices[0];
         const distMeters = distance(
           point(first),

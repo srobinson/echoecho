@@ -144,6 +144,11 @@ export const VoiceAnnotationSheet = forwardRef<BottomSheet, VoiceAnnotationSheet
           {/* Recording */}
           {state.phase === 'recording' && (
             <View style={styles.centeredContent}>
+              <View style={styles.liveBadge}>
+                <View style={styles.liveDot} />
+                <Text style={styles.liveBadgeText}>Recording live</Text>
+              </View>
+
               <Pressable
                 style={[styles.micButton, styles.micButtonActive]}
                 onPress={() => void stopRecording()}
@@ -156,8 +161,12 @@ export const VoiceAnnotationSheet = forwardRef<BottomSheet, VoiceAnnotationSheet
               {state.isTimeLimitReached ? (
                 <Text style={styles.limitText}>60s limit reached</Text>
               ) : (
-                <Text style={styles.hint}>Recording... tap to stop</Text>
+                <Text style={styles.hint}>Listening now. Tap stop when you are done speaking.</Text>
               )}
+
+              <Text style={styles.supportingHint}>
+                Audio is being captured even if live transcript text has not appeared yet.
+              </Text>
 
               {state.transcript.length > 0 && (
                 <View style={styles.transcriptBox}>
@@ -177,6 +186,12 @@ export const VoiceAnnotationSheet = forwardRef<BottomSheet, VoiceAnnotationSheet
                   {state.transcript || '(No transcript — audio recorded)'}
                 </Text>
               </View>
+
+              {!state.transcript && (
+                <Text style={styles.supportingHint}>
+                  No transcription was returned, but the audio clip can still be saved with this waypoint.
+                </Text>
+              )}
 
               <View style={styles.actionRow}>
                 <ActionButton label="Re-record" onPress={reRecord} color="#718096" />
@@ -238,6 +253,30 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   centeredContent: { alignItems: 'center', gap: 16, paddingTop: 8 },
+  liveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F0629222',
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#F0629244',
+  },
+  liveDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#F06292',
+  },
+  liveBadgeText: {
+    color: '#F0F0F5',
+    fontSize: 13,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
   micButton: {
     width: 80,
     height: 80,
@@ -247,6 +286,12 @@ const styles = StyleSheet.create({
   },
   micButtonActive: { backgroundColor: '#F06292' },
   hint: { color: '#606070', fontSize: 14 },
+  supportingHint: {
+    color: '#808090',
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
   limitText: { color: '#F06292', fontSize: 14, fontWeight: '600' },
   transcriptBox: {
     backgroundColor: '#0A0A0F',
