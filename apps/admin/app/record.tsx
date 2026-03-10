@@ -25,6 +25,7 @@ import BottomSheet from '@gorhom/bottom-sheet';
 
 import { MAPBOX_STYLE_SATELLITE } from '../src/lib/mapbox';
 import { useRecordingStore } from '../src/stores/recordingStore';
+import { useCampusStore } from '../src/stores/campusStore';
 import { useGpsRecording } from '../src/hooks/useGpsRecording';
 import { computeDistance } from '@echoecho/shared';
 
@@ -74,6 +75,17 @@ export default function RecordScreen() {
 
   const store = useRecordingStore();
   const { session } = store;
+
+  const activeCampus = useCampusStore((s) => s.activeCampus);
+  // Stable reference — a new array on every render would make Mapbox Camera
+  // re-apply centerCoordinate on every tick, fighting user pan gestures.
+  const campusCenter = useMemo<[number, number] | null>(
+    () => activeCampus
+      ? [activeCampus.center.longitude, activeCampus.center.latitude]
+      : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeCampus?.id],
+  );
 
   // Tick state drives elapsed-time re-renders at 1 Hz while recording
   const [tick, setTick] = useState(0);
@@ -176,7 +188,29 @@ export default function RecordScreen() {
       );
       return;
     }
-    await gpsStart();
+
+    // Background location is required for the OS location task. Foreground-
+    // only grants will cause startLocationUpdatesAsync to throw.
+    if (permissionStatus === 'foreground_only') {
+      Alert.alert(
+        'Background Location Required',
+        'This app needs "Always" location access to record routes while the screen is off. Please update the permission in Settings.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: openSettings },
+        ],
+      );
+      return;
+    }
+
+    try {
+      await gpsStart();
+    } catch (e) {
+      Alert.alert(
+        'Could Not Start Recording',
+        e instanceof Error ? e.message : 'GPS service failed to start. Check location permissions and try again.',
+      );
+    }
   }, [permissionStatus, gpsStart, openSettings]);
 
   const handleStop = useCallback(() => {
@@ -244,15 +278,24 @@ export default function RecordScreen() {
         logoEnabled={false}
         attributionPosition={{ bottom: 8, right: 8 }}
       >
-        {/* When recording: follow user location exclusively — no centerCoordinate
-            alongside followUserLocation (rnmapbox native conflict → crash).
-            When idle: camera is free; user can pan/zoom without interference. */}
+        {/* When recording: follow user location exclusively — never combine
+            followUserLocation with centerCoordinate (rnmapbox native conflict).
+            When idle: pin to campus center on first mount (animationMode="none"
+            so it's instant, no fly animation), then leave the camera free for
+            manual pan/zoom. */}
         {isRecording ? (
           <MapboxGL.Camera
             followUserLocation
             followZoomLevel={18}
             animationMode="easeTo"
             animationDuration={500}
+          />
+        ) : campusCenter ? (
+          <MapboxGL.Camera
+            centerCoordinate={campusCenter}
+            zoomLevel={17}
+            animationMode="none"
+            animationDuration={0}
           />
         ) : (
           <MapboxGL.Camera />
