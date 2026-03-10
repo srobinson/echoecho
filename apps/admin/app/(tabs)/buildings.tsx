@@ -7,6 +7,7 @@ import {
   View,
   Text,
   FlatList,
+  ScrollView,
   Pressable,
   TextInput,
   StyleSheet,
@@ -155,14 +156,14 @@ function BuildingsScreenInner() {
         )}
       </View>
 
-      <FlatList
-        data={CATEGORY_FILTERS}
+      <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        keyExtractor={(item) => item.value}
         contentContainerStyle={styles.filterRow}
-        renderItem={({ item: f }) => (
+      >
+        {CATEGORY_FILTERS.map((f) => (
           <Pressable
+            key={f.value}
             style={[styles.filterChip, categoryFilter === f.value && { backgroundColor: accent + '22', borderColor: accent }]}
             onPress={() => setCategoryFilter(f.value)}
             accessibilityLabel={`Filter: ${f.label}`}
@@ -176,8 +177,8 @@ function BuildingsScreenInner() {
               {f.label}
             </Text>
           </Pressable>
-        )}
-      />
+        ))}
+      </ScrollView>
 
       {error && (
         <View style={styles.errorBanner}>
