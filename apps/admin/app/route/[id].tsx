@@ -55,6 +55,7 @@ function RouteDetailScreenInner() {
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [versions, setVersions] = useState<RouteVersion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showVersions, setShowVersions] = useState(false);
 
@@ -71,7 +72,11 @@ function RouteDetailScreenInner() {
       .eq('id', id)
       .single();
 
-    if (!error && data) {
+    if (error) {
+      setLoadError(error.message);
+    } else if (!data) {
+      setLoadError('Route not found.');
+    } else {
       const r = data as Route;
       setRoute(r);
       setEditName(r.name);
@@ -143,6 +148,7 @@ function RouteDetailScreenInner() {
       `${label} route?`,
       `Change status of "${route.name}" to ${newStatus}.`,
       [
+        { text: 'Cancel', style: 'cancel' },
         {
           text: label,
           onPress: async () => {
@@ -158,7 +164,6 @@ function RouteDetailScreenInner() {
             AccessibilityInfo.announceForAccessibility(`Route ${newStatus}.`);
           },
         },
-        { text: 'Cancel', style: 'cancel' },
       ],
     );
   }, [route]);
@@ -196,6 +201,7 @@ function RouteDetailScreenInner() {
       `Delete "${route.name}"?`,
       'This cannot be undone.',
       [
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
@@ -212,16 +218,34 @@ function RouteDetailScreenInner() {
             router.back();
           },
         },
-        { text: 'Cancel', style: 'cancel' },
       ],
     );
   }, [route]);
 
-  if (isLoading || !route) {
+  if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={accent} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!route) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centered}>
+          <Ionicons name="alert-circle-outline" size={48} color="#F06292" />
+          <Text style={styles.errorTitle}>{loadError ?? 'Route not found'}</Text>
+          <Pressable
+            style={styles.backBtn}
+            onPress={() => router.back()}
+            accessibilityLabel="Go back"
+            accessibilityRole="button"
+          >
+            <Ionicons name="arrow-back" size={22} color="#F0F0F5" />
+          </Pressable>
         </View>
       </SafeAreaView>
     );
@@ -517,7 +541,8 @@ function ActionButton({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A0A0F' },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
+  errorTitle: { color: '#F06292', fontSize: 15, fontWeight: '600', textAlign: 'center', maxWidth: 280 },
   scroll: { paddingBottom: 40 },
   header: {
     flexDirection: 'row',
