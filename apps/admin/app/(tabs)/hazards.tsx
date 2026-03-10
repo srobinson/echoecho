@@ -522,23 +522,6 @@ function HazardsScreenInner() {
             </Pressable>
           ))}
         </ScrollView>
-<<<<<<< HEAD
-      )}
-
-      {hasActiveFilters && (
-        <View style={styles.filterActionsRow}>
-          <Pressable
-            style={[styles.clearFiltersBtn, { borderColor: accent + '44', backgroundColor: accent + '16' }]}
-            onPress={clearFilters}
-            accessibilityRole="button"
-            accessibilityLabel="Clear hazard filters"
-          >
-            <Ionicons name="close-circle-outline" size={15} color={accent} />
-            <Text style={[styles.clearFiltersLabel, { color: accent }]}>Clear filters</Text>
-          </Pressable>
-        </View>
-=======
->>>>>>> 98d52d0 (nancy[ALP-1150]: Fix 5 hazards screen bugs)
       )}
 
       {hasActiveFilters && (
