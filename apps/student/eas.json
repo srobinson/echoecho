@@ -6,7 +6,7 @@
   "build": {
     "preview-student": {
       "distribution": "internal",
-
+      "corepack": true,
       "env": {
         "APP_VARIANT": "student"
       },
@@ -16,7 +16,7 @@
     },
     "production-student": {
       "distribution": "store",
-
+      "corepack": true,
       "env": {
         "APP_VARIANT": "student"
       }
