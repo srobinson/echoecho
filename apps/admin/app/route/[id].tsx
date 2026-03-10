@@ -13,7 +13,6 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  Image,
   AccessibilityInfo,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -22,6 +21,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { supabase } from '../../src/lib/supabase';
 import type { Building, Route, RouteStatus, Waypoint, WaypointType } from '@echoecho/shared';
+import { ConfirmDialog } from '../../src/components/ConfirmDialog';
+import { RoutePreviewMap } from '../../src/components/route/RoutePreviewMap';
 
 import { tabColors } from '@echoecho/ui';
 import { SectionColorProvider, useSectionColor } from '../../src/contexts/SectionColorContext';
@@ -41,6 +42,11 @@ interface RouteVersion {
   createdAt: string;
 }
 
+type RouteConfirmAction =
+  | { kind: 'status'; nextStatus: RouteStatus; title: string; message: string; confirmLabel: string }
+  | { kind: 'delete'; title: string; message: string; confirmLabel: string }
+  | null;
+
 export default function RouteDetailScreen() {
   return (
     <SectionColorProvider value={tabColors.routes}>
@@ -59,10 +65,11 @@ function RouteDetailScreenInner() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showVersions, setShowVersions] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<RouteConfirmAction>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
 
   // Inline edit state
   const [editName, setEditName] = useState('');
-  const [editDescription, setEditDescription] = useState('');
   const [isEditing, setIsEditing] = useState(false);
 
   const fetchRoute = useCallback(async () => {
@@ -81,7 +88,6 @@ function RouteDetailScreenInner() {
       const r = data as Route;
       setRoute(r);
       setEditName(r.name);
-      setEditDescription(r.description ?? '');
 
       // Fetch buildings for map overlay
       const buildingIds = [r.fromBuildingId, r.toBuildingId].filter(Boolean) as string[];
@@ -129,7 +135,6 @@ function RouteDetailScreenInner() {
       .from('routes')
       .update({
         name: editName.trim(),
-        description: editDescription.trim() || null,
       })
       .eq('id', route.id);
 
@@ -138,90 +143,65 @@ function RouteDetailScreenInner() {
       Alert.alert('Save failed', error.message);
       return;
     }
-    setRoute({ ...route, name: editName.trim(), description: editDescription.trim() || null });
+    setRoute({ ...route, name: editName.trim() });
     setIsEditing(false);
-  }, [route, editName, editDescription]);
+  }, [route, editName]);
 
   const handleStatusChange = useCallback(async (newStatus: RouteStatus) => {
     if (!route) return;
     const label = newStatus === 'published' ? 'Publish' : newStatus === 'retracted' ? 'Archive' : 'Update';
-    Alert.alert(
-      `${label} route?`,
-      `Change status of "${route.name}" to ${newStatus}.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: label,
-          onPress: async () => {
-            const { error } = await supabase
-              .from('routes')
-              .update({ status: newStatus })
-              .eq('id', route.id);
-            if (error) {
-              Alert.alert('Failed', error.message);
-              return;
-            }
-            setRoute({ ...route, status: newStatus });
-            AccessibilityInfo.announceForAccessibility(`Route ${newStatus}.`);
-          },
-        },
-      ],
-    );
-  }, [route]);
-
-  const handleDuplicate = useCallback(async () => {
-    if (!route) return;
-    const { data, error } = await supabase
-      .from('routes')
-      .insert({
-        campus_id: route.campusId,
-        name: `${route.name} (copy)`,
-        description: route.description,
-        from_building_id: route.fromBuildingId,
-        to_building_id: route.toBuildingId,
-        from_label: route.fromLabel,
-        to_label: route.toLabel,
-        status: 'draft',
-      })
-      .select('id')
-      .single();
-
-    if (error || !data) {
-      Alert.alert('Duplicate failed', error?.message ?? 'Unknown error');
-      return;
-    }
-    Alert.alert('Duplicated', 'Route copied as draft.', [
-      { text: 'View Copy', onPress: () => router.replace(`/route/${data.id}`) },
-      { text: 'Stay Here' },
-    ]);
+    setConfirmAction({
+      kind: 'status',
+      nextStatus: newStatus,
+      title: `${label} route?`,
+      message: `Change status of "${route.name}" to ${newStatus}.`,
+      confirmLabel: label,
+    });
   }, [route]);
 
   const handleDelete = useCallback(() => {
     if (!route) return;
-    Alert.alert(
-      `Delete "${route.name}"?`,
-      'This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const { error } = await supabase
-              .from('routes')
-              .delete()
-              .eq('id', route.id);
-            if (error) {
-              Alert.alert('Delete failed', error.message);
-              return;
-            }
-            AccessibilityInfo.announceForAccessibility(`${route.name} deleted.`);
-            router.back();
-          },
-        },
-      ],
-    );
+    setConfirmAction({
+      kind: 'delete',
+      title: `Delete "${route.name}"?`,
+      message: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+    });
   }, [route]);
+
+  const handleConfirmAction = useCallback(async () => {
+    if (!route || !confirmAction) return;
+
+    setConfirmBusy(true);
+    if (confirmAction.kind === 'status') {
+      const { error } = await supabase
+        .from('routes')
+        .update({ status: confirmAction.nextStatus })
+        .eq('id', route.id);
+      setConfirmBusy(false);
+      if (error) {
+        Alert.alert('Failed', error.message);
+        return;
+      }
+      setRoute({ ...route, status: confirmAction.nextStatus });
+      setConfirmAction(null);
+      AccessibilityInfo.announceForAccessibility(`Route ${confirmAction.nextStatus}.`);
+      return;
+    }
+
+    const { error } = await supabase
+      .from('routes')
+      .delete()
+      .eq('id', route.id);
+    setConfirmBusy(false);
+    if (error) {
+      Alert.alert('Delete failed', error.message);
+      return;
+    }
+    setConfirmAction(null);
+    AccessibilityInfo.announceForAccessibility(`${route.name} deleted.`);
+    router.back();
+  }, [route, confirmAction]);
 
   if (isLoading) {
     return (
@@ -253,10 +233,10 @@ function RouteDetailScreenInner() {
   }
 
   const statusColor = STATUS_COLOR[route.status] ?? '#9CA3AF';
-  const mapToken = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
-  const mapUrl = route.waypoints.length >= 2 && mapToken
-    ? buildStaticMapUrl(route, mapToken, buildings)
-    : null;
+  const fromBuildingName = buildings.find((b) => b.id === route.fromBuildingId)?.name ?? '';
+  const toBuildingName = buildings.find((b) => b.id === route.toBuildingId)?.name ?? '';
+  const fromLabel = route.fromLabel?.trim() || fromBuildingName || 'Not set';
+  const toLabel = route.toLabel?.trim() || toBuildingName || 'Not set';
   const orderedWaypoints = [...route.waypoints].sort(
     (a, b) => a.sequenceIndex - b.sequenceIndex,
   );
@@ -286,15 +266,7 @@ function RouteDetailScreenInner() {
           </View>
         </View>
 
-        {/* Static map preview */}
-        {mapUrl && (
-          <Image
-            source={{ uri: mapUrl }}
-            style={styles.mapPreview}
-            accessible
-            accessibilityLabel={`Route map: ${route.name}`}
-          />
-        )}
+        <RoutePreviewMap route={route} buildings={buildings} height={360} interactive />
 
         {/* Stats */}
         <View style={styles.statsRow}>
@@ -338,22 +310,12 @@ function RouteDetailScreenInner() {
                   accessibilityLabel="Route name"
                 />
               </MetaField>
-              <MetaField label="Description">
-                <TextInput
-                  style={[styles.metaInput, styles.metaInputMultiline]}
-                  value={editDescription}
-                  onChangeText={setEditDescription}
-                  multiline
-                  accessibilityLabel="Route description"
-                />
-              </MetaField>
             </>
           ) : (
             <>
-              <MetaRow label="From" value={route.fromLabel} />
-              <MetaRow label="To" value={route.toLabel} />
-              {route.description && <MetaRow label="Notes" value={route.description} />}
-              {route.recordedBy && <MetaRow label="Recorded by" value={route.recordedBy} />}
+              <MetaRow label="From" value={fromLabel} />
+              <MetaRow label="To" value={toLabel} />
+              {route.description && <MetaRow label="Description" value={route.description} />}
               {route.recordedAt && (
                 <MetaRow label="Date" value={new Date(route.recordedAt).toLocaleDateString()} />
               )}
@@ -391,12 +353,7 @@ function RouteDetailScreenInner() {
                 onPress={() => void handleStatusChange('draft')}
               />
             )}
-            <ActionButton
-              icon="copy"
-              label="Duplicate"
-              color={accent}
-              onPress={() => void handleDuplicate()}
-            />
+            {/* POC: duplicate remains parked until we support copying waypoints and full route metadata. */}
             <ActionButton
               icon="trash"
               label="Delete"
@@ -439,6 +396,18 @@ function RouteDetailScreenInner() {
           </View>
         )}
       </ScrollView>
+      <ConfirmDialog
+        visible={confirmAction != null}
+        title={confirmAction?.title ?? ''}
+        message={confirmAction?.message ?? ''}
+        confirmLabel={confirmAction?.confirmLabel ?? 'Confirm'}
+        destructive={confirmAction?.kind === 'delete'}
+        loading={confirmBusy}
+        onCancel={() => {
+          if (!confirmBusy) setConfirmAction(null);
+        }}
+        onConfirm={() => void handleConfirmAction()}
+      />
     </SafeAreaView>
   );
 }
@@ -604,63 +573,6 @@ async function resolveWaypointAudioUrl(audioPath: string): Promise<string> {
   }
 
   return data.signedUrl;
-}
-
-const MAX_STATIC_MAP_COORDS = 50;
-const MAX_BUILDING_COORDS = 20;
-
-/**
- * Build a GeoJSON FeatureCollection for a route and its associated buildings.
- * Used as the overlay for Mapbox Static Images API (geojson(...) format).
- */
-function buildRouteGeoJson(route: Route, routeBuildings: Building[]): string {
-  const features: object[] = [];
-
-  // Building polygons — drawn beneath the route path
-  for (const b of routeBuildings) {
-    if (!b.footprint || b.footprint.length < 3) continue;
-    const fp = b.footprint;
-    const step = fp.length <= MAX_BUILDING_COORDS ? 1 : Math.ceil(fp.length / MAX_BUILDING_COORDS);
-    const ring: [number, number][] = fp.filter((_, i) => i % step === 0 || i === fp.length - 1);
-    // Ensure the ring is closed
-    const first = ring[0];
-    const last = ring[ring.length - 1];
-    if (first && last && (first[0] !== last[0] || first[1] !== last[1])) {
-      ring.push([first[0], first[1]]);
-    }
-    features.push({
-      type: 'Feature',
-      geometry: { type: 'Polygon', coordinates: [ring] },
-      properties: {
-        stroke: '#00BFFF',
-        'stroke-width': 2,
-        'stroke-opacity': 0.9,
-        fill: '#00BFFF',
-        'fill-opacity': 0.15,
-      },
-    });
-  }
-
-  // Route LineString — drawn on top
-  const wps = route.waypoints;
-  const step = wps.length <= MAX_STATIC_MAP_COORDS ? 1 : Math.ceil(wps.length / MAX_STATIC_MAP_COORDS);
-  const sampled = wps.filter((_, i) => i % step === 0 || i === wps.length - 1);
-  features.push({
-    type: 'Feature',
-    geometry: {
-      type: 'LineString',
-      coordinates: sampled.map((w) => [w.coordinate.longitude, w.coordinate.latitude]),
-    },
-    properties: { stroke: '#6c63ff', 'stroke-width': 3, 'stroke-opacity': 0.8 },
-  });
-
-  return JSON.stringify({ type: 'FeatureCollection', features });
-}
-
-function buildStaticMapUrl(route: Route, token: string, routeBuildings: Building[] = []): string {
-  const geojson = buildRouteGeoJson(route, routeBuildings);
-  const overlay = `geojson(${encodeURIComponent(geojson)})`;
-  return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${overlay}/auto/600x200@2x?padding=15&access_token=${token}`;
 }
 
 function StatBox({ value, label }: { value: string; label: string }) {

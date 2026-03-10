@@ -17,6 +17,7 @@ import {
   AccessibilityInfo,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import type { BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
@@ -48,6 +49,16 @@ const HAZARD_LABELS: Record<HazardType, string> = {
   low_clearance: 'Low Clearance',
   seasonal: 'Seasonal',
   wet_surface: 'Wet Surface',
+  other: 'Other',
+};
+
+const HAZARD_FILTER_LABELS: Record<HazardType, string> = {
+  uneven_surface: 'Uneven',
+  construction: 'Construction',
+  stairs_unmarked: 'Stairs',
+  low_clearance: 'Clearance',
+  seasonal: 'Seasonal',
+  wet_surface: 'Wet',
   other: 'Other',
 };
 
@@ -89,7 +100,7 @@ function HazardsScreenInner() {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [typeFilter, setTypeFilter] = useState<HazardType | null>(null);
   const [routeFilter, setRouteFilter] = useState<string | null>(null);
-  const [expiryFilter, setExpiryFilter] = useState<ExpiryFilter>('active');
+  const [expiryFilter, setExpiryFilter] = useState<ExpiryFilter>('all');
   const [selectedHazard, setSelectedHazard] = useState<Hazard | null>(null);
   const [addCoordinate, setAddCoordinate] = useState<[number, number] | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -140,6 +151,13 @@ function HazardsScreenInner() {
     void run();
   }, [fetchHazards, fetchRoutes]);
 
+  useFocusEffect(
+    useCallback(() => {
+      void fetchHazards();
+      void fetchRoutes();
+    }, [fetchHazards, fetchRoutes]),
+  );
+
   // Realtime subscription for hazard changes
   useEffect(() => {
     if (!activeCampus) return;
@@ -187,6 +205,8 @@ function HazardsScreenInner() {
       return expiresMs >= now;
     });
   }, [hazards, expiryFilter, nowMs]);
+
+  const hasActiveFilters = typeFilter !== null || routeFilter !== null || expiryFilter !== 'all';
 
   const handleResolve = useCallback(async (hazard: Hazard) => {
     // Close the detail sheet first so Alert displays properly
@@ -375,10 +395,22 @@ function HazardsScreenInner() {
     [routes, nowMs, handleSelectHazard, handleResolve],
   );
 
+  const clearFilters = useCallback(() => {
+    setTypeFilter(null);
+    setRouteFilter(null);
+    setExpiryFilter('all');
+  }, []);
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* View mode toggle */}
       <View style={styles.header}>
+        <View style={styles.headerTextBlock}>
+          <Text style={styles.headerTitle}>Hazards</Text>
+          <Text style={styles.headerSubtitle}>
+            {filteredHazards.length} shown{hasActiveFilters ? ' with filters' : ''}
+          </Text>
+        </View>
         <View style={styles.viewToggle}>
           <Pressable
             style={[styles.toggleBtn, viewMode === 'list' && { backgroundColor: accent + '22' }]}
@@ -449,9 +481,8 @@ function HazardsScreenInner() {
             accessibilityRole="radio"
             accessibilityState={{ selected: typeFilter === type }}
           >
-            <Ionicons name={HAZARD_ICONS[type]} size={14} color={typeFilter === type ? accent : '#606070'} />
             <Text style={[styles.filterLabel, typeFilter === type && { color: accent }]}>
-              {HAZARD_LABELS[type]}
+              {HAZARD_FILTER_LABELS[type]}
             </Text>
           </Pressable>
         ))}
@@ -493,6 +524,20 @@ function HazardsScreenInner() {
         </ScrollView>
       )}
 
+      {hasActiveFilters && (
+        <View style={styles.filterActionsRow}>
+          <Pressable
+            style={[styles.clearFiltersBtn, { borderColor: accent + '44', backgroundColor: accent + '16' }]}
+            onPress={clearFilters}
+            accessibilityRole="button"
+            accessibilityLabel="Clear hazard filters"
+          >
+            <Ionicons name="close-circle-outline" size={15} color={accent} />
+            <Text style={[styles.clearFiltersLabel, { color: accent }]}>Clear filters</Text>
+          </Pressable>
+        </View>
+      )}
+
       {isLoading ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={accent} />
@@ -507,6 +552,9 @@ function HazardsScreenInner() {
             <View style={styles.empty}>
               <Ionicons name="shield-checkmark-outline" size={64} color="#1E1E26" />
               <Text style={styles.emptyTitle}>No hazards found</Text>
+              {activeCampus?.name && (
+                <Text style={styles.emptyCampus}>Campus: {activeCampus.name}</Text>
+              )}
               <Text style={styles.emptyBody}>
                 {typeFilter || expiryFilter !== 'all'
                   ? 'Try adjusting your filters.'
@@ -1069,11 +1117,14 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A0A0F' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+    gap: 10,
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 8,
+    paddingBottom: 0,
   },
+  headerTextBlock: { gap: 2 },
+  headerTitle: { color: '#F0F0F5', fontSize: 18, fontWeight: '700' },
+  headerSubtitle: { color: '#606070', fontSize: 12 },
   viewToggle: {
     flexDirection: 'row',
     backgroundColor: '#111116',
@@ -1081,14 +1132,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1E1E26',
     overflow: 'hidden',
+    alignSelf: 'center',
   },
   toggleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    minHeight: 44,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    minHeight: 34,
     justifyContent: 'center',
   },
   toggleBtnActive: {},
@@ -1097,24 +1149,40 @@ const styles = StyleSheet.create({
   filterRow: {
     gap: 6,
     paddingHorizontal: 16,
-    paddingVertical: 6,
+    paddingVertical: 2,
   },
   filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
     backgroundColor: '#111116',
     borderWidth: 1,
     borderColor: '#1E1E26',
-    minHeight: 36,
+    minHeight: 32,
     justifyContent: 'center',
   },
   filterChipActive: {},
-  filterLabel: { color: '#606070', fontSize: 12, fontWeight: '600' },
+  filterLabel: { color: '#606070', fontSize: 11, fontWeight: '600' },
   filterLabelActive: {},
+  filterActionsRow: {
+    paddingHorizontal: 16,
+    paddingTop: 2,
+    paddingBottom: 6,
+  },
+  clearFiltersBtn: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  clearFiltersLabel: { fontSize: 12, fontWeight: '700' },
   list: { padding: 16, paddingBottom: 40 },
   separator: { height: 8 },
   card: {
@@ -1160,6 +1228,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emptyTitle: { color: '#606070', fontSize: 20, fontWeight: '700' },
+  emptyCampus: { color: '#808090', fontSize: 12, fontWeight: '600' },
   emptyBody: { color: '#404050', fontSize: 14, textAlign: 'center', maxWidth: 280 },
   mapContainer: { flex: 1 },
   map: { flex: 1 },

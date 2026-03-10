@@ -448,7 +448,7 @@ function MapScreenInner() {
           <>
             <Pressable
               style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
-              onPress={() => router.push('/record')}
+              onPress={() => router.push({ pathname: '/record', params: { autostart: '1' } })}
               accessibilityLabel="Record a new route"
               accessibilityRole="button"
             >

@@ -1,23 +1,18 @@
 /**
  * ALP-950: Voice annotation at waypoints.
  *
- * Manages simultaneous audio recording (expo-av) and live speech-to-text
- * (expo-speech-recognition). The STT transcript is shown for review before save.
- * The raw audio file is stored locally and queued for Supabase Storage upload.
- *
- * Audio session (iOS): AVAudioSession category PlayAndRecord with allowBluetooth.
- * Coexists with the background GPS session from ALP-947 — activating the mic does
- * not interrupt the location task.
+ * Manages live speech-to-text and persisted audio capture through
+ * expo-speech-recognition. The STT transcript is shown for review before save,
+ * and the recognizer itself persists the raw audio to a local file.
  *
  * Connectivity: expo-speech-recognition requires network on iOS <16 and most Android
  * devices. Callers must check connectivity before starting and surface an explicit error.
  *
  * Maximum recording duration: 60 seconds. Auto-stop fires at the limit.
- * Audio-level silence check: if no audio detected in the first 3 seconds, prompt retry.
+ * Silence check: if no audible input is detected in the first 3 seconds, prompt retry.
  *
  * Upload failure: transcript text is saved locally; audio upload is queued for retry.
  */
-import { Audio } from 'expo-av';
 import { ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
 import * as FileSystem from 'expo-file-system';
 
@@ -51,46 +46,6 @@ const MAX_DURATION_MS = 60_000;
 const SILENCE_CHECK_MS = 3_000;
 const STORAGE_BUCKET = 'route-audio';
 
-const RECORDING_OPTIONS: Audio.RecordingOptions = {
-  ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
-  android: {
-    ...Audio.RecordingOptionsPresets.HIGH_QUALITY.android,
-    extension: '.m4a',
-  },
-  ios: {
-    ...Audio.RecordingOptionsPresets.HIGH_QUALITY.ios,
-    extension: '.m4a',
-  },
-  web: {
-    mimeType: 'audio/webm',
-    bitsPerSecond: 128000,
-  },
-};
-
-// ── Audio session helpers ─────────────────────────────────────────────────────
-
-/**
- * Activate the recording audio session. Coexists with background GPS on iOS by
- * using PlayAndRecord with mixWithOthers and allowBluetooth options.
- */
-export async function activateRecordingAudioSession(): Promise<void> {
-  await Audio.setAudioModeAsync({
-    allowsRecordingIOS: true,
-    playsInSilentModeIOS: true,
-    staysActiveInBackground: false,
-    shouldDuckAndroid: true,
-  });
-}
-
-/** Restore the audio session to playback mode after recording ends. */
-export async function deactivateRecordingAudioSession(): Promise<void> {
-  await Audio.setAudioModeAsync({
-    allowsRecordingIOS: false,
-    playsInSilentModeIOS: true,
-    staysActiveInBackground: false,
-  });
-}
-
 // ── Recording lifecycle ───────────────────────────────────────────────────────
 
 export interface SttSubscription {
@@ -100,10 +55,11 @@ export interface SttSubscription {
 export type StartRecordingResult =
   | {
       ok: true;
-      recording: Audio.Recording;
       sttSubscriptions: SttSubscription[];
       autoStopTimer: ReturnType<typeof setTimeout>;
       silenceCheckTimer: ReturnType<typeof setTimeout>;
+      audioUriPromise: Promise<string | null>;
+      startedAt: number;
     }
   | {
       ok: false;
@@ -111,31 +67,25 @@ export type StartRecordingResult =
         | 'permission_denied'
         | 'speech_permission_denied'
         | 'recognition_unavailable'
-        | 'audio_session_error'
         | 'start_failed'
         | 'already_recording';
     };
 
 /**
- * Start simultaneous Audio.Recording and STT recognition.
- * Returns the recording object and timer handles the caller must retain.
+ * Start speech recognition with persisted audio capture.
+ * Returns the timer handles and audio promise the caller must retain.
  *
  * onAutoStop fires when the 60-second limit is reached.
- * onSilenceDetected fires if the mic is silent for the first 3 seconds.
+ * onSilenceDetected fires if no audible input is detected for the first 3 seconds.
  * onTranscriptUpdate fires with each interim STT result.
  */
 export async function startVoiceAnnotationRecording(options: {
   onAutoStop: () => void;
   onSilenceDetected: () => void;
-  onTranscriptUpdate: (text: string) => void;
+  onTranscriptUpdate: (text: string, isFinal: boolean) => void;
   onSTTError: (message: string) => void;
 }): Promise<StartRecordingResult> {
   const { onAutoStop, onSilenceDetected, onTranscriptUpdate, onSTTError } = options;
-
-  const { status } = await Audio.requestPermissionsAsync();
-  if (status !== 'granted') {
-    return { ok: false, reason: 'permission_denied' };
-  }
 
   try {
     const speechPermission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
@@ -151,24 +101,34 @@ export async function startVoiceAnnotationRecording(options: {
   }
 
   try {
-    await activateRecordingAudioSession();
-  } catch {
-    return { ok: false, reason: 'audio_session_error' };
-  }
+    let heardAudibleInput = false;
+    let hasResolvedAudioUri = false;
+    let resolveAudioUri: (uri: string | null) => void = () => {};
+    const audioUriPromise = new Promise<string | null>((resolve) => {
+      resolveAudioUri = resolve;
+    });
 
-  const recording = new Audio.Recording();
-  try {
-    await recording.prepareToRecordAsync(RECORDING_OPTIONS);
-    await recording.startAsync();
+    const finalizeAudioUri = (uri: string | null) => {
+      if (hasResolvedAudioUri) return;
+      hasResolvedAudioUri = true;
+      resolveAudioUri(uri);
+    };
 
-    // STT runs in parallel
     const sttSubs = [
       ExpoSpeechRecognitionModule.addListener('result', (event) => {
         const text = event.results[0]?.transcript ?? '';
-        if (text) onTranscriptUpdate(text);
+        if (text) onTranscriptUpdate(text, event.isFinal);
       }),
       ExpoSpeechRecognitionModule.addListener('error', (event) => {
         onSTTError(event.message ?? 'Speech recognition error');
+      }),
+      ExpoSpeechRecognitionModule.addListener('audioend', (event) => {
+        finalizeAudioUri(event.uri ?? null);
+      }),
+      ExpoSpeechRecognitionModule.addListener('volumechange', (event) => {
+        if (event.value >= 0) {
+          heardAudibleInput = true;
+        }
       }),
     ];
 
@@ -177,37 +137,41 @@ export async function startVoiceAnnotationRecording(options: {
       interimResults: true,
       maxAlternatives: 1,
       continuous: true,
+      recordingOptions: {
+        persist: true,
+      },
+      volumeChangeEventOptions: {
+        enabled: true,
+        intervalMillis: 250,
+      },
+      androidRecognitionServicePackage:
+        ExpoSpeechRecognitionModule.getDefaultRecognitionService().packageName || undefined,
     });
 
     const autoStopTimer = setTimeout(() => {
       onAutoStop();
     }, MAX_DURATION_MS);
 
-    const silenceCheckTimer = setTimeout(async () => {
-      try {
-        const status = await recording.getStatusAsync();
-        const level = status.metering ?? -160;
-        if (level < -60) {
-          onSilenceDetected();
-        }
-      } catch {
-        // Ignore status reads after the recorder has already been torn down.
+    const silenceCheckTimer = setTimeout(() => {
+      if (!heardAudibleInput) {
+        onSilenceDetected();
       }
     }, SILENCE_CHECK_MS);
 
-    return { ok: true, recording, sttSubscriptions: sttSubs, autoStopTimer, silenceCheckTimer };
+    return {
+      ok: true,
+      sttSubscriptions: sttSubs,
+      autoStopTimer,
+      silenceCheckTimer,
+      audioUriPromise,
+      startedAt: Date.now(),
+    };
   } catch {
     try {
       ExpoSpeechRecognitionModule.stop();
     } catch {
       // best-effort cleanup only
     }
-    try {
-      await recording.stopAndUnloadAsync();
-    } catch {
-      // recording may not have started
-    }
-    await deactivateRecordingAudioSession();
     return { ok: false, reason: 'start_failed' };
   }
 }
@@ -218,14 +182,15 @@ export interface StopRecordingResult {
 }
 
 /**
- * Stop the recording and STT, clear timers, restore the audio session.
+ * Stop speech recognition, clear timers, and wait for the persisted audio file.
  * Returns the local audio URI and actual duration.
  */
 export async function stopVoiceAnnotationRecording(
-  recording: Audio.Recording,
   sttSubscriptions: SttSubscription[],
   autoStopTimer: ReturnType<typeof setTimeout>,
   silenceCheckTimer: ReturnType<typeof setTimeout>,
+  audioUriPromise: Promise<string | null>,
+  startedAt: number,
 ): Promise<StopRecordingResult> {
   clearTimeout(autoStopTimer);
   clearTimeout(silenceCheckTimer);
@@ -235,27 +200,26 @@ export async function stopVoiceAnnotationRecording(
   } catch {
     // recognizer may already be stopped or unavailable
   }
-  sttSubscriptions.forEach((s) => s.remove());
-
-  let audioUri: string | null = null;
-  let durationMs = 0;
 
   try {
-    const statusBefore = await recording.getStatusAsync();
-    durationMs = statusBefore.durationMillis ?? 0;
-    await recording.stopAndUnloadAsync();
-    audioUri = recording.getURI();
+    const audioUri = await Promise.race<string | null>([
+      audioUriPromise,
+      new Promise<string | null>((resolve) => {
+        setTimeout(() => resolve(null), 1500);
+      }),
+    ]);
+    sttSubscriptions.forEach((s) => s.remove());
+    return {
+      audioUri,
+      durationMs: Math.max(0, Date.now() - startedAt),
+    };
   } catch {
-    // Recording may have already stopped
+    sttSubscriptions.forEach((s) => s.remove());
+    return {
+      audioUri: null,
+      durationMs: Math.max(0, Date.now() - startedAt),
+    };
   }
-
-  try {
-    await deactivateRecordingAudioSession();
-  } catch {
-    // no-op cleanup failure
-  }
-
-  return { audioUri, durationMs };
 }
 
 // ── Upload ────────────────────────────────────────────────────────────────────
@@ -304,14 +268,14 @@ export async function uploadVoiceAnnotation(
   localUri: string,
   waypointLocalId: string,
 ): Promise<AudioUploadResult> {
-  const storageKey = `pending/${waypointLocalId}.m4a`;
+  const { storageKey, contentType } = getAudioUploadTarget(localUri, waypointLocalId);
 
   try {
     const blob = await uriToBlob(localUri);
 
     const { error } = await supabase.storage
       .from(STORAGE_BUCKET)
-      .upload(storageKey, blob, { contentType: 'audio/mp4', upsert: true });
+      .upload(storageKey, blob, { contentType, upsert: true });
 
     if (error) throw error;
 
@@ -332,10 +296,11 @@ export async function processAudioUploadRetryQueue(): Promise<void> {
   for (const item of queue) {
     try {
       const blob = await uriToBlob(item.localUri);
+      const { contentType } = getAudioUploadTarget(item.localUri, item.waypointLocalId);
 
       const { error } = await supabase.storage
         .from(STORAGE_BUCKET)
-        .upload(item.storageKey, blob, { contentType: 'audio/mp4', upsert: true });
+        .upload(item.storageKey, blob, { contentType, upsert: true });
 
       if (error) throw error;
     } catch {
@@ -344,4 +309,25 @@ export async function processAudioUploadRetryQueue(): Promise<void> {
   }
 
   await saveAudioRetryQueue(remaining);
+}
+
+function getAudioUploadTarget(localUri: string, waypointLocalId: string): {
+  storageKey: string;
+  contentType: string;
+} {
+  const extensionMatch = localUri.match(/\.([a-z0-9]+)(?:\?|$)/i);
+  const extension = extensionMatch?.[1]?.toLowerCase() ?? 'm4a';
+  const contentType =
+    extension === 'wav'
+      ? 'audio/wav'
+      : extension === 'caf'
+        ? 'audio/x-caf'
+        : extension === 'webm'
+          ? 'audio/webm'
+          : 'audio/mp4';
+
+  return {
+    storageKey: `pending/${waypointLocalId}.${extension}`,
+    contentType,
+  };
 }

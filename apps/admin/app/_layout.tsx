@@ -35,6 +35,7 @@ export default function RootLayout() {
           headerTintColor: '#F0F0F5',
           headerTitleStyle: { fontWeight: '700' },
           contentStyle: { backgroundColor: '#0A0A0F' },
+          animation: 'fade',
         }}
       >
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
@@ -55,7 +56,8 @@ export default function RootLayout() {
           name="record"
           options={{
             title: 'Record Route',
-            presentation: 'fullScreenModal',
+            presentation: 'card',
+            contentStyle: { backgroundColor: '#0A0A0F' },
           }}
         />
         <Stack.Screen
@@ -70,5 +72,6 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+    backgroundColor: '#0A0A0F',
   },
 });

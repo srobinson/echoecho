@@ -19,7 +19,7 @@ import {
   AccessibilityInfo,
   Text,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapboxGL from '@rnmapbox/maps';
 import BottomSheet from '@gorhom/bottom-sheet';
@@ -80,6 +80,7 @@ const HAZARD_COLORS: Record<string, string> = {
 
 export default function RecordScreen() {
   logRecordDebug('render:start');
+  const { autostart } = useLocalSearchParams<{ autostart?: string }>();
   const {
     permissionStatus,
     isDegraded,
@@ -190,6 +191,7 @@ export default function RecordScreen() {
   // ── Recording control ─────────────────────────────────────────────────────
 
   const startInFlight = useRef(false);
+  const autoStartConsumedRef = useRef(false);
 
   const handleStart = useCallback(async () => {
     logRecordDebug('handleStart:entered', { permissionStatus });
@@ -244,6 +246,16 @@ export default function RecordScreen() {
       startInFlight.current = false;
     }
   }, [permissionStatus, gpsStart, openSettings, store, activeCampus?.id]);
+
+  useEffect(() => {
+    if (autostart !== '1') return;
+    if (autoStartConsumedRef.current) return;
+    if (permissionStatus !== 'granted') return;
+    if (session?.state === 'recording' || session?.state === 'paused') return;
+
+    autoStartConsumedRef.current = true;
+    void handleStart();
+  }, [autostart, permissionStatus, session?.state, handleStart]);
 
   const handleStop = useCallback(() => {
     Alert.alert('Stop Recording', 'What would you like to do with this route?', [

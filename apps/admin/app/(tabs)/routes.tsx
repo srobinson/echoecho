@@ -11,17 +11,18 @@ import {
   TextInput,
   StyleSheet,
   ActivityIndicator,
-  Image,
   AccessibilityInfo,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCampusStore } from '../../src/stores/campusStore';
 import { supabase } from '../../src/lib/supabase';
 import type { Building, Route, RouteStatus } from '@echoecho/shared';
 import { tabColors } from '@echoecho/ui';
 import { SectionColorProvider, useSectionColor } from '../../src/contexts/SectionColorContext';
+import { RoutePreviewMap } from '../../src/components/route/RoutePreviewMap';
 
 type FilterStatus = 'all' | RouteStatus;
 
@@ -111,6 +112,13 @@ function RoutesScreenInner() {
   }, [fetchRoutes, fetchBuildings, statusFilter]);
   /* eslint-enable react-hooks/exhaustive-deps */
 
+  useFocusEffect(
+    useCallback(() => {
+      void fetchRoutes(searchQuery, statusFilter);
+      void fetchBuildings();
+    }, [fetchRoutes, fetchBuildings, searchQuery, statusFilter]),
+  );
+
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -197,7 +205,7 @@ function RoutesScreenInner() {
 
       <Pressable
         style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
-        onPress={() => router.push('/record')}
+        onPress={() => router.push({ pathname: '/record', params: { autostart: '1' } })}
         accessibilityLabel="Record a new route"
         accessibilityRole="button"
       >
@@ -207,62 +215,7 @@ function RoutesScreenInner() {
   );
 }
 
-const MAX_STATIC_MAP_COORDS = 50;
-const MAX_BUILDING_COORDS = 20;
-
-/**
- * Build a GeoJSON FeatureCollection for a route and its associated buildings.
- * Used as the overlay for Mapbox Static Images API (geojson(...) format).
- */
-function buildRouteGeoJson(route: Route, routeBuildings: Building[]): string {
-  const features: object[] = [];
-
-  // Building polygons — drawn beneath the route path
-  for (const b of routeBuildings) {
-    if (!b.footprint || b.footprint.length < 3) continue;
-    const fp = b.footprint;
-    const step = fp.length <= MAX_BUILDING_COORDS ? 1 : Math.ceil(fp.length / MAX_BUILDING_COORDS);
-    const ring: [number, number][] = fp.filter((_, i) => i % step === 0 || i === fp.length - 1);
-    // Ensure the ring is closed
-    const first = ring[0];
-    const last = ring[ring.length - 1];
-    if (first && last && (first[0] !== last[0] || first[1] !== last[1])) {
-      ring.push([first[0], first[1]]);
-    }
-    features.push({
-      type: 'Feature',
-      geometry: { type: 'Polygon', coordinates: [ring] },
-      properties: {
-        stroke: '#00BFFF',
-        'stroke-width': 2,
-        'stroke-opacity': 0.9,
-        fill: '#00BFFF',
-        'fill-opacity': 0.15,
-      },
-    });
-  }
-
-  // Route LineString — drawn on top
-  const wps = route.waypoints;
-  const step = wps.length <= MAX_STATIC_MAP_COORDS ? 1 : Math.ceil(wps.length / MAX_STATIC_MAP_COORDS);
-  const sampled = wps.filter((_, i) => i % step === 0 || i === wps.length - 1);
-  features.push({
-    type: 'Feature',
-    geometry: {
-      type: 'LineString',
-      coordinates: sampled.map((w) => [w.coordinate.longitude, w.coordinate.latitude]),
-    },
-    properties: { stroke: '#6c63ff', 'stroke-width': 3, 'stroke-opacity': 0.8 },
-  });
-
-  return JSON.stringify({ type: 'FeatureCollection', features });
-}
-
-function staticMapUrl(route: Route, buildingMap?: Map<string, Building>): string | null {
-  if (route.waypoints.length < 2) return null;
-  const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
-  if (!token) return null;
-
+function getRoutePreviewBuildings(route: Route, buildingMap?: Map<string, Building>): Building[] {
   const routeBuildings: Building[] = [];
   if (buildingMap) {
     for (const bid of [route.fromBuildingId, route.toBuildingId]) {
@@ -271,11 +224,7 @@ function staticMapUrl(route: Route, buildingMap?: Map<string, Building>): string
       if (b) routeBuildings.push(b);
     }
   }
-
-  const geojson = buildRouteGeoJson(route, routeBuildings);
-  const overlay = `geojson(${encodeURIComponent(geojson)})`;
-
-  return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${overlay}/auto/300x120@2x?padding=10&access_token=${token}`;
+  return routeBuildings;
 }
 
 function ListSeparator() {
@@ -284,10 +233,10 @@ function ListSeparator() {
 
 const RouteCard = memo(function RouteCard({ route, buildings, onPress }: { route: Route; buildings: Map<string, Building>; onPress: () => void }) {
   const statusColor = STATUS_COLOR[route.status] ?? '#9CA3AF';
-  const mapUrl = staticMapUrl(route, buildings);
   const dateStr = route.recordedAt
     ? new Date(route.recordedAt).toLocaleDateString()
     : new Date(route.createdAt).toLocaleDateString();
+  const routeBuildings = getRoutePreviewBuildings(route, buildings);
 
   return (
     <Pressable
@@ -296,14 +245,7 @@ const RouteCard = memo(function RouteCard({ route, buildings, onPress }: { route
       accessibilityLabel={`${route.name}, ${route.status}, from ${route.fromLabel} to ${route.toLabel}, recorded ${dateStr}`}
       accessibilityRole="button"
     >
-      {mapUrl && (
-        <Image
-          source={{ uri: mapUrl }}
-          style={styles.mapPreview}
-          accessible
-          accessibilityLabel={`Route map: ${route.name}`}
-        />
-      )}
+      <RoutePreviewMap route={route} buildings={routeBuildings} height={120} />
       <View style={styles.cardContent}>
         <View style={styles.cardHeader}>
           <Text style={styles.cardTitle} numberOfLines={1}>

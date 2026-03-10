@@ -14,7 +14,7 @@
 import * as FileSystem from 'expo-file-system';
 
 import { supabase } from '../lib/supabase';
-import type { RecordingSession, PendingWaypoint } from '@echoecho/shared';
+import type { RecordingSession, PendingWaypoint, PendingHazard } from '@echoecho/shared';
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -68,6 +68,17 @@ interface WaypointPayload {
   annotation_text: string | null;
   annotation_audio_url: string | null;
   photo_url: string | null;
+}
+
+interface HazardInsertPayload {
+  campus_id: string;
+  route_id: string;
+  type: PendingHazard['type'];
+  severity: PendingHazard['severity'];
+  coordinate: PendingHazard['coordinate'];
+  title: string;
+  description: string | null;
+  expires_at: string | null;
 }
 
 // ── Storage helpers ───────────────────────────────────────────────────────────
@@ -248,6 +259,19 @@ function buildWaypointPayloads(
   });
 }
 
+function buildHazardPayloads(session: RecordingSession, routeId: string): HazardInsertPayload[] {
+  return session.pendingHazards.map((hazard) => ({
+    campus_id:   session.campusId,
+    route_id:    routeId,
+    type:        hazard.type,
+    severity:    hazard.severity,
+    coordinate:  hazard.coordinate,
+    title:       hazard.title,
+    description: hazard.description,
+    expires_at:  hazard.expiresAt ?? null,
+  }));
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
@@ -320,7 +344,21 @@ export async function saveRoute(
 
   if (error) return { ok: false, stage: 'db', error: error.message };
 
-  return { ok: true, routeId: data as string };
+  const routeId = data as string;
+  const hazardPayloads = buildHazardPayloads(session, routeId);
+
+  if (hazardPayloads.length > 0) {
+    const { error: hazardError } = await supabase.from('hazards').insert(hazardPayloads);
+    if (hazardError) {
+      return {
+        ok: false,
+        stage: 'db',
+        error: `Route saved, but hazards failed to save: ${hazardError.message}`,
+      };
+    }
+  }
+
+  return { ok: true, routeId };
 }
 
 /**
