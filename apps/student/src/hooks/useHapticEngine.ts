@@ -18,7 +18,6 @@
 import { useCallback, useRef, useEffect } from 'react';
 import { Platform, AccessibilityInfo, Vibration } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import * as Battery from 'expo-battery';
 import type { NavEvent } from '../types/navEvents';
 import type { SttSessionState } from '@echoecho/shared';
 
@@ -202,13 +201,15 @@ export function useHapticEngine(
 
   // Low Power Mode detection — expo-battery
   useEffect(() => {
-    let sub: Battery.Subscription;
+    let removeBatteryListener: (() => void) | undefined;
 
     const init = async () => {
       if (Platform.OS !== 'ios') return;
       try {
+        const Battery = require('expo-battery') as typeof import('expo-battery');
+
         lowPowerRef.current = await Battery.isLowPowerModeEnabledAsync();
-        sub = Battery.addLowPowerModeListener(({ lowPowerMode }) => {
+        const sub = Battery.addLowPowerModeListener(({ lowPowerMode }) => {
           const wasActive = lowPowerRef.current;
           lowPowerRef.current = lowPowerMode;
           if (lowPowerMode && !wasActive && !lowPowerAnnouncedRef.current) {
@@ -221,13 +222,14 @@ export function useHapticEngine(
             lowPowerAnnouncedRef.current = false;
           }
         });
+        removeBatteryListener = () => sub.remove();
       } catch {
         // expo-battery unavailable; default to haptics enabled
       }
     };
 
     void init();
-    return () => { sub?.remove(); };
+    return () => { removeBatteryListener?.(); };
   }, []);
 
   const firePattern = useCallback(async (key: HapticPatternKey) => {

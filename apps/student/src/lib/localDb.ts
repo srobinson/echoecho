@@ -336,3 +336,35 @@ export async function getLocalRoute(routeId: string): Promise<LocalRoute | null>
     syncedAt: row.synced_at,
   };
 }
+
+export async function getLocalRoutesForCampus(campusId: string): Promise<LocalRoute[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{
+    id: string;
+    campus_id: string;
+    name: string;
+    difficulty: string;
+    tags: string;
+    status: string;
+    total_distance_m: number | null;
+    content_hash: string;
+    synced_at: number;
+  }>(
+    `SELECT * FROM local_routes
+     WHERE campus_id = ? AND status = 'published'
+     ORDER BY name COLLATE NOCASE ASC`,
+    [campusId],
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    campusId: row.campus_id,
+    name: row.name,
+    difficulty: row.difficulty as LocalRoute['difficulty'],
+    tags: JSON.parse(row.tags) as string[],
+    status: row.status as LocalRoute['status'],
+    totalDistanceM: row.total_distance_m,
+    contentHash: row.content_hash,
+    syncedAt: row.synced_at,
+  }));
+}

@@ -26,9 +26,10 @@ import {
 } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
 import { supabase } from '../lib/supabase';
 import { syncCampus } from '../lib/syncEngine';
-import type { Entrance, Waypoint } from '@echoecho/shared';
+import { haversineM, type Campus, type Entrance, type Waypoint } from '@echoecho/shared';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -86,25 +87,28 @@ export function CampusProvider({ children }: CampusProviderProps) {
 
   const fetchFromNetwork = useCallback(async (): Promise<boolean> => {
     try {
-      const { data: campusRow, error: campusErr } = await supabase
-        .from('campuses')
-        .select('id, name, security_phone')
-        .limit(1)
-        .maybeSingle();
+      const deviceCoords = await getDeviceCoords();
+
+      const { data: campusRows, error: campusErr } = await supabase
+        .from('v_campuses' as 'campuses')
+        .select('id, name, center, securityPhone')
+        .order('name');
 
       if (campusErr) {
         console.error('[CampusContext] Failed to fetch campus:', campusErr.message);
         return false;
       }
-      if (!campusRow) {
+      if (!campusRows || campusRows.length === 0) {
         console.warn('[CampusContext] No campus configured');
         return false;
       }
 
+      const selectedCampus = selectCampusForDevice(campusRows as Array<Campus & { securityPhone?: string | null }>, deviceCoords);
+
       const campusInfo: CampusInfo = {
-        id: campusRow.id as string,
-        name: campusRow.name as string,
-        securityPhone: (campusRow.security_phone as string | null) ?? null,
+        id: selectedCampus.id,
+        name: selectedCampus.name,
+        securityPhone: selectedCampus.securityPhone ?? null,
       };
 
       // Fetch all buildings with entrances for this campus
@@ -180,6 +184,10 @@ export function CampusProvider({ children }: CampusProviderProps) {
         AsyncStorage.setItem(STORAGE_KEY_SECURITY_WPS, JSON.stringify(secWaypoints)),
       ]);
 
+      // Ensure the student app has local route data on first load, not only
+      // after a later foreground event.
+      await syncCampus(campusInfo.id, undefined, true);
+
       setLoadFailed(false);
       return true;
     } catch {
@@ -254,4 +262,57 @@ export function CampusProvider({ children }: CampusProviderProps) {
       {children}
     </CampusContext.Provider>
   );
+}
+
+async function getDeviceCoords(): Promise<{ latitude: number; longitude: number } | null> {
+  try {
+    const permission = await Location.getForegroundPermissionsAsync();
+    if (permission.status !== 'granted') {
+      return null;
+    }
+
+    const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: 60_000 });
+    const current = lastKnown ?? await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+
+    return {
+      latitude: current.coords.latitude,
+      longitude: current.coords.longitude,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function selectCampusForDevice(
+  campuses: Array<Campus & { securityPhone?: string | null }>,
+  coords: { latitude: number; longitude: number } | null,
+): Campus & { securityPhone?: string | null } {
+  if (!coords || campuses.length === 1) {
+    return campuses[0];
+  }
+
+  let nearest = campuses[0];
+  let nearestDistance = haversineM(
+    coords.latitude,
+    coords.longitude,
+    nearest.center.latitude,
+    nearest.center.longitude,
+  );
+
+  for (const campus of campuses.slice(1)) {
+    const distance = haversineM(
+      coords.latitude,
+      coords.longitude,
+      campus.center.latitude,
+      campus.center.longitude,
+    );
+    if (distance < nearestDistance) {
+      nearest = campus;
+      nearestDistance = distance;
+    }
+  }
+
+  return nearest;
 }
