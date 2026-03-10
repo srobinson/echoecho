@@ -210,18 +210,52 @@ function RoutesScreenInner() {
 const MAX_STATIC_MAP_COORDS = 50;
 const MAX_BUILDING_COORDS = 20;
 
-function buildingPathOverlay(footprint: [number, number][]): string {
-  // Sample building footprint coordinates if too many
-  const step = footprint.length <= MAX_BUILDING_COORDS ? 1 : Math.ceil(footprint.length / MAX_BUILDING_COORDS);
-  const sampled = footprint.filter((_, i) => i % step === 0 || i === footprint.length - 1);
-  // Close the ring
-  const first = sampled[0];
-  const last = sampled[sampled.length - 1];
-  if (first && last && (first[0] !== last[0] || first[1] !== last[1])) {
-    sampled.push(first);
+/**
+ * Build a GeoJSON FeatureCollection for a route and its associated buildings.
+ * Used as the overlay for Mapbox Static Images API (geojson(...) format).
+ */
+function buildRouteGeoJson(route: Route, routeBuildings: Building[]): string {
+  const features: object[] = [];
+
+  // Building polygons — drawn beneath the route path
+  for (const b of routeBuildings) {
+    if (!b.footprint || b.footprint.length < 3) continue;
+    const fp = b.footprint;
+    const step = fp.length <= MAX_BUILDING_COORDS ? 1 : Math.ceil(fp.length / MAX_BUILDING_COORDS);
+    const ring: [number, number][] = fp.filter((_, i) => i % step === 0 || i === fp.length - 1);
+    // Ensure the ring is closed
+    const first = ring[0];
+    const last = ring[ring.length - 1];
+    if (first && last && (first[0] !== last[0] || first[1] !== last[1])) {
+      ring.push([first[0], first[1]]);
+    }
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Polygon', coordinates: [ring] },
+      properties: {
+        stroke: '#00BFFF',
+        'stroke-width': 2,
+        'stroke-opacity': 0.9,
+        fill: '#00BFFF',
+        'fill-opacity': 0.15,
+      },
+    });
   }
-  const coords = sampled.map(([lng, lat]) => `${lng.toFixed(5)},${lat.toFixed(5)}`);
-  return `path-2+00BFFF-0.9(${encodeURIComponent(coords.join(','))})`;
+
+  // Route LineString — drawn on top
+  const wps = route.waypoints;
+  const step = wps.length <= MAX_STATIC_MAP_COORDS ? 1 : Math.ceil(wps.length / MAX_STATIC_MAP_COORDS);
+  const sampled = wps.filter((_, i) => i % step === 0 || i === wps.length - 1);
+  features.push({
+    type: 'Feature',
+    geometry: {
+      type: 'LineString',
+      coordinates: sampled.map((w) => [w.coordinate.longitude, w.coordinate.latitude]),
+    },
+    properties: { stroke: '#6c63ff', 'stroke-width': 3, 'stroke-opacity': 0.8 },
+  });
+
+  return JSON.stringify({ type: 'FeatureCollection', features });
 }
 
 function staticMapUrl(route: Route, buildingMap?: Map<string, Building>): string | null {
@@ -229,55 +263,19 @@ function staticMapUrl(route: Route, buildingMap?: Map<string, Building>): string
   const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
   if (!token) return null;
 
-  const wps = route.waypoints;
-  const step = wps.length <= MAX_STATIC_MAP_COORDS ? 1 : Math.ceil(wps.length / MAX_STATIC_MAP_COORDS);
-  const sampled = wps.filter((_, i) => i % step === 0 || i === wps.length - 1);
-
-  const coords = sampled.map((w) =>
-    `${w.coordinate.longitude.toFixed(5)},${w.coordinate.latitude.toFixed(5)}`,
-  );
-
-  // Build overlay layers: building outlines first (route path on top)
-  const overlays: string[] = [];
-  const buildingFootprints: [number, number][][] = [];
-
+  const routeBuildings: Building[] = [];
   if (buildingMap) {
-    const buildingIds = new Set<string>();
-    if (route.fromBuildingId) buildingIds.add(route.fromBuildingId);
-    if (route.toBuildingId) buildingIds.add(route.toBuildingId);
-    for (const bid of buildingIds) {
+    for (const bid of [route.fromBuildingId, route.toBuildingId]) {
+      if (!bid) continue;
       const b = buildingMap.get(bid);
-      if (b && b.footprint && b.footprint.length >= 3) {
-        overlays.push(buildingPathOverlay(b.footprint));
-        buildingFootprints.push(b.footprint);
-      }
+      if (b) routeBuildings.push(b);
     }
   }
 
-  // Route path on top
-  overlays.push(`path-3+6c63ff-0.8(${encodeURIComponent(coords.join(','))})`);
+  const geojson = buildRouteGeoJson(route, routeBuildings);
+  const overlay = `geojson(${encodeURIComponent(geojson)})`;
 
-  // Bbox includes both waypoints and building footprints so the viewport
-  // contains the full building outline even when it extends beyond the route.
-  let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
-  for (const w of wps) {
-    if (w.coordinate.longitude < minLng) minLng = w.coordinate.longitude;
-    if (w.coordinate.longitude > maxLng) maxLng = w.coordinate.longitude;
-    if (w.coordinate.latitude < minLat) minLat = w.coordinate.latitude;
-    if (w.coordinate.latitude > maxLat) maxLat = w.coordinate.latitude;
-  }
-  for (const fp of buildingFootprints) {
-    for (const [lng, lat] of fp) {
-      if (lng < minLng) minLng = lng;
-      if (lng > maxLng) maxLng = lng;
-      if (lat < minLat) minLat = lat;
-      if (lat > maxLat) maxLat = lat;
-    }
-  }
-  const pad = 0.0002;
-  const bbox = `${minLng - pad},${minLat - pad},${maxLng + pad},${maxLat + pad}`;
-
-  return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${overlays.join(',')}/[${bbox}]/300x120@2x?access_token=${token}`;
+  return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${overlay}/auto/300x120@2x?padding=10&access_token=${token}`;
 }
 
 function ListSeparator() {
