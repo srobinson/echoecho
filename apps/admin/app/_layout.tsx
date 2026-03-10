@@ -44,6 +44,10 @@ export default function RootLayout() {
           options={{ title: 'Campus', headerBackTitle: 'Back' }}
         />
         <Stack.Screen
+          name="building/[id]"
+          options={{ title: 'Building', headerBackTitle: 'Back' }}
+        />
+        <Stack.Screen
           name="route/[id]"
           options={{ title: 'Route', headerBackTitle: 'Back' }}
         />
