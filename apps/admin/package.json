@@ -4,6 +4,7 @@
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
+    "eas-build-pre-install": "echo \"MAPBOX_DOWNLOADS_TOKEN=$MAPBOX_DOWNLOADS_TOKEN\" >> ./android/gradle.properties",
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",

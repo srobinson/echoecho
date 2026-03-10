@@ -6,7 +6,6 @@
   "build": {
     "preview-admin": {
       "distribution": "internal",
-
       "env": {
         "APP_VARIANT": "admin"
       },

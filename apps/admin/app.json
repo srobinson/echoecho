@@ -87,6 +87,7 @@
         }
       ]
     ],
+    "entryPoint": "expo-router/entry",
     "experiments": {
       "typedRoutes": true
     },
