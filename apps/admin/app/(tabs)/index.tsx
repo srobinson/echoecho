@@ -35,6 +35,7 @@ import { WaypointEditSheet } from '../../src/components/waypoint/WaypointEditShe
 import { WaypointReorderList } from '../../src/components/waypoint/WaypointReorderList';
 import { WaypointBeforeAfterModal } from '../../src/components/waypoint/WaypointBeforeAfterModal';
 import { useCampusStore } from '../../src/stores/campusStore';
+import { useMapViewportStore } from '../../src/stores/mapViewportStore';
 import { MAPBOX_STYLE_SATELLITE } from '../../src/lib/mapbox';
 import { useAdminMapData } from '../../src/hooks/useAdminMapData';
 import { useBuildingDraw } from '../../src/hooks/useBuildingDraw';
@@ -72,6 +73,7 @@ function MapScreenInner() {
   const [selected, setSelected] = useState<SelectedFeature>(null);
   const [pendingEntranceCoord, setPendingEntranceCoord] = useState<[number, number] | null>(null);
   const { activeCampus } = useCampusStore();
+  const setViewport = useMapViewportStore((s) => s.setViewport);
 
   const { buildings, routes, annotationWaypoints, isLoading, error, refresh } = useAdminMapData(
     activeCampus?.id ?? null,
@@ -108,6 +110,15 @@ function MapScreenInner() {
   );
 
   const wpHasChanges = wpEdit.isDirty;
+
+  // Persist camera position so the record screen can inherit it.
+  // onMapIdle fires once after the camera settles (not per frame during gestures).
+  const handleMapIdle = useCallback((state: MapboxGL.MapState) => {
+    const { center: c, zoom: z } = state.properties;
+    if (c && z != null) {
+      setViewport([c[0], c[1]], z);
+    }
+  }, [setViewport]);
 
   // Handle map press depending on current mode
   const handleMapPress = useCallback((feature: GeoJSON.Feature) => {
@@ -184,6 +195,7 @@ function MapScreenInner() {
           scaleBarEnabled={false}
           accessible={false}
           onPress={isDrawing ? handleMapPress : undefined}
+          onMapIdle={handleMapIdle}
         >
           <MapboxGL.Camera
             ref={cameraRef}

@@ -26,6 +26,7 @@ import BottomSheet from '@gorhom/bottom-sheet';
 import { MAPBOX_STYLE_SATELLITE } from '../src/lib/mapbox';
 import { useRecordingStore } from '../src/stores/recordingStore';
 import { useCampusStore } from '../src/stores/campusStore';
+import { useMapViewportStore } from '../src/stores/mapViewportStore';
 import { useGpsRecording } from '../src/hooks/useGpsRecording';
 import { computeDistance } from '@echoecho/shared';
 
@@ -77,15 +78,20 @@ export default function RecordScreen() {
   const { session } = store;
 
   const activeCampus = useCampusStore((s) => s.activeCampus);
-  // Stable reference — a new array on every render would make Mapbox Camera
-  // re-apply centerCoordinate on every tick, fighting user pan gestures.
-  const campusCenter = useMemo<[number, number] | null>(
-    () => activeCampus
-      ? [activeCampus.center.longitude, activeCampus.center.latitude]
-      : null,
+  const savedCenter = useMapViewportStore((s) => s.center);
+  const savedZoom = useMapViewportStore((s) => s.zoom);
+
+  // Inherit the viewport the user was looking at on the main map.
+  // Falls back to campus center if the store has no captured position yet.
+  const initialCenter = useMemo<[number, number] | null>(
+    () => savedCenter
+      ?? (activeCampus
+        ? [activeCampus.center.longitude, activeCampus.center.latitude]
+        : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeCampus?.id],
   );
+  const initialZoom = savedZoom ?? 17;
 
   // Tick state drives elapsed-time re-renders at 1 Hz while recording
   const [tick, setTick] = useState(0);
@@ -290,10 +296,10 @@ export default function RecordScreen() {
             animationMode="easeTo"
             animationDuration={500}
           />
-        ) : campusCenter ? (
+        ) : initialCenter ? (
           <MapboxGL.Camera
-            centerCoordinate={campusCenter}
-            zoomLevel={17}
+            centerCoordinate={initialCenter}
+            zoomLevel={initialZoom}
             animationMode="none"
             animationDuration={0}
           />
