@@ -522,6 +522,7 @@ function HazardsScreenInner() {
             </Pressable>
           ))}
         </ScrollView>
+<<<<<<< HEAD
       )}
 
       {hasActiveFilters && (
@@ -536,6 +537,8 @@ function HazardsScreenInner() {
             <Text style={[styles.clearFiltersLabel, { color: accent }]}>Clear filters</Text>
           </Pressable>
         </View>
+=======
+>>>>>>> 98d52d0 (nancy[ALP-1150]: Fix 5 hazards screen bugs)
       )}
 
       {isLoading ? (
