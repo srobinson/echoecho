@@ -27,6 +27,15 @@ import { AppState, Platform } from 'react-native';
 import { useRecordingStore } from '../stores/recordingStore';
 import type { TrackPoint } from '@echoecho/shared';
 
+function logGpsServiceDebug(step: string, details?: unknown) {
+  if (!__DEV__) return;
+  if (details === undefined) {
+    console.log(`[GpsServiceDebug] ${step}`);
+    return;
+  }
+  console.log(`[GpsServiceDebug] ${step}`, details);
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 export const GPS_TASK_ID = 'echoecho.gps-recording';
@@ -68,6 +77,7 @@ let _sequenceIndex = 0;
 let _sampleCountSinceFlush = 0;
 let _isPaused = false;
 let _degraded = false;
+let _foregroundSubscription: Location.LocationSubscription | null = null;
 
 // ── Simple event emitter ──────────────────────────────────────────────────────
 
@@ -127,6 +137,26 @@ async function flushBuffer(points: TrackPoint[]): Promise<void> {
   }
 }
 
+async function appendPoints(points: TrackPoint[]): Promise<void> {
+  if (points.length === 0 || _isPaused) return;
+
+  const persisted = await loadPersistedBuffer();
+  persisted.push(...points);
+  _sampleCountSinceFlush += points.length;
+
+  if (_sampleCountSinceFlush >= FLUSH_EVERY_N) {
+    _sampleCountSinceFlush = 0;
+    await flushBuffer(persisted);
+  }
+
+  const store = useRecordingStore.getState();
+  if (store.session?.state === 'recording') {
+    for (const point of points) {
+      store.appendTrackPoint(point);
+    }
+  }
+}
+
 /** Recover a persisted buffer after an app kill mid-recording. */
 export async function loadPersistedBuffer(): Promise<TrackPoint[]> {
   try {
@@ -162,26 +192,7 @@ TaskManager.defineTask(GPS_TASK_ID, async ({ data, error }: TaskManager.TaskMana
 
   // Map incoming locations to TrackPoints
   const points: TrackPoint[] = locations.map((loc) => mapLocation(loc, _sequenceIndex++));
-
-  // Always persist to file buffer first. On Android headless restart the Zustand
-  // store resets to defaults (no session), but the file buffer survives. The
-  // foreground recovery handler (registerForegroundRecovery) merges these back.
-  const persisted = await loadPersistedBuffer();
-  persisted.push(...points);
-  _sampleCountSinceFlush += points.length;
-
-  if (_sampleCountSinceFlush >= FLUSH_EVERY_N) {
-    _sampleCountSinceFlush = 0;
-    await flushBuffer(persisted);
-  }
-
-  // Update in-memory store when available (foreground + iOS background contexts)
-  const store = useRecordingStore.getState();
-  if (store.session?.state === 'recording') {
-    for (const point of points) {
-      store.appendTrackPoint(point);
-    }
-  }
+  await appendPoints(points);
 });
 
 // ── Battery management ────────────────────────────────────────────────────────
@@ -222,6 +233,14 @@ function subscribeBattery(): void {
     const isLow = batteryLevel < BATTERY_LOW;
     if (isLow !== _degraded) {
       const newOptions = await applyBatteryAwareOptions();
+      if (Platform.OS === 'android') {
+        try {
+          await startForegroundWatcher(newOptions);
+        } catch {
+          // Foreground watcher may already be stopped; ignore.
+        }
+        return;
+      }
       const hasTask = await TaskManager.isTaskRegisteredAsync(GPS_TASK_ID);
       if (hasTask) {
         try {
@@ -239,18 +258,80 @@ function unsubscribeBattery(): void {
   _batterySubscription = null;
 }
 
+async function stopForegroundWatcher(): Promise<void> {
+  _foregroundSubscription?.remove();
+  _foregroundSubscription = null;
+}
+
+async function startForegroundWatcher(options: Location.LocationOptions): Promise<void> {
+  await stopForegroundWatcher();
+
+  _foregroundSubscription = await Location.watchPositionAsync(
+    {
+      accuracy: options.accuracy ?? Location.Accuracy.High,
+      distanceInterval: 5,
+      mayShowUserSettingsDialog: true,
+    },
+    (location) => {
+      const point = mapLocation(location, _sequenceIndex++);
+      void appendPoints([point]);
+    },
+    (reason) => {
+      console.error('[GpsServiceDebug] foregroundWatcher:error', reason);
+    },
+  );
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
  * Start the GPS location updates background task.
  * Caller is responsible for confirming permissions before calling this.
  */
+let _starting = false;
+
 export async function startLocationTask(): Promise<void> {
-  const options = await applyBatteryAwareOptions();
-  await Location.startLocationUpdatesAsync(GPS_TASK_ID, options);
-  subscribeBattery();
-  _isPaused = false;
-  _sampleCountSinceFlush = 0;
+  logGpsServiceDebug('startLocationTask:entered', { starting: _starting });
+  // Guard against concurrent calls (auto-start + manual tap race).
+  if (_starting) return;
+  _starting = true;
+
+  try {
+    logGpsServiceDebug('startLocationTask:applyBatteryAwareOptions:before');
+    const options = await applyBatteryAwareOptions();
+    logGpsServiceDebug('startLocationTask:applyBatteryAwareOptions:after', options);
+    if (Platform.OS === 'android') {
+      logGpsServiceDebug('startLocationTask:startForegroundWatcher:before');
+      await startForegroundWatcher(options);
+      logGpsServiceDebug('startLocationTask:startForegroundWatcher:after');
+      subscribeBattery();
+      _isPaused = false;
+      _sampleCountSinceFlush = 0;
+      logGpsServiceDebug('startLocationTask:complete:foreground');
+      return;
+    }
+    const hasStarted = await Location.hasStartedLocationUpdatesAsync(GPS_TASK_ID);
+    logGpsServiceDebug('startLocationTask:hasStartedLocationUpdatesAsync', { hasStarted });
+    if (hasStarted) {
+      logGpsServiceDebug('startLocationTask:stopExistingLocationUpdates:before');
+      await Location.stopLocationUpdatesAsync(GPS_TASK_ID);
+      logGpsServiceDebug('startLocationTask:stopExistingLocationUpdates:after');
+    }
+    logGpsServiceDebug('startLocationTask:startLocationUpdatesAsync:before');
+    await Location.startLocationUpdatesAsync(GPS_TASK_ID, options);
+    logGpsServiceDebug('startLocationTask:startLocationUpdatesAsync:after');
+    logGpsServiceDebug('startLocationTask:subscribeBattery');
+    subscribeBattery();
+    _isPaused = false;
+    _sampleCountSinceFlush = 0;
+    logGpsServiceDebug('startLocationTask:complete');
+  } catch (error) {
+    console.error('[GpsServiceDebug] startLocationTask:error', error);
+    throw error;
+  } finally {
+    _starting = false;
+    logGpsServiceDebug('startLocationTask:finally');
+  }
 }
 
 /** Pause location collection without stopping the OS task (keeps background entitlement alive). */
@@ -268,6 +349,7 @@ export async function stopLocationTask(): Promise<void> {
   _isPaused = false;
   _degraded = false;
   unsubscribeBattery();
+  await stopForegroundWatcher();
   try {
     const hasTask = await TaskManager.isTaskRegisteredAsync(GPS_TASK_ID);
     if (hasTask) {

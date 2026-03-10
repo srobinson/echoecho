@@ -3,7 +3,7 @@
  * static map preview, and version history (read-only).
  * ALP-968.
  */
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,14 +13,16 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  Image,
   AccessibilityInfo,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Audio } from 'expo-av';
 import { supabase } from '../../src/lib/supabase';
-import type { Route, RouteStatus } from '@echoecho/shared';
+import type { Building, Route, RouteStatus, Waypoint, WaypointType } from '@echoecho/shared';
+import { ConfirmDialog } from '../../src/components/ConfirmDialog';
+import { RoutePreviewMap } from '../../src/components/route/RoutePreviewMap';
 
 import { tabColors } from '@echoecho/ui';
 import { SectionColorProvider, useSectionColor } from '../../src/contexts/SectionColorContext';
@@ -40,6 +42,11 @@ interface RouteVersion {
   createdAt: string;
 }
 
+type RouteConfirmAction =
+  | { kind: 'status'; nextStatus: RouteStatus; title: string; message: string; confirmLabel: string }
+  | { kind: 'delete'; title: string; message: string; confirmLabel: string }
+  | null;
+
 export default function RouteDetailScreen() {
   return (
     <SectionColorProvider value={tabColors.routes}>
@@ -52,14 +59,17 @@ function RouteDetailScreenInner() {
   const accent = useSectionColor();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [route, setRoute] = useState<Route | null>(null);
+  const [buildings, setBuildings] = useState<Building[]>([]);
   const [versions, setVersions] = useState<RouteVersion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showVersions, setShowVersions] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<RouteConfirmAction>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
 
   // Inline edit state
   const [editName, setEditName] = useState('');
-  const [editDescription, setEditDescription] = useState('');
   const [isEditing, setIsEditing] = useState(false);
 
   const fetchRoute = useCallback(async () => {
@@ -70,11 +80,24 @@ function RouteDetailScreenInner() {
       .eq('id', id)
       .single();
 
-    if (!error && data) {
+    if (error) {
+      setLoadError(error.message);
+    } else if (!data) {
+      setLoadError('Route not found.');
+    } else {
       const r = data as Route;
       setRoute(r);
       setEditName(r.name);
-      setEditDescription(r.description ?? '');
+
+      // Fetch buildings for map overlay
+      const buildingIds = [r.fromBuildingId, r.toBuildingId].filter(Boolean) as string[];
+      if (buildingIds.length > 0) {
+        const { data: bData } = await supabase
+          .from('v_buildings' as 'buildings')
+          .select('*')
+          .in('id', buildingIds);
+        if (bData) setBuildings(bData as Building[]);
+      }
     }
     setIsLoading(false);
   }, [id]);
@@ -112,7 +135,6 @@ function RouteDetailScreenInner() {
       .from('routes')
       .update({
         name: editName.trim(),
-        description: editDescription.trim() || null,
       })
       .eq('id', route.id);
 
@@ -121,92 +143,67 @@ function RouteDetailScreenInner() {
       Alert.alert('Save failed', error.message);
       return;
     }
-    setRoute({ ...route, name: editName.trim(), description: editDescription.trim() || null });
+    setRoute({ ...route, name: editName.trim() });
     setIsEditing(false);
-  }, [route, editName, editDescription]);
+  }, [route, editName]);
 
   const handleStatusChange = useCallback(async (newStatus: RouteStatus) => {
     if (!route) return;
     const label = newStatus === 'published' ? 'Publish' : newStatus === 'retracted' ? 'Archive' : 'Update';
-    Alert.alert(
-      `${label} route?`,
-      `Change status of "${route.name}" to ${newStatus}.`,
-      [
-        {
-          text: label,
-          onPress: async () => {
-            const { error } = await supabase
-              .from('routes')
-              .update({ status: newStatus })
-              .eq('id', route.id);
-            if (error) {
-              Alert.alert('Failed', error.message);
-              return;
-            }
-            setRoute({ ...route, status: newStatus });
-            AccessibilityInfo.announceForAccessibility(`Route ${newStatus}.`);
-          },
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    );
-  }, [route]);
-
-  const handleDuplicate = useCallback(async () => {
-    if (!route) return;
-    const { data, error } = await supabase
-      .from('routes')
-      .insert({
-        campus_id: route.campusId,
-        name: `${route.name} (copy)`,
-        description: route.description,
-        from_building_id: route.fromBuildingId,
-        to_building_id: route.toBuildingId,
-        from_label: route.fromLabel,
-        to_label: route.toLabel,
-        status: 'draft',
-      })
-      .select('id')
-      .single();
-
-    if (error || !data) {
-      Alert.alert('Duplicate failed', error?.message ?? 'Unknown error');
-      return;
-    }
-    Alert.alert('Duplicated', 'Route copied as draft.', [
-      { text: 'View Copy', onPress: () => router.replace(`/route/${data.id}`) },
-      { text: 'Stay Here' },
-    ]);
+    setConfirmAction({
+      kind: 'status',
+      nextStatus: newStatus,
+      title: `${label} route?`,
+      message: `Change status of "${route.name}" to ${newStatus}.`,
+      confirmLabel: label,
+    });
   }, [route]);
 
   const handleDelete = useCallback(() => {
     if (!route) return;
-    Alert.alert(
-      `Delete "${route.name}"?`,
-      'This cannot be undone.',
-      [
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const { error } = await supabase
-              .from('routes')
-              .delete()
-              .eq('id', route.id);
-            if (error) {
-              Alert.alert('Delete failed', error.message);
-              return;
-            }
-            AccessibilityInfo.announceForAccessibility(`${route.name} deleted.`);
-            router.back();
-          },
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    );
+    setConfirmAction({
+      kind: 'delete',
+      title: `Delete "${route.name}"?`,
+      message: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+    });
   }, [route]);
 
-  if (isLoading || !route) {
+  const handleConfirmAction = useCallback(async () => {
+    if (!route || !confirmAction) return;
+
+    setConfirmBusy(true);
+    if (confirmAction.kind === 'status') {
+      const { error } = await supabase
+        .from('routes')
+        .update({ status: confirmAction.nextStatus })
+        .eq('id', route.id);
+      setConfirmBusy(false);
+      if (error) {
+        Alert.alert('Failed', error.message);
+        return;
+      }
+      setRoute({ ...route, status: confirmAction.nextStatus });
+      setConfirmAction(null);
+      AccessibilityInfo.announceForAccessibility(`Route ${confirmAction.nextStatus}.`);
+      return;
+    }
+
+    const { error } = await supabase
+      .from('routes')
+      .delete()
+      .eq('id', route.id);
+    setConfirmBusy(false);
+    if (error) {
+      Alert.alert('Delete failed', error.message);
+      return;
+    }
+    setConfirmAction(null);
+    AccessibilityInfo.announceForAccessibility(`${route.name} deleted.`);
+    router.back();
+  }, [route, confirmAction]);
+
+  if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
@@ -216,11 +213,33 @@ function RouteDetailScreenInner() {
     );
   }
 
+  if (!route) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centered}>
+          <Ionicons name="alert-circle-outline" size={48} color="#F06292" />
+          <Text style={styles.errorTitle}>{loadError ?? 'Route not found'}</Text>
+          <Pressable
+            style={styles.backBtn}
+            onPress={() => router.back()}
+            accessibilityLabel="Go back"
+            accessibilityRole="button"
+          >
+            <Ionicons name="arrow-back" size={22} color="#F0F0F5" />
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   const statusColor = STATUS_COLOR[route.status] ?? '#9CA3AF';
-  const mapToken = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
-  const mapUrl = route.waypoints.length >= 2 && mapToken
-    ? buildStaticMapUrl(route, mapToken)
-    : null;
+  const fromBuildingName = buildings.find((b) => b.id === route.fromBuildingId)?.name ?? '';
+  const toBuildingName = buildings.find((b) => b.id === route.toBuildingId)?.name ?? '';
+  const fromLabel = route.fromLabel?.trim() || fromBuildingName || 'Not set';
+  const toLabel = route.toLabel?.trim() || toBuildingName || 'Not set';
+  const orderedWaypoints = [...route.waypoints].sort(
+    (a, b) => a.sequenceIndex - b.sequenceIndex,
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -247,15 +266,7 @@ function RouteDetailScreenInner() {
           </View>
         </View>
 
-        {/* Static map preview */}
-        {mapUrl && (
-          <Image
-            source={{ uri: mapUrl }}
-            style={styles.mapPreview}
-            accessible
-            accessibilityLabel={`Route map: ${route.name}`}
-          />
-        )}
+        <RoutePreviewMap route={route} buildings={buildings} height={360} interactive />
 
         {/* Stats */}
         <View style={styles.statsRow}>
@@ -299,28 +310,20 @@ function RouteDetailScreenInner() {
                   accessibilityLabel="Route name"
                 />
               </MetaField>
-              <MetaField label="Description">
-                <TextInput
-                  style={[styles.metaInput, styles.metaInputMultiline]}
-                  value={editDescription}
-                  onChangeText={setEditDescription}
-                  multiline
-                  accessibilityLabel="Route description"
-                />
-              </MetaField>
             </>
           ) : (
             <>
-              <MetaRow label="From" value={route.fromLabel} />
-              <MetaRow label="To" value={route.toLabel} />
-              {route.description && <MetaRow label="Notes" value={route.description} />}
-              {route.recordedBy && <MetaRow label="Recorded by" value={route.recordedBy} />}
+              <MetaRow label="From" value={fromLabel} />
+              <MetaRow label="To" value={toLabel} />
+              {route.description && <MetaRow label="Description" value={route.description} />}
               {route.recordedAt && (
                 <MetaRow label="Date" value={new Date(route.recordedAt).toLocaleDateString()} />
               )}
             </>
           )}
         </View>
+
+        <WaypointAnnotationTable waypoints={orderedWaypoints} />
 
         {/* Actions */}
         <View style={styles.section}>
@@ -350,12 +353,7 @@ function RouteDetailScreenInner() {
                 onPress={() => void handleStatusChange('draft')}
               />
             )}
-            <ActionButton
-              icon="copy"
-              label="Duplicate"
-              color={accent}
-              onPress={() => void handleDuplicate()}
-            />
+            {/* POC: duplicate remains parked until we support copying waypoints and full route metadata. */}
             <ActionButton
               icon="trash"
               label="Delete"
@@ -398,32 +396,183 @@ function RouteDetailScreenInner() {
           </View>
         )}
       </ScrollView>
+      <ConfirmDialog
+        visible={confirmAction != null}
+        title={confirmAction?.title ?? ''}
+        message={confirmAction?.message ?? ''}
+        confirmLabel={confirmAction?.confirmLabel ?? 'Confirm'}
+        destructive={confirmAction?.kind === 'delete'}
+        loading={confirmBusy}
+        onCancel={() => {
+          if (!confirmBusy) setConfirmAction(null);
+        }}
+        onConfirm={() => void handleConfirmAction()}
+      />
     </SafeAreaView>
   );
 }
 
-const MAX_STATIC_MAP_COORDS = 50;
+const AUDIO_BUCKET = 'route-audio';
 
-function buildStaticMapUrl(route: Route, token: string): string {
-  const wps = route.waypoints;
-  const step = wps.length <= MAX_STATIC_MAP_COORDS ? 1 : Math.ceil(wps.length / MAX_STATIC_MAP_COORDS);
-  const sampled = wps.filter((_, i) => i % step === 0 || i === wps.length - 1);
+const WAYPOINT_TYPE_LABEL: Record<WaypointType, string> = {
+  start: 'Start',
+  end: 'End',
+  turn: 'Turn',
+  decision_point: 'Decision Point',
+  landmark: 'Landmark',
+  hazard: 'Hazard',
+  door: 'Door',
+  elevator: 'Elevator',
+  stairs: 'Stairs',
+  ramp: 'Ramp',
+  crossing: 'Crossing',
+  regular: 'Waypoint',
+};
 
-  const coords = sampled.map((w) =>
-    `${w.coordinate.longitude.toFixed(5)},${w.coordinate.latitude.toFixed(5)}`,
+function WaypointAnnotationTable({ waypoints }: { waypoints: Waypoint[] }) {
+  const accent = useSectionColor();
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
+
+  const stopPlayback = useCallback(async () => {
+    if (soundRef.current) {
+      await soundRef.current.unloadAsync();
+      soundRef.current = null;
+    }
+    setPlayingId(null);
+    setLoadingId(null);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      void stopPlayback();
+    };
+  }, [stopPlayback]);
+
+  const handleToggleAudio = useCallback(async (waypoint: Waypoint) => {
+    if (!waypoint.audioAnnotationUrl) return;
+
+    if (playingId === waypoint.id) {
+      await stopPlayback();
+      return;
+    }
+
+    setLoadingId(waypoint.id);
+    try {
+      await stopPlayback();
+      const audioUri = await resolveWaypointAudioUrl(waypoint.audioAnnotationUrl);
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: audioUri },
+        { shouldPlay: true },
+        (status) => {
+          if (!status.isLoaded) return;
+          if (status.didJustFinish) {
+            void stopPlayback();
+          }
+        },
+      );
+
+      soundRef.current = sound;
+      setPlayingId(waypoint.id);
+    } catch (error) {
+      Alert.alert(
+        'Playback unavailable',
+        error instanceof Error ? error.message : 'Unable to play this audio annotation.',
+      );
+    } finally {
+      setLoadingId((current) => (current === waypoint.id ? null : current));
+    }
+  }, [playingId, stopPlayback]);
+
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle} accessibilityRole="header">Waypoint Annotations</Text>
+      {waypoints.length === 0 ? (
+        <Text style={styles.emptySectionText}>No waypoints recorded for this route yet.</Text>
+      ) : (
+        <View style={styles.annotationTable}>
+          <View style={styles.annotationHeaderRow}>
+            <Text style={[styles.annotationHeaderCell, styles.annotationStepCol]}>#</Text>
+            <Text style={[styles.annotationHeaderCell, styles.annotationTypeCol]}>Type</Text>
+            <Text style={[styles.annotationHeaderCell, styles.annotationTranscriptCol]}>Transcript</Text>
+            <Text style={[styles.annotationHeaderCell, styles.annotationAudioCol]}>Audio</Text>
+          </View>
+          {waypoints.map((waypoint) => {
+            const hasAudio = waypoint.audioAnnotationUrl != null;
+            const isLoading = loadingId === waypoint.id;
+            const isPlaying = playingId === waypoint.id;
+            const isAnotherClipActive =
+              (playingId != null && playingId !== waypoint.id) ||
+              (loadingId != null && loadingId !== waypoint.id);
+            return (
+              <View key={waypoint.id} style={styles.annotationRow}>
+                <Text style={[styles.annotationCell, styles.annotationStepCol, styles.annotationStepText]}>
+                  {waypoint.sequenceIndex + 1}
+                </Text>
+                <Text style={[styles.annotationCell, styles.annotationTypeCol, styles.annotationTypeText]}>
+                  {WAYPOINT_TYPE_LABEL[waypoint.type] ?? waypoint.type}
+                </Text>
+                <View style={[styles.annotationCell, styles.annotationTranscriptCol]}>
+                  <Text style={styles.annotationTranscriptText}>
+                    {waypoint.audioLabel?.trim() || 'No transcript'}
+                  </Text>
+                </View>
+                <View style={[styles.annotationCell, styles.annotationAudioCol]}>
+                  {hasAudio ? (
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.audioButton,
+                        { borderColor: accent + '44', backgroundColor: accent + '18' },
+                        isAnotherClipActive && styles.audioButtonDisabled,
+                        pressed && styles.audioButtonPressed,
+                      ]}
+                      onPress={() => void handleToggleAudio(waypoint)}
+                      disabled={isAnotherClipActive}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${isPlaying ? 'Stop' : 'Play'} audio for waypoint ${waypoint.sequenceIndex + 1}`}
+                      accessibilityState={{ disabled: isAnotherClipActive }}
+                    >
+                      {isLoading ? (
+                        <ActivityIndicator size="small" color={accent} />
+                      ) : (
+                        <>
+                          <Ionicons
+                            name={isPlaying ? 'stop-circle' : 'play-circle'}
+                            size={18}
+                            color={accent}
+                          />
+                          <Text style={[styles.audioButtonLabel, { color: accent }]}>
+                            {isPlaying ? 'Playing' : 'Play'}
+                          </Text>
+                        </>
+                      )}
+                    </Pressable>
+                  ) : (
+                    <Text style={styles.annotationEmptyAudio}>No audio</Text>
+                  )}
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </View>
   );
-  const path = `path-3+6c63ff-0.8(${encodeURIComponent(coords.join(','))})`;
+}
 
-  let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
-  for (const w of wps) {
-    if (w.coordinate.longitude < minLng) minLng = w.coordinate.longitude;
-    if (w.coordinate.longitude > maxLng) maxLng = w.coordinate.longitude;
-    if (w.coordinate.latitude < minLat) minLat = w.coordinate.latitude;
-    if (w.coordinate.latitude > maxLat) maxLat = w.coordinate.latitude;
+async function resolveWaypointAudioUrl(audioPath: string): Promise<string> {
+  if (/^https?:\/\//i.test(audioPath)) return audioPath;
+
+  const { data, error } = await supabase.storage
+    .from(AUDIO_BUCKET)
+    .createSignedUrl(audioPath, 60 * 10);
+
+  if (error || !data?.signedUrl) {
+    throw new Error(error?.message ?? 'Audio file could not be resolved.');
   }
-  const bbox = `${minLng - 0.0003},${minLat - 0.0003},${maxLng + 0.0003},${maxLat + 0.0003}`;
 
-  return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${path}/[${bbox}]/600x200@2x?access_token=${token}`;
+  return data.signedUrl;
 }
 
 function StatBox({ value, label }: { value: string; label: string }) {
@@ -483,7 +632,8 @@ function ActionButton({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A0A0F' },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
+  errorTitle: { color: '#F06292', fontSize: 15, fontWeight: '600', textAlign: 'center', maxWidth: 280 },
   scroll: { paddingBottom: 40 },
   header: {
     flexDirection: 'row',
@@ -505,7 +655,7 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
   mapPreview: {
     width: '100%',
-    height: 180,
+    height: 360,
     backgroundColor: '#0D0D12',
   },
   statsRow: {
@@ -604,4 +754,61 @@ const styles = StyleSheet.create({
   versionInfo: { flex: 1, gap: 2 },
   versionDate: { color: '#F0F0F5', fontSize: 13 },
   versionMeta: { color: '#606070', fontSize: 11 },
+  emptySectionText: { color: '#606070', fontSize: 13, lineHeight: 20 },
+  annotationTable: {
+    borderWidth: 1,
+    borderColor: '#1E1E26',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  annotationHeaderRow: {
+    flexDirection: 'row',
+    backgroundColor: '#0D0D12',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1E1E26',
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  annotationHeaderCell: {
+    color: '#808090',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  annotationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 12,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1E1E26',
+  },
+  annotationCell: {
+    justifyContent: 'center',
+  },
+  annotationStepCol: { width: 30 },
+  annotationTypeCol: { width: 88 },
+  annotationTranscriptCol: { flex: 1 },
+  annotationAudioCol: { width: 86, alignItems: 'flex-end' },
+  annotationStepText: { color: '#F0F0F5', fontSize: 13, fontWeight: '700' },
+  annotationTypeText: { color: '#D6D6E5', fontSize: 12, fontWeight: '600' },
+  annotationTranscriptText: { color: '#F0F0F5', fontSize: 13, lineHeight: 18 },
+  annotationEmptyAudio: { color: '#606070', fontSize: 12, fontWeight: '600' },
+  audioButton: {
+    minWidth: 74,
+    minHeight: 36,
+    borderWidth: 1,
+    borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+  },
+  audioButtonPressed: { opacity: 0.72 },
+  audioButtonDisabled: { opacity: 0.35 },
+  audioButtonLabel: { fontSize: 12, fontWeight: '700' },
 });

@@ -17,22 +17,40 @@ import {
   StyleSheet,
   Alert,
   AccessibilityInfo,
+  Text,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapboxGL from '@rnmapbox/maps';
 import BottomSheet from '@gorhom/bottom-sheet';
+import { HazardPickerSheet } from '@echoecho/ui';
 
 import { MAPBOX_STYLE_SATELLITE } from '../src/lib/mapbox';
 import { useRecordingStore } from '../src/stores/recordingStore';
+import { useCampusStore } from '../src/stores/campusStore';
+import { useMapViewportStore } from '../src/stores/mapViewportStore';
 import { useGpsRecording } from '../src/hooks/useGpsRecording';
+import { useAdminMapData } from '../src/hooks/useAdminMapData';
 import { computeDistance } from '@echoecho/shared';
+import { clearPersistedBuffer } from '../src/services/gpsRecordingService';
 
 import { RecordingBottomBar } from '../src/components/RecordingBottomBar';
 import { VoiceAnnotationSheet } from '../src/components/VoiceAnnotationSheet';
 import { HazardButton } from '../src/components/HazardButton';
+import { BuildingLayer } from '../src/components/map/BuildingLayer';
+import type { HazardType } from '@echoecho/shared';
 
-const TSBVI_CENTER: [number, number] = [-97.7468, 30.3495];
+function logRecordDebug(step: string, details?: unknown) {
+  if (!__DEV__) return;
+  if (details === undefined) {
+    console.log(`[RecordDebug] ${step}`);
+    return;
+  }
+  console.log(`[RecordDebug] ${step}`, details);
+}
+
+// Fallback center when stores are empty (TSBVI campus, Austin TX)
+const FALLBACK_CENTER: [number, number] = [-97.7468, 30.3495];
 
 // Waypoint type → color for marker dot
 const WAYPOINT_COLORS: Record<string, string> = {
@@ -61,26 +79,44 @@ const HAZARD_COLORS: Record<string, string> = {
 };
 
 export default function RecordScreen() {
+  logRecordDebug('render:start');
+  const { autostart } = useLocalSearchParams<{ autostart?: string }>();
   const {
     permissionStatus,
     isDegraded,
-    hasPersistedBuffer,
     requestPermissions,
     startRecording: gpsStart,
     pauseRecording: gpsPause,
     resumeRecording: gpsResume,
     stopRecording: gpsStop,
-    recoverPersistedSession,
     openSettings,
   } = useGpsRecording();
 
   const store = useRecordingStore();
   const { session } = store;
 
+  const activeCampus = useCampusStore((s) => s.activeCampus);
+  const savedCenter = useMapViewportStore((s) => s.center);
+  const savedZoom = useMapViewportStore((s) => s.zoom);
+
+  // Inherit the viewport the user was looking at on the main map.
+  // Falls back to campus center if the store has no captured position yet.
+  const initialCenter = useMemo<[number, number]>(
+    () => savedCenter
+      ?? (activeCampus
+        ? [activeCampus.center.longitude, activeCampus.center.latitude]
+        : FALLBACK_CENTER),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeCampus?.id],
+  );
+  const initialZoom = savedZoom ?? 17;
+  const { buildings } = useAdminMapData(activeCampus?.id ?? null);
+
   // Tick state drives elapsed-time re-renders at 1 Hz while recording
   const [tick, setTick] = useState(0);
   const lastAnnouncedSecRef = useRef(0);
   const voiceSheetRef = useRef<BottomSheet>(null);
+  const hazardSheetRef = useRef<BottomSheet>(null);
   const [activeWaypointId, setActiveWaypointId] = useState<string | null>(null);
 
   const isRecording = session?.state === 'recording';
@@ -143,30 +179,24 @@ export default function RecordScreen() {
     }
   }, [elapsedMs, distanceMeters, isRecording]);
 
-  // ── Permission + persisted buffer prompts ─────────────────────────────────
+  // ── Permission request ───────────────────────────────────────────────────
 
   useEffect(() => {
+    logRecordDebug('permissions:effect', { permissionStatus });
     if (permissionStatus === 'unknown') {
       requestPermissions();
     }
   }, [permissionStatus, requestPermissions]);
 
-  useEffect(() => {
-    if (hasPersistedBuffer) {
-      Alert.alert(
-        'Resume Previous Session?',
-        'A previous recording session was interrupted. Recover it?',
-        [
-          { text: 'Discard', style: 'destructive', onPress: () => store.clearSession() },
-          { text: 'Recover', onPress: recoverPersistedSession },
-        ],
-      );
-    }
-  }, [hasPersistedBuffer, recoverPersistedSession, store]);
-
   // ── Recording control ─────────────────────────────────────────────────────
 
+  const startInFlight = useRef(false);
+  const autoStartConsumedRef = useRef(false);
+
   const handleStart = useCallback(async () => {
+    logRecordDebug('handleStart:entered', { permissionStatus });
+    if (permissionStatus === 'unknown') return;
+
     if (permissionStatus === 'denied' || permissionStatus === 'restricted') {
       Alert.alert(
         'Location Permission Required',
@@ -178,8 +208,54 @@ export default function RecordScreen() {
       );
       return;
     }
-    await gpsStart();
-  }, [permissionStatus, gpsStart, openSettings]);
+
+    if (permissionStatus === 'foreground_only') {
+      Alert.alert(
+        'Background Location Required',
+        'This app needs "Always" location access to record routes while the screen is off. Please update the permission in Settings.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: openSettings },
+        ],
+      );
+      return;
+    }
+
+    // Prevent concurrent calls (auto-start + manual tap race)
+    if (startInFlight.current) return;
+    startInFlight.current = true;
+
+    try {
+      logRecordDebug('handleStart:clearPersistedBuffer');
+      // Clear any stale persisted buffer before starting fresh
+      await clearPersistedBuffer();
+      logRecordDebug('handleStart:gpsStart:before');
+      await gpsStart();
+      if (activeCampus?.id) {
+        store.updateSessionMeta('', '', activeCampus.id);
+      }
+      logRecordDebug('handleStart:gpsStart:after');
+    } catch (e) {
+      console.error('[RecordDebug] handleStart:error', e);
+      store.clearSession();
+      Alert.alert(
+        'Could Not Start Recording',
+        e instanceof Error ? e.message : 'GPS service failed to start. Check location permissions and try again.',
+      );
+    } finally {
+      startInFlight.current = false;
+    }
+  }, [permissionStatus, gpsStart, openSettings, store, activeCampus?.id]);
+
+  useEffect(() => {
+    if (autostart !== '1') return;
+    if (autoStartConsumedRef.current) return;
+    if (permissionStatus !== 'granted') return;
+    if (session?.state === 'recording' || session?.state === 'paused') return;
+
+    autoStartConsumedRef.current = true;
+    void handleStart();
+  }, [autostart, permissionStatus, session?.state, handleStart]);
 
   const handleStop = useCallback(() => {
     Alert.alert('Stop Recording', 'What would you like to do with this route?', [
@@ -222,6 +298,35 @@ export default function RecordScreen() {
     voiceSheetRef.current?.snapToIndex(0);
   }, [trackPoints, store]);
 
+  const handleOpenHazardSheet = useCallback(() => {
+    hazardSheetRef.current?.snapToIndex(0);
+  }, []);
+
+  const handleHazardConfirm = useCallback(
+    ({ type, expiresAt }: { type: HazardType; expiresAt: string | null }) => {
+      hazardSheetRef.current?.close();
+
+      const last = trackPoints[trackPoints.length - 1];
+      if (!last) return;
+
+      store.addPendingHazard({
+        localId: `hazard-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        coordinate: {
+          latitude: last.latitude,
+          longitude: last.longitude,
+          altitude: last.altitude,
+        },
+        type,
+        severity: 'medium',
+        title: type.replaceAll('_', ' ').replace(/\b\w/g, (char) => char.toUpperCase()),
+        description: null,
+        expiresAt,
+        capturedAt: Date.now(),
+      });
+    },
+    [trackPoints, store],
+  );
+
   // ── Map GeoJSON ────────────────────────────────────────────────────────────
 
   const trackGeoJSON: GeoJSON.Feature<GeoJSON.LineString> = useMemo(
@@ -246,16 +351,26 @@ export default function RecordScreen() {
         logoEnabled={false}
         attributionPosition={{ bottom: 8, right: 8 }}
       >
+        {/* centerCoordinate always present (never undefined). followUserLocation
+            takes priority when isRecording is true. Matches the working pattern
+            from commit 2c3766c. */}
         <MapboxGL.Camera
-          followUserLocation={isRecording}
-          followZoomLevel={18}
-          centerCoordinate={TSBVI_CENTER}
-          zoomLevel={16}
-          animationMode="flyTo"
-          animationDuration={800}
+          defaultSettings={{
+            centerCoordinate: initialCenter,
+            zoomLevel: initialZoom,
+          }}
+          centerCoordinate={initialCenter}
+          zoomLevel={initialZoom}
+          animationMode="moveTo"
+          animationDuration={0}
         />
 
         <MapboxGL.UserLocation visible animated />
+
+        <BuildingLayer
+          buildings={buildings}
+          onBuildingPress={() => {}}
+        />
 
         {trackPoints.length > 1 && (
           <MapboxGL.ShapeSource id="live-track" shape={trackGeoJSON}>
@@ -310,7 +425,13 @@ export default function RecordScreen() {
         onResume={gpsResume}
         onStop={handleStop}
         onWaypoint={handleWaypoint}
-        hazardSlot={isRecording ? <HazardButton /> : null}
+        hazardSlot={isRecording ? <HazardButton onOpenSheet={handleOpenHazardSheet} renderSheet={false} /> : null}
+      />
+
+      <HazardPickerSheet
+        ref={hazardSheetRef}
+        onConfirm={handleHazardConfirm}
+        onDismiss={() => hazardSheetRef.current?.close()}
       />
 
       {activeWaypointId && (
@@ -356,10 +477,17 @@ const WaypointDot = React.memo(function WaypointDot({ color, label }: { color: s
 const HazardDot = React.memo(function HazardDot({ color, label }: { color: string; label: string }) {
   return (
     <View
-      style={[styles.markerDot, styles.hazardDot, { backgroundColor: color }]}
+      style={styles.hazardMarker}
       accessible
       accessibilityLabel={`Hazard: ${label}`}
-    />
+    >
+      <View style={styles.hazardLabelChip}>
+        <Text style={styles.hazardLabelText}>{label}</Text>
+      </View>
+      <View style={[styles.markerDot, styles.hazardDot, { backgroundColor: color }]}>
+        <Text style={styles.hazardIcon}>!</Text>
+      </View>
+    </View>
   );
 });
 
@@ -389,11 +517,35 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
   },
   hazardDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 4,
-    borderWidth: 2,
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 3,
     borderColor: '#fff',
     transform: [{ rotate: '45deg' }],
+  },
+  hazardMarker: {
+    alignItems: 'center',
+    gap: 6,
+    transform: [{ translateY: -24 }],
+  },
+  hazardLabelChip: {
+    backgroundColor: '#111116ee',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: '#ffffff22',
+  },
+  hazardLabelText: {
+    color: '#F0F0F5',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  hazardIcon: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '900',
+    transform: [{ rotate: '-45deg' }],
   },
 });

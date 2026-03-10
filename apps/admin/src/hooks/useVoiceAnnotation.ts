@@ -1,7 +1,7 @@
 /**
  * ALP-950: React hook managing the voice annotation recording lifecycle.
  *
- * Orchestrates expo-av audio recording + expo-speech-recognition STT.
+ * Orchestrates expo-speech-recognition live STT with persisted audio capture.
  * Returns state and handlers consumed by VoiceAnnotationSheet.
  *
  * Connectivity check: callers should verify network availability before
@@ -10,7 +10,6 @@
  */
 import { useState, useCallback, useRef } from 'react';
 import { AccessibilityInfo, Linking, Platform } from 'react-native';
-import { Audio } from 'expo-av';
 
 import {
   startVoiceAnnotationRecording,
@@ -53,6 +52,30 @@ export interface UseVoiceAnnotationReturn {
   openMicSettings: () => void;
 }
 
+function mergeTranscriptSegments(base: string, incoming: string): string {
+  const left = base.trim();
+  const right = incoming.trim();
+
+  if (!left) return right;
+  if (!right) return left;
+  if (left === right) return left;
+
+  const leftLower = left.toLowerCase();
+  const rightLower = right.toLowerCase();
+
+  if (rightLower.startsWith(leftLower)) return right;
+  if (leftLower.endsWith(rightLower)) return left;
+
+  const maxOverlap = Math.min(left.length, right.length);
+  for (let size = maxOverlap; size > 0; size -= 1) {
+    if (leftLower.slice(-size) === rightLower.slice(0, size)) {
+      return `${left}${right.slice(size)}`.trim();
+    }
+  }
+
+  return `${left} ${right}`.trim();
+}
+
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useVoiceAnnotation(): UseVoiceAnnotationReturn {
@@ -65,10 +88,12 @@ export function useVoiceAnnotation(): UseVoiceAnnotationReturn {
     showSilencePrompt: false,
   });
 
-  const recordingRef = useRef<Audio.Recording | null>(null);
   const sttSubsRef = useRef<SttSubscription[]>([]);
   const autoStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const audioUriPromiseRef = useRef<Promise<string | null> | null>(null);
+  const startedAtRef = useRef<number | null>(null);
+  const transcriptRef = useRef('');
 
   const reset = useCallback((): void => {
     setState({
@@ -79,29 +104,36 @@ export function useVoiceAnnotation(): UseVoiceAnnotationReturn {
       isTimeLimitReached: false,
       showSilencePrompt: false,
     });
-    recordingRef.current = null;
     sttSubsRef.current = [];
     autoStopTimerRef.current = null;
     silenceTimerRef.current = null;
+    audioUriPromiseRef.current = null;
+    startedAtRef.current = null;
+    transcriptRef.current = '';
   }, []);
 
   const doStop = useCallback(async (): Promise<{ audioUri: string | null }> => {
-    const recording = recordingRef.current;
     const sttSubs = sttSubsRef.current;
     const autoStop = autoStopTimerRef.current;
     const silenceStop = silenceTimerRef.current;
+    const audioUriPromise = audioUriPromiseRef.current;
+    const startedAt = startedAtRef.current;
 
-    if (!recording) return { audioUri: null };
+    if (!audioUriPromise || startedAt == null) return { audioUri: null };
 
     const { audioUri } = await stopVoiceAnnotationRecording(
-      recording,
       sttSubs,
       autoStop ?? setTimeout(() => {}, 0),
       silenceStop ?? setTimeout(() => {}, 0),
+      audioUriPromise,
+      startedAt,
     );
 
-    recordingRef.current = null;
     sttSubsRef.current = [];
+    autoStopTimerRef.current = null;
+    silenceTimerRef.current = null;
+    audioUriPromiseRef.current = null;
+    startedAtRef.current = null;
     return { audioUri };
   }, []);
 
@@ -115,6 +147,7 @@ export function useVoiceAnnotation(): UseVoiceAnnotationReturn {
       isTimeLimitReached: false,
       showSilencePrompt: false,
     }));
+    transcriptRef.current = '';
 
     AccessibilityInfo.announceForAccessibility('Recording voice annotation');
 
@@ -132,7 +165,19 @@ export function useVoiceAnnotation(): UseVoiceAnnotationReturn {
         setState((s) => ({ ...s, showSilencePrompt: true }));
       },
       onTranscriptUpdate: (text) => {
-        setState((s) => ({ ...s, transcript: text }));
+        const nextChunk = text.trim();
+        if (!nextChunk) return;
+
+        const previewTranscript = mergeTranscriptSegments(
+          transcriptRef.current,
+          nextChunk,
+        );
+        transcriptRef.current = previewTranscript;
+        setState((s) => (
+          s.transcript === previewTranscript
+            ? s
+            : { ...s, transcript: previewTranscript }
+        ));
       },
       onSTTError: (message) => {
         setState((s) => ({
@@ -148,20 +193,30 @@ export function useVoiceAnnotation(): UseVoiceAnnotationReturn {
       const message =
         result.reason === 'permission_denied'
           ? 'Microphone permission is required for voice annotation.'
-          : 'Failed to start audio recording.';
+          : result.reason === 'speech_permission_denied'
+            ? 'Speech recognition permission is required for transcription.'
+            : result.reason === 'recognition_unavailable'
+              ? 'Speech recognition is not available on this device right now.'
+              : 'Failed to start voice annotation.';
       setState((s) => ({ ...s, phase: 'error', errorMessage: message }));
       return;
     }
 
-    recordingRef.current = result.recording;
     sttSubsRef.current = result.sttSubscriptions;
     autoStopTimerRef.current = result.autoStopTimer;
     silenceTimerRef.current = result.silenceCheckTimer;
+    audioUriPromiseRef.current = result.audioUriPromise;
+    startedAtRef.current = result.startedAt;
   }, [doStop]);
 
   const stopRecording = useCallback(async (): Promise<void> => {
     const { audioUri } = await doStop();
-    setState((s) => ({ ...s, phase: 'preview', audioUri }));
+    setState((s) => ({
+      ...s,
+      phase: 'preview',
+      audioUri,
+      transcript: transcriptRef.current,
+    }));
     AccessibilityInfo.announceForAccessibility(
       'Recording stopped. Review your transcription.',
     );

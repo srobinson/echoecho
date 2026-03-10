@@ -11,17 +11,18 @@ import {
   TextInput,
   StyleSheet,
   ActivityIndicator,
-  Image,
   AccessibilityInfo,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCampusStore } from '../../src/stores/campusStore';
 import { supabase } from '../../src/lib/supabase';
-import type { Route, RouteStatus } from '@echoecho/shared';
+import type { Building, Route, RouteStatus } from '@echoecho/shared';
 import { tabColors } from '@echoecho/ui';
 import { SectionColorProvider, useSectionColor } from '../../src/contexts/SectionColorContext';
+import { RoutePreviewMap } from '../../src/components/route/RoutePreviewMap';
 
 type FilterStatus = 'all' | RouteStatus;
 
@@ -50,6 +51,7 @@ export default function RoutesScreen() {
 function RoutesScreenInner() {
   const accent = useSectionColor();
   const [routes, setRoutes] = useState<Route[]>([]);
+  const [buildings, setBuildings] = useState<Map<string, Building>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -88,11 +90,34 @@ function RoutesScreenInner() {
     setIsLoading(false);
   }, [activeCampus]);
 
+  const fetchBuildings = useCallback(async () => {
+    if (!activeCampus) return;
+    const { data } = await supabase
+      .from('v_buildings' as 'buildings')
+      .select('*')
+      .eq('campusId' as 'campus_id', activeCampus.id);
+    if (data) {
+      const map = new Map<string, Building>();
+      for (const b of data as Building[]) {
+        map.set(b.id, b);
+      }
+      setBuildings(map);
+    }
+  }, [activeCampus]);
+
   /* eslint-disable react-hooks/exhaustive-deps -- searchQuery excluded: search uses debounced handleSearch */
   useEffect(() => {
     void fetchRoutes(searchQuery, statusFilter);
-  }, [fetchRoutes, statusFilter]);
+    void fetchBuildings();
+  }, [fetchRoutes, fetchBuildings, statusFilter]);
   /* eslint-enable react-hooks/exhaustive-deps */
+
+  useFocusEffect(
+    useCallback(() => {
+      void fetchRoutes(searchQuery, statusFilter);
+      void fetchBuildings();
+    }, [fetchRoutes, fetchBuildings, searchQuery, statusFilter]),
+  );
 
   useEffect(() => {
     return () => {
@@ -102,9 +127,9 @@ function RoutesScreenInner() {
 
   const renderRouteItem = useCallback(
     ({ item }: { item: Route }) => (
-      <RouteCard route={item} onPress={() => router.push(`/route/${item.id}`)} />
+      <RouteCard route={item} buildings={buildings} onPress={() => router.push(`/route/${item.id}`)} />
     ),
-    [],
+    [buildings],
   );
 
   const handleSearch = useCallback((text: string) => {
@@ -173,13 +198,14 @@ function RoutesScreenInner() {
           ListEmptyComponent={<EmptyState hasFilter={statusFilter !== 'all' || searchQuery.length > 0} />}
           renderItem={renderRouteItem}
           ItemSeparatorComponent={ListSeparator}
+          extraData={buildings}
           accessibilityRole="list"
         />
       )}
 
       <Pressable
         style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
-        onPress={() => router.push('/record')}
+        onPress={() => router.push({ pathname: '/record', params: { autostart: '1' } })}
         accessibilityLabel="Record a new route"
         accessibilityRole="button"
       >
@@ -189,44 +215,28 @@ function RoutesScreenInner() {
   );
 }
 
-const MAX_STATIC_MAP_COORDS = 50;
-
-function staticMapUrl(route: Route): string | null {
-  if (route.waypoints.length < 2) return null;
-  const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
-  if (!token) return null;
-
-  const wps = route.waypoints;
-  const step = wps.length <= MAX_STATIC_MAP_COORDS ? 1 : Math.ceil(wps.length / MAX_STATIC_MAP_COORDS);
-  const sampled = wps.filter((_, i) => i % step === 0 || i === wps.length - 1);
-
-  const coords = sampled.map((w) =>
-    `${w.coordinate.longitude.toFixed(5)},${w.coordinate.latitude.toFixed(5)}`,
-  );
-  const path = `path-3+6c63ff-0.8(${encodeURIComponent(coords.join(','))})`;
-
-  let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
-  for (const w of wps) {
-    if (w.coordinate.longitude < minLng) minLng = w.coordinate.longitude;
-    if (w.coordinate.longitude > maxLng) maxLng = w.coordinate.longitude;
-    if (w.coordinate.latitude < minLat) minLat = w.coordinate.latitude;
-    if (w.coordinate.latitude > maxLat) maxLat = w.coordinate.latitude;
+function getRoutePreviewBuildings(route: Route, buildingMap?: Map<string, Building>): Building[] {
+  const routeBuildings: Building[] = [];
+  if (buildingMap) {
+    for (const bid of [route.fromBuildingId, route.toBuildingId]) {
+      if (!bid) continue;
+      const b = buildingMap.get(bid);
+      if (b) routeBuildings.push(b);
+    }
   }
-  const bbox = `${minLng - 0.0003},${minLat - 0.0003},${maxLng + 0.0003},${maxLat + 0.0003}`;
-
-  return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${path}/[${bbox}]/300x120@2x?access_token=${token}`;
+  return routeBuildings;
 }
 
 function ListSeparator() {
   return <View style={styles.separator} />;
 }
 
-const RouteCard = memo(function RouteCard({ route, onPress }: { route: Route; onPress: () => void }) {
+const RouteCard = memo(function RouteCard({ route, buildings, onPress }: { route: Route; buildings: Map<string, Building>; onPress: () => void }) {
   const statusColor = STATUS_COLOR[route.status] ?? '#9CA3AF';
-  const mapUrl = staticMapUrl(route);
   const dateStr = route.recordedAt
     ? new Date(route.recordedAt).toLocaleDateString()
     : new Date(route.createdAt).toLocaleDateString();
+  const routeBuildings = getRoutePreviewBuildings(route, buildings);
 
   return (
     <Pressable
@@ -235,14 +245,7 @@ const RouteCard = memo(function RouteCard({ route, onPress }: { route: Route; on
       accessibilityLabel={`${route.name}, ${route.status}, from ${route.fromLabel} to ${route.toLabel}, recorded ${dateStr}`}
       accessibilityRole="button"
     >
-      {mapUrl && (
-        <Image
-          source={{ uri: mapUrl }}
-          style={styles.mapPreview}
-          accessible
-          accessibilityLabel={`Route map: ${route.name}`}
-        />
-      )}
+      <RoutePreviewMap route={route} buildings={routeBuildings} height={120} />
       <View style={styles.cardContent}>
         <View style={styles.cardHeader}>
           <Text style={styles.cardTitle} numberOfLines={1}>

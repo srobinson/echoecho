@@ -33,8 +33,10 @@ export function BuildingDrawToolbar({
     <View style={styles.container}>
       <Text style={styles.hint}>
         {vertexCount === 0
-          ? 'Tap map to place vertices'
-          : `${vertexCount} vertices placed`}
+          ? 'Tap map to draw the building footprint'
+          : vertexCount < 3
+            ? `${vertexCount} points placed`
+            : `${vertexCount} points placed. Tap the check button when the footprint is complete.`}
       </Text>
 
       <View style={styles.actions}>

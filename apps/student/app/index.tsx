@@ -20,6 +20,8 @@ import {
   FlatList,
   AccessibilityInfo,
   Platform,
+  Animated,
+  Easing,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -66,6 +68,32 @@ export default function HomeScreen() {
     rejectDestination,
     resetToIdle,
   } = useSttDestination(handleDestinationConfirmed);
+
+  // Pulsing animation while listening
+  const [pulseAnim] = useState(() => new Animated.Value(1));
+  useEffect(() => {
+    if (sttState === 'listening') {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.06,
+            duration: 600,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 600,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+      loop.start();
+      return () => loop.stop();
+    }
+    pulseAnim.setValue(1);
+  }, [sttState, pulseAnim]);
 
   const handleVoiceSearch = useCallback(() => {
     if (sttUnavailable) {
@@ -128,42 +156,44 @@ export default function HomeScreen() {
       </View>
 
       {/* Voice input button with STT state feedback */}
-      <Pressable
-        style={({ pressed }) => [
-          styles.voiceBtn,
-          sttState === 'listening' && styles.voiceBtnListening,
-          pressed && styles.voiceBtnPressed,
-        ]}
-        onPress={sttState === 'listening' ? stopListening : handleVoiceSearch}
-        accessibilityLabel={
-          sttState === 'listening'
-            ? 'Listening. Tap to stop.'
-            : sttState === 'transcribing'
-              ? 'Processing your speech. Please wait.'
-              : 'Start voice destination input'
-        }
-        accessibilityRole="button"
-        accessibilityHint="Double tap to speak your destination"
-        accessibilityState={{ busy: sttState === 'transcribing' }}
-      >
-        <Ionicons
-          name={sttState === 'listening' ? 'mic' : 'mic-outline'}
-          size={40}
-          color={sttState === 'listening' ? '#fff' : '#060608'}
-        />
-        <Text
-          style={[
-            styles.voiceBtnLabel,
-            sttState === 'listening' && styles.voiceBtnLabelListening,
+      <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.voiceBtn,
+            sttState === 'listening' && styles.voiceBtnListening,
+            pressed && styles.voiceBtnPressed,
           ]}
+          onPress={sttState === 'listening' ? stopListening : handleVoiceSearch}
+          accessibilityLabel={
+            sttState === 'listening'
+              ? 'Listening. Tap to stop.'
+              : sttState === 'transcribing'
+                ? 'Processing your speech. Please wait.'
+                : 'Start voice destination input'
+          }
+          accessibilityRole="button"
+          accessibilityHint="Double tap to speak your destination"
+          accessibilityState={{ busy: sttState === 'transcribing' }}
         >
-          {sttState === 'listening'
-            ? 'Listening...'
-            : sttState === 'transcribing'
-              ? 'Processing...'
-              : 'Speak Destination'}
-        </Text>
-      </Pressable>
+          <Ionicons
+            name={sttState === 'listening' ? 'mic' : 'mic-outline'}
+            size={40}
+            color={sttState === 'listening' ? '#fff' : '#060608'}
+          />
+          <Text
+            style={[
+              styles.voiceBtnLabel,
+              sttState === 'listening' && styles.voiceBtnLabelListening,
+            ]}
+          >
+            {sttState === 'listening'
+              ? 'Listening...'
+              : sttState === 'transcribing'
+                ? 'Processing...'
+                : 'Speak Destination'}
+          </Text>
+        </Pressable>
+      </Animated.View>
 
       {/* STT confirmation prompt */}
       {sttState === 'confirming' && pendingMatch && (

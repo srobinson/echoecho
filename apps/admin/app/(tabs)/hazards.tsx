@@ -1,27 +1,31 @@
 /**
  * Hazard management tab: list and map views for campus hazards.
  * ALP-970: Filter by type/route/expiry, resolve hazards, add from map.
+ * ALP-1150: Bug fixes for map, expiry, resolve, edit/delete, filter UX.
  */
 import { useEffect, useCallback, useState, useRef, useMemo, forwardRef, memo } from 'react';
 import {
   View,
   Text,
   FlatList,
+  ScrollView,
   Pressable,
+  TextInput,
   StyleSheet,
   ActivityIndicator,
   Alert,
   AccessibilityInfo,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import BottomSheet, { BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetBackdrop, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import type { BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import MapboxGL from '@rnmapbox/maps';
 import { useCampusStore } from '../../src/stores/campusStore';
 import { supabase } from '../../src/lib/supabase';
 import { HazardPickerSheet } from '@echoecho/ui';
-import type { Hazard, HazardType, Route } from '@echoecho/shared';
+import type { Hazard, HazardType, HazardSeverity, Route } from '@echoecho/shared';
 import { tabColors } from '@echoecho/ui';
 import { SectionColorProvider, useSectionColor } from '../../src/contexts/SectionColorContext';
 
@@ -48,11 +52,28 @@ const HAZARD_LABELS: Record<HazardType, string> = {
   other: 'Other',
 };
 
+const HAZARD_FILTER_LABELS: Record<HazardType, string> = {
+  uneven_surface: 'Uneven',
+  construction: 'Construction',
+  stairs_unmarked: 'Stairs',
+  low_clearance: 'Clearance',
+  seasonal: 'Seasonal',
+  wet_surface: 'Wet',
+  other: 'Other',
+};
+
 const SEVERITY_COLOR: Record<string, string> = {
   low: '#FFB74D',
   medium: '#FFB74D',
   high: '#F06292',
 };
+
+const SEVERITY_OPTIONS: HazardSeverity[] = ['low', 'medium', 'high'];
+
+const HAZARD_TYPE_OPTIONS: HazardType[] = [
+  'uneven_surface', 'construction', 'stairs_unmarked',
+  'low_clearance', 'seasonal', 'wet_surface', 'other',
+];
 
 const EXPIRY_FILTERS: { value: ExpiryFilter; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -79,7 +100,7 @@ function HazardsScreenInner() {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [typeFilter, setTypeFilter] = useState<HazardType | null>(null);
   const [routeFilter, setRouteFilter] = useState<string | null>(null);
-  const [expiryFilter, setExpiryFilter] = useState<ExpiryFilter>('active');
+  const [expiryFilter, setExpiryFilter] = useState<ExpiryFilter>('all');
   const [selectedHazard, setSelectedHazard] = useState<Hazard | null>(null);
   const [addCoordinate, setAddCoordinate] = useState<[number, number] | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -130,6 +151,13 @@ function HazardsScreenInner() {
     void run();
   }, [fetchHazards, fetchRoutes]);
 
+  useFocusEffect(
+    useCallback(() => {
+      void fetchHazards();
+      void fetchRoutes();
+    }, [fetchHazards, fetchRoutes]),
+  );
+
   // Realtime subscription for hazard changes
   useEffect(() => {
     if (!activeCampus) return;
@@ -178,7 +206,12 @@ function HazardsScreenInner() {
     });
   }, [hazards, expiryFilter, nowMs]);
 
+  const hasActiveFilters = typeFilter !== null || routeFilter !== null || expiryFilter !== 'all';
+
   const handleResolve = useCallback(async (hazard: Hazard) => {
+    // Close the detail sheet first so Alert displays properly
+    detailRef.current?.close();
+
     Alert.alert(
       'Resolve Hazard',
       `Mark "${HAZARD_LABELS[hazard.type]}" as resolved? It will no longer appear in the student app.`,
@@ -193,12 +226,47 @@ function HazardsScreenInner() {
               .update({ resolved_at: new Date().toISOString() })
               .eq('id', hazard.id);
 
-            if (!error) {
-              AccessibilityInfo.announceForAccessibility(
-                `Hazard resolved: ${HAZARD_LABELS[hazard.type]}`,
-              );
-              void fetchHazards();
+            if (error) {
+              Alert.alert('Resolve failed', error.message);
+              return;
             }
+            AccessibilityInfo.announceForAccessibility(
+              `Hazard resolved: ${HAZARD_LABELS[hazard.type]}`,
+            );
+            setSelectedHazard(null);
+            void fetchHazards();
+          },
+        },
+      ],
+    );
+  }, [fetchHazards]);
+
+  const handleDelete = useCallback(async (hazard: Hazard) => {
+    detailRef.current?.close();
+
+    Alert.alert(
+      `Delete hazard?`,
+      `Delete "${hazard.title || HAZARD_LABELS[hazard.type]}"? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const { error } = await supabase
+              .from('hazards')
+              .delete()
+              .eq('id', hazard.id);
+
+            if (error) {
+              Alert.alert('Delete failed', error.message);
+              return;
+            }
+            AccessibilityInfo.announceForAccessibility(
+              `Hazard deleted: ${hazard.title || HAZARD_LABELS[hazard.type]}`,
+            );
+            setSelectedHazard(null);
+            void fetchHazards();
           },
         },
       ],
@@ -237,6 +305,64 @@ function HazardsScreenInner() {
     setAddCoordinate(null);
   }, [activeCampus, addCoordinate, fetchHazards]);
 
+  const handleUpdateExpiry = useCallback(async (hazardId: string, expiresAt: string | null) => {
+    const { error } = await supabase
+      .from('hazards')
+      .update({ expires_at: expiresAt })
+      .eq('id', hazardId);
+
+    if (error) {
+      Alert.alert('Update failed', error.message);
+      return;
+    }
+    // Update the selected hazard in place so the sheet reflects the change
+    setSelectedHazard((prev) =>
+      prev && prev.id === hazardId
+        ? { ...prev, expiresAt }
+        : prev,
+    );
+    AccessibilityInfo.announceForAccessibility(
+      expiresAt ? `Expiry updated to ${new Date(expiresAt).toLocaleDateString()}` : 'Set to permanent',
+    );
+    void fetchHazards();
+  }, [fetchHazards]);
+
+  const handleUpdateHazard = useCallback(async (
+    hazardId: string,
+    updates: { description?: string | null; severity?: HazardSeverity; type?: HazardType },
+  ) => {
+    const dbUpdates: Record<string, unknown> = {};
+    if (updates.description !== undefined) dbUpdates.description = updates.description;
+    if (updates.severity !== undefined) dbUpdates.severity = updates.severity;
+    if (updates.type !== undefined) {
+      dbUpdates.type = updates.type;
+      dbUpdates.title = HAZARD_LABELS[updates.type];
+    }
+
+    const { error } = await supabase
+      .from('hazards')
+      .update(dbUpdates)
+      .eq('id', hazardId);
+
+    if (error) {
+      Alert.alert('Update failed', error.message);
+      return;
+    }
+
+    setSelectedHazard((prev) =>
+      prev && prev.id === hazardId
+        ? {
+            ...prev,
+            ...(updates.description !== undefined ? { description: updates.description } : {}),
+            ...(updates.severity ? { severity: updates.severity } : {}),
+            ...(updates.type ? { type: updates.type, title: HAZARD_LABELS[updates.type] } : {}),
+          }
+        : prev,
+    );
+    AccessibilityInfo.announceForAccessibility('Hazard updated.');
+    void fetchHazards();
+  }, [fetchHazards]);
+
   // GeoJSON for map hazard markers
   const hazardGeoJson = useMemo((): GeoJSON.FeatureCollection => ({
     type: 'FeatureCollection',
@@ -269,10 +395,22 @@ function HazardsScreenInner() {
     [routes, nowMs, handleSelectHazard, handleResolve],
   );
 
+  const clearFilters = useCallback(() => {
+    setTypeFilter(null);
+    setRouteFilter(null);
+    setExpiryFilter('all');
+  }, []);
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* View mode toggle */}
       <View style={styles.header}>
+        <View style={styles.headerTextBlock}>
+          <Text style={styles.headerTitle}>Hazards</Text>
+          <Text style={styles.headerSubtitle}>
+            {filteredHazards.length} shown{hasActiveFilters ? ' with filters' : ''}
+          </Text>
+        </View>
         <View style={styles.viewToggle}>
           <Pressable
             style={[styles.toggleBtn, viewMode === 'list' && { backgroundColor: accent + '22' }]}
@@ -298,7 +436,11 @@ function HazardsScreenInner() {
       </View>
 
       {/* Expiry filter chips */}
-      <View style={styles.filterRow}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterRow}
+      >
         {EXPIRY_FILTERS.map((f) => (
           <Pressable
             key={f.value}
@@ -313,10 +455,14 @@ function HazardsScreenInner() {
             </Text>
           </Pressable>
         ))}
-      </View>
+      </ScrollView>
 
       {/* Type filter chips */}
-      <View style={styles.filterRow}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterRow}
+      >
         <Pressable
           style={[styles.filterChip, !typeFilter && { backgroundColor: accent + '22', borderColor: accent }]}
           onPress={() => setTypeFilter(null)}
@@ -335,17 +481,20 @@ function HazardsScreenInner() {
             accessibilityRole="radio"
             accessibilityState={{ selected: typeFilter === type }}
           >
-            <Ionicons name={HAZARD_ICONS[type]} size={14} color={typeFilter === type ? accent : '#606070'} />
             <Text style={[styles.filterLabel, typeFilter === type && { color: accent }]}>
-              {HAZARD_LABELS[type]}
+              {HAZARD_FILTER_LABELS[type]}
             </Text>
           </Pressable>
         ))}
-      </View>
+      </ScrollView>
 
       {/* Route filter chips */}
       {routes.length > 0 && (
-        <View style={styles.filterRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterRow}
+        >
           <Pressable
             style={[styles.filterChip, !routeFilter && { backgroundColor: accent + '22', borderColor: accent }]}
             onPress={() => setRouteFilter(null)}
@@ -372,6 +521,20 @@ function HazardsScreenInner() {
               </Text>
             </Pressable>
           ))}
+        </ScrollView>
+      )}
+
+      {hasActiveFilters && (
+        <View style={styles.filterActionsRow}>
+          <Pressable
+            style={[styles.clearFiltersBtn, { borderColor: accent + '44', backgroundColor: accent + '16' }]}
+            onPress={clearFilters}
+            accessibilityRole="button"
+            accessibilityLabel="Clear hazard filters"
+          >
+            <Ionicons name="close-circle-outline" size={15} color={accent} />
+            <Text style={[styles.clearFiltersLabel, { color: accent }]}>Clear filters</Text>
+          </Pressable>
         </View>
       )}
 
@@ -389,6 +552,9 @@ function HazardsScreenInner() {
             <View style={styles.empty}>
               <Ionicons name="shield-checkmark-outline" size={64} color="#1E1E26" />
               <Text style={styles.emptyTitle}>No hazards found</Text>
+              {activeCampus?.name && (
+                <Text style={styles.emptyCampus}>Campus: {activeCampus.name}</Text>
+              )}
               <Text style={styles.emptyBody}>
                 {typeFilter || expiryFilter !== 'all'
                   ? 'Try adjusting your filters.'
@@ -403,7 +569,7 @@ function HazardsScreenInner() {
         <View style={styles.mapContainer}>
           <MapboxGL.MapView
             style={styles.map}
-            styleURL="mapbox://styles/mapbox/dark-v11"
+            styleURL="mapbox://styles/mapbox/satellite-v9"
             onLongPress={handleMapLongPress}
             accessible={false}
           >
@@ -472,19 +638,11 @@ function HazardsScreenInner() {
         routes={routes}
         nowMs={nowMs}
         onResolve={() => { if (selectedHazard) void handleResolve(selectedHazard); }}
+        onDelete={() => { if (selectedHazard) void handleDelete(selectedHazard); }}
         onDismiss={() => { detailRef.current?.close(); }}
         onAnimationComplete={() => { setSelectedHazard(null); }}
-        onUpdateExpiry={async (hazardId, expiresAt) => {
-          const { error } = await supabase
-            .from('hazards')
-            .update({ expires_at: expiresAt })
-            .eq('id', hazardId);
-          if (error) {
-            Alert.alert('Update failed', error.message);
-            return;
-          }
-          void fetchHazards();
-        }}
+        onUpdateExpiry={handleUpdateExpiry}
+        onUpdateHazard={handleUpdateHazard}
       />
 
       {/* Add hazard picker (reused from packages/ui) */}
@@ -557,7 +715,7 @@ const HazardListItem = memo(function HazardListItem({
             </View>
           </View>
           <Text style={[styles.expiryText, isExpiringSoon && styles.expiryTextWarning]}>
-            {isExpiringSoon ? '⚠ Expiring soon: ' : ''}{expiryStr}
+            {isExpiringSoon ? 'Expiring soon: ' : ''}{expiryStr}
           </Text>
         </View>
         <Pressable
@@ -583,11 +741,29 @@ const HazardDetailSheet = forwardRef<
     routes: Route[];
     nowMs: number;
     onResolve: () => void;
+    onDelete: () => void;
     onDismiss: () => void;
     onAnimationComplete: () => void;
     onUpdateExpiry: (hazardId: string, expiresAt: string | null) => void;
+    onUpdateHazard: (hazardId: string, updates: { description?: string | null; severity?: HazardSeverity; type?: HazardType }) => void;
   }
->(({ hazard, routes, nowMs, onResolve, onDismiss, onAnimationComplete, onUpdateExpiry }, ref) => {
+>(({ hazard, routes, nowMs, onResolve, onDelete, onDismiss, onAnimationComplete, onUpdateExpiry, onUpdateHazard }, ref) => {
+  const accent = useSectionColor();
+  const [isEditing, setIsEditing] = useState(false);
+  const [editDescription, setEditDescription] = useState('');
+  const [editSeverity, setEditSeverity] = useState<HazardSeverity>('medium');
+  const [editType, setEditType] = useState<HazardType>('other');
+  const [lastHazardId, setLastHazardId] = useState<string | null>(null);
+
+  // Reset edit state when a different hazard is selected (avoids setState in effect)
+  if (hazard && hazard.id !== lastHazardId) {
+    setLastHazardId(hazard.id);
+    setEditDescription(hazard.description ?? '');
+    setEditSeverity(hazard.severity);
+    setEditType(hazard.type);
+    setIsEditing(false);
+  }
+
   const renderBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => (
       <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} onPress={onDismiss} />
@@ -596,9 +772,28 @@ const HazardDetailSheet = forwardRef<
   );
 
   const handleClose = useCallback(() => {
+    setIsEditing(false);
     onDismiss();
     onAnimationComplete();
   }, [onDismiss, onAnimationComplete]);
+
+  const handleSaveEdits = useCallback(() => {
+    if (!hazard) return;
+    const updates: { description?: string | null; severity?: HazardSeverity; type?: HazardType } = {};
+    if (editDescription.trim() !== (hazard.description ?? '')) {
+      updates.description = editDescription.trim() || null;
+    }
+    if (editSeverity !== hazard.severity) {
+      updates.severity = editSeverity;
+    }
+    if (editType !== hazard.type) {
+      updates.type = editType;
+    }
+    if (Object.keys(updates).length > 0) {
+      onUpdateHazard(hazard.id, updates);
+    }
+    setIsEditing(false);
+  }, [hazard, editDescription, editSeverity, editType, onUpdateHazard]);
 
   const routeName = hazard?.routeId
     ? routes.find((r) => r.id === hazard.routeId)?.name ?? 'Unknown route'
@@ -617,7 +812,7 @@ const HazardDetailSheet = forwardRef<
     <BottomSheet
       ref={ref}
       index={-1}
-      snapPoints={['50%']}
+      snapPoints={['65%']}
       enablePanDownToClose
       onClose={handleClose}
       backdropComponent={renderBackdrop}
@@ -625,7 +820,7 @@ const HazardDetailSheet = forwardRef<
       backgroundStyle={{ backgroundColor: '#111116' }}
     >
       {hazard && (
-      <BottomSheetView style={detailStyles.container}>
+      <BottomSheetScrollView style={detailStyles.container} contentContainerStyle={detailStyles.scrollContent}>
         <View style={detailStyles.headerRow}>
           <View style={[styles.iconCircle, { backgroundColor: `${severityColor}22` }]}>
             <Ionicons name={HAZARD_ICONS[hazard.type]} size={24} color={severityColor} />
@@ -634,62 +829,183 @@ const HazardDetailSheet = forwardRef<
             <Text style={detailStyles.title}>{hazard.title || HAZARD_LABELS[hazard.type]}</Text>
             <Text style={detailStyles.subtitle}>{routeName}</Text>
           </View>
+          <Pressable
+            onPress={() => isEditing ? handleSaveEdits() : setIsEditing(true)}
+            accessibilityLabel={isEditing ? 'Save changes' : 'Edit hazard'}
+            accessibilityRole="button"
+            style={[detailStyles.editToggle, { backgroundColor: accent + '22' }]}
+          >
+            <Ionicons name={isEditing ? 'checkmark' : 'pencil'} size={16} color={accent} />
+            <Text style={[detailStyles.editToggleLabel, { color: accent }]}>
+              {isEditing ? 'Save' : 'Edit'}
+            </Text>
+          </Pressable>
         </View>
 
-        {hazard.description && (
-          <Text style={detailStyles.description}>{hazard.description}</Text>
-        )}
+        {isEditing ? (
+          <>
+            {/* Edit Type */}
+            <Text style={detailStyles.sectionLabel}>Type</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={detailStyles.chipRow}>
+                {HAZARD_TYPE_OPTIONS.map((t) => (
+                  <Pressable
+                    key={t}
+                    style={[
+                      detailStyles.expiryChip,
+                      editType === t && { backgroundColor: accent + '22', borderColor: accent },
+                    ]}
+                    onPress={() => setEditType(t)}
+                    accessibilityLabel={`Type: ${HAZARD_LABELS[t]}`}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: editType === t }}
+                  >
+                    <Ionicons name={HAZARD_ICONS[t]} size={14} color={editType === t ? accent : '#606070'} />
+                    <Text style={[detailStyles.expiryChipText, editType === t && { color: accent }]}>
+                      {HAZARD_LABELS[t]}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </ScrollView>
 
-        <View style={detailStyles.metaRow}>
-          <View style={detailStyles.metaItem}>
-            <Text style={detailStyles.metaLabel}>Severity</Text>
-            <View style={[styles.severityBadge, { backgroundColor: `${severityColor}22` }]}>
-              <Text style={[styles.severityText, { color: severityColor }]}>
-                {hazard.severity}
-              </Text>
+            {/* Edit Severity */}
+            <Text style={detailStyles.sectionLabel}>Severity</Text>
+            <View style={detailStyles.chipRow}>
+              {SEVERITY_OPTIONS.map((s) => {
+                const sColor = SEVERITY_COLOR[s] ?? '#FFB74D';
+                return (
+                  <Pressable
+                    key={s}
+                    style={[
+                      detailStyles.expiryChip,
+                      editSeverity === s && { backgroundColor: sColor + '22', borderColor: sColor },
+                    ]}
+                    onPress={() => setEditSeverity(s)}
+                    accessibilityLabel={`Severity: ${s}`}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: editSeverity === s }}
+                  >
+                    <Text style={[
+                      detailStyles.expiryChipText,
+                      editSeverity === s && { color: sColor },
+                    ]}>
+                      {s.charAt(0).toUpperCase() + s.slice(1)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
-          </View>
-          <View style={detailStyles.metaItem}>
-            <Text style={detailStyles.metaLabel}>Created</Text>
-            <Text style={detailStyles.metaValue}>
-              {new Date(hazard.createdAt).toLocaleDateString()}
-            </Text>
-          </View>
-          <View style={detailStyles.metaItem}>
-            <Text style={detailStyles.metaLabel}>Expires</Text>
-            <Text style={detailStyles.metaValue}>
-              {hazard.expiresAt ? new Date(hazard.expiresAt).toLocaleDateString() : 'Never'}
-            </Text>
-          </View>
-        </View>
 
-        {/* Expiry update chips */}
-        <Text style={detailStyles.sectionLabel}>Update Expiry</Text>
-        <View style={detailStyles.expiryRow}>
-          {expiryOptions.map((opt, idx) => (
+            {/* Edit Description */}
+            <Text style={detailStyles.sectionLabel}>Description</Text>
+            <TextInput
+              style={detailStyles.descriptionInput}
+              value={editDescription}
+              onChangeText={setEditDescription}
+              placeholder="Optional description"
+              placeholderTextColor="#404050"
+              multiline
+              accessibilityLabel="Hazard description"
+            />
+
             <Pressable
-              key={idx}
-              style={detailStyles.expiryChip}
-              onPress={() => onUpdateExpiry(hazard.id, opt.value)}
-              accessibilityLabel={`Set expiry: ${opt.label}`}
+              style={detailStyles.cancelBtn}
+              onPress={() => {
+                setEditDescription(hazard.description ?? '');
+                setEditSeverity(hazard.severity);
+                setEditType(hazard.type);
+                setIsEditing(false);
+              }}
+              accessibilityLabel="Cancel editing"
               accessibilityRole="button"
             >
-              <Text style={detailStyles.expiryChipText}>{opt.label}</Text>
+              <Text style={detailStyles.cancelBtnText}>Cancel</Text>
             </Pressable>
-          ))}
-        </View>
+          </>
+        ) : (
+          <>
+            {hazard.description && (
+              <Text style={detailStyles.description}>{hazard.description}</Text>
+            )}
 
-        {/* Resolve action */}
-        <Pressable
-          style={detailStyles.resolveBtn}
-          onPress={onResolve}
-          accessibilityLabel={`Resolve ${HAZARD_LABELS[hazard.type]} hazard`}
-          accessibilityRole="button"
-        >
-          <Ionicons name="checkmark-circle" size={20} color="#fff" />
-          <Text style={detailStyles.resolveBtnText}>Resolve Hazard</Text>
-        </Pressable>
-      </BottomSheetView>
+            <View style={detailStyles.metaRow}>
+              <View style={detailStyles.metaItem}>
+                <Text style={detailStyles.metaLabel}>Severity</Text>
+                <View style={[styles.severityBadge, { backgroundColor: `${severityColor}22` }]}>
+                  <Text style={[styles.severityText, { color: severityColor }]}>
+                    {hazard.severity}
+                  </Text>
+                </View>
+              </View>
+              <View style={detailStyles.metaItem}>
+                <Text style={detailStyles.metaLabel}>Created</Text>
+                <Text style={detailStyles.metaValue}>
+                  {new Date(hazard.createdAt).toLocaleDateString()}
+                </Text>
+              </View>
+              <View style={detailStyles.metaItem}>
+                <Text style={detailStyles.metaLabel}>Expires</Text>
+                <Text style={detailStyles.metaValue}>
+                  {hazard.expiresAt ? new Date(hazard.expiresAt).toLocaleDateString() : 'Never'}
+                </Text>
+              </View>
+            </View>
+
+            {/* Expiry update chips */}
+            <Text style={detailStyles.sectionLabel}>Update Expiry</Text>
+            <View style={detailStyles.chipRow}>
+              {expiryOptions.map((opt, idx) => {
+                const isActive = opt.value === null
+                  ? !hazard.expiresAt
+                  : false;
+                return (
+                  <Pressable
+                    key={idx}
+                    style={[
+                      detailStyles.expiryChip,
+                      isActive && { backgroundColor: accent + '22', borderColor: accent },
+                    ]}
+                    onPress={() => onUpdateExpiry(hazard.id, opt.value)}
+                    accessibilityLabel={`Set expiry: ${opt.label}`}
+                    accessibilityRole="button"
+                  >
+                    <Text style={[
+                      detailStyles.expiryChipText,
+                      isActive && { color: accent },
+                    ]}>
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Actions */}
+            <View style={detailStyles.actionRow}>
+              <Pressable
+                style={detailStyles.resolveBtn}
+                onPress={onResolve}
+                accessibilityLabel={`Resolve ${HAZARD_LABELS[hazard.type]} hazard`}
+                accessibilityRole="button"
+              >
+                <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                <Text style={detailStyles.resolveBtnText}>Resolve</Text>
+              </Pressable>
+
+              <Pressable
+                style={detailStyles.deleteBtn}
+                onPress={onDelete}
+                accessibilityLabel={`Delete ${HAZARD_LABELS[hazard.type]} hazard`}
+                accessibilityRole="button"
+              >
+                <Ionicons name="trash" size={18} color="#F06292" />
+                <Text style={detailStyles.deleteBtnText}>Delete</Text>
+              </Pressable>
+            </View>
+          </>
+        )}
+      </BottomSheetScrollView>
       )}
     </BottomSheet>
   );
@@ -698,11 +1014,21 @@ const HazardDetailSheet = forwardRef<
 HazardDetailSheet.displayName = 'HazardDetailSheet';
 
 const detailStyles = StyleSheet.create({
-  container: { paddingHorizontal: 20, gap: 14 },
+  container: { flex: 1 },
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 20, gap: 14 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   headerContent: { flex: 1 },
   title: { color: '#F0F0F5', fontSize: 18, fontWeight: '700' },
   subtitle: { color: '#606070', fontSize: 13, marginTop: 2 },
+  editToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  editToggleLabel: { fontSize: 13, fontWeight: '600' },
   description: { color: '#808090', fontSize: 14, lineHeight: 20 },
   metaRow: { flexDirection: 'row', gap: 16 },
   metaItem: { gap: 4 },
@@ -721,8 +1047,11 @@ const detailStyles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.8,
   },
-  expiryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   expiryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingVertical: 8,
     paddingHorizontal: 14,
     borderRadius: 20,
@@ -733,7 +1062,29 @@ const detailStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   expiryChipText: { color: '#606070', fontSize: 12 },
+  descriptionInput: {
+    backgroundColor: '#0D0D12',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1E1E26',
+    color: '#F0F0F5',
+    fontSize: 15,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  cancelBtn: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#1E1E26',
+  },
+  cancelBtnText: { color: '#808090', fontSize: 13, fontWeight: '600' },
+  actionRow: { flexDirection: 'row', gap: 10 },
   resolveBtn: {
+    flex: 2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -744,6 +1095,20 @@ const detailStyles = StyleSheet.create({
     minHeight: 48,
   },
   resolveBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  deleteBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#F0629222',
+    borderWidth: 1,
+    borderColor: '#F0629244',
+    paddingVertical: 14,
+    borderRadius: 12,
+    minHeight: 48,
+  },
+  deleteBtnText: { color: '#F06292', fontSize: 15, fontWeight: '700' },
 });
 
 // ── Main styles ────────────────────────────────────────────────────────────
@@ -752,11 +1117,14 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A0A0F' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+    gap: 10,
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 8,
+    paddingBottom: 0,
   },
+  headerTextBlock: { gap: 2 },
+  headerTitle: { color: '#F0F0F5', fontSize: 18, fontWeight: '700' },
+  headerSubtitle: { color: '#606070', fontSize: 12 },
   viewToggle: {
     flexDirection: 'row',
     backgroundColor: '#111116',
@@ -764,42 +1132,57 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1E1E26',
     overflow: 'hidden',
+    alignSelf: 'center',
   },
   toggleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    minHeight: 44,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    minHeight: 34,
     justifyContent: 'center',
   },
   toggleBtnActive: {},
   toggleText: { color: '#606070', fontSize: 13, fontWeight: '600' },
   toggleTextActive: {},
   filterRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 6,
     paddingHorizontal: 16,
-    paddingVertical: 6,
+    paddingVertical: 2,
   },
   filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
     backgroundColor: '#111116',
     borderWidth: 1,
     borderColor: '#1E1E26',
-    minHeight: 36,
+    minHeight: 32,
     justifyContent: 'center',
   },
   filterChipActive: {},
-  filterLabel: { color: '#606070', fontSize: 12, fontWeight: '600' },
+  filterLabel: { color: '#606070', fontSize: 11, fontWeight: '600' },
   filterLabelActive: {},
+  filterActionsRow: {
+    paddingHorizontal: 16,
+    paddingTop: 2,
+    paddingBottom: 6,
+  },
+  clearFiltersBtn: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  clearFiltersLabel: { fontSize: 12, fontWeight: '700' },
   list: { padding: 16, paddingBottom: 40 },
   separator: { height: 8 },
   card: {
@@ -845,6 +1228,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emptyTitle: { color: '#606070', fontSize: 20, fontWeight: '700' },
+  emptyCampus: { color: '#808090', fontSize: 12, fontWeight: '600' },
   emptyBody: { color: '#404050', fontSize: 14, textAlign: 'center', maxWidth: 280 },
   mapContainer: { flex: 1 },
   map: { flex: 1 },

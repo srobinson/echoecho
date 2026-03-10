@@ -7,12 +7,14 @@ import {
   View,
   Text,
   FlatList,
+  ScrollView,
   Pressable,
   TextInput,
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCampusStore } from '../../src/stores/campusStore';
 import { supabase } from '../../src/lib/supabase';
@@ -155,14 +157,14 @@ function BuildingsScreenInner() {
         )}
       </View>
 
-      <FlatList
-        data={CATEGORY_FILTERS}
+      <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        keyExtractor={(item) => item.value}
         contentContainerStyle={styles.filterRow}
-        renderItem={({ item: f }) => (
+      >
+        {CATEGORY_FILTERS.map((f) => (
           <Pressable
+            key={f.value}
             style={[styles.filterChip, categoryFilter === f.value && { backgroundColor: accent + '22', borderColor: accent }]}
             onPress={() => setCategoryFilter(f.value)}
             accessibilityLabel={`Filter: ${f.label}`}
@@ -176,8 +178,8 @@ function BuildingsScreenInner() {
               {f.label}
             </Text>
           </Pressable>
-        )}
-      />
+        ))}
+      </ScrollView>
 
       {error && (
         <View style={styles.errorBanner}>
@@ -224,7 +226,13 @@ const BuildingCard = memo(function BuildingCard({ building }: { building: Buildi
   const entranceCount = building.entrances?.length ?? 0;
 
   return (
-    <View style={styles.card}>
+    <Pressable
+      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+      onPress={() => router.push(`/building/${building.id}`)}
+      accessibilityLabel={`${building.name}, ${building.category}`}
+      accessibilityRole="button"
+      accessibilityHint="Opens building details"
+    >
       <View style={[styles.cardIconContainer, { backgroundColor: accent + '14' }]}>
         <Ionicons name={icon} size={28} color={accent} />
       </View>
@@ -262,7 +270,7 @@ const BuildingCard = memo(function BuildingCard({ building }: { building: Buildi
           </Text>
         )}
       </View>
-    </View>
+    </Pressable>
   );
 });
 
@@ -334,6 +342,7 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 12,
   },
+  cardPressed: { opacity: 0.75 },
   cardIconContainer: {
     width: 48,
     height: 48,

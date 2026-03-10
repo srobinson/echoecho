@@ -1175,7 +1175,7 @@ __metadata:
     "@expo/vector-icons": "npm:~14.0.4"
     "@gorhom/bottom-sheet": "npm:^4.6.1"
     "@react-native-async-storage/async-storage": "npm:1.23.1"
-    "@rnmapbox/maps": "npm:10.1.33"
+    "@rnmapbox/maps": "npm:^10.2.10"
     "@supabase/supabase-js": "npm:^2.43.4"
     "@turf/distance": "npm:^7.3.4"
     "@turf/helpers": "npm:^7.3.4"
@@ -2824,9 +2824,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@rnmapbox/maps@npm:10.1.33":
-  version: 10.1.33
-  resolution: "@rnmapbox/maps@npm:10.1.33"
+"@rnmapbox/maps@npm:^10.2.10":
+  version: 10.2.10
+  resolution: "@rnmapbox/maps@npm:10.2.10"
   dependencies:
     "@turf/along": "npm:6.5.0"
     "@turf/distance": "npm:6.5.0"
@@ -2834,13 +2834,13 @@ __metadata:
     "@turf/length": "npm:6.5.0"
     "@turf/nearest-point-on-line": "npm:6.5.0"
     "@types/geojson": "npm:^7946.0.7"
-    debounce: "npm:^1.2.0"
+    debounce: "npm:^2.2.0"
   peerDependencies:
     expo: ">=47.0.0"
     mapbox-gl: ^2.9.0
-    react: ">=16.6.1"
+    react: ">=17.0.0"
     react-dom: ">= 17.0.0"
-    react-native: ">=0.59.9"
+    react-native: ">=0.69"
   peerDependenciesMeta:
     expo:
       optional: true
@@ -2848,7 +2848,7 @@ __metadata:
       optional: true
     react-dom:
       optional: true
-  checksum: 10c0/fbad1cd2b7ca0c3ce6045beaf06061ded71037b0b52a65db723fb107e083a940545be471c56ed997c21044a998dd5022d29fd7de01dddeaf0c2ec0952e0b4c59
+  checksum: 10c0/d6429851904d098571a3f448157824dd5729856ca2cdcdea13912743d1dc37b88552418f26a0d6dcec22dbba1aa0ff77cb269961501d379e30fbe1083d136117
   languageName: node
   linkType: hard
 
@@ -5049,10 +5049,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"debounce@npm:^1.2.0":
-  version: 1.2.1
-  resolution: "debounce@npm:1.2.1"
-  checksum: 10c0/6c9320aa0973fc42050814621a7a8a78146c1975799b5b3cc1becf1f77ba9a5aa583987884230da0842a03f385def452fad5d60db97c3d1c8b824e38a8edf500
+"debounce@npm:^2.2.0":
+  version: 2.2.0
+  resolution: "debounce@npm:2.2.0"
+  checksum: 10c0/684536fe9a04c9eea46cf02f119f69aa4071813ba25b9b43370e1503ea60b34fd38d694c7145fa2be504f9d40e7e39354cb9ed155c70954a0eefa391aefe271c
   languageName: node
   linkType: hard
 

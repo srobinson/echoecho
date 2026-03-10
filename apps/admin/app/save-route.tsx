@@ -38,6 +38,8 @@ import {
 } from '../src/services/routeSaveService';
 import { tabColors } from '@echoecho/ui';
 import { SectionColorProvider, useSectionColor } from '../src/contexts/SectionColorContext';
+import type { PendingWaypoint, RecordingSession, WaypointType } from '@echoecho/shared';
+import { ConfirmDialog } from '../src/components/ConfirmDialog';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -65,6 +67,21 @@ const STAGE_LABELS: Record<SaveStage, string> = {
   saving_to_database: 'Saving route…',
 };
 
+const WAYPOINT_TYPE_LABEL: Record<WaypointType, string> = {
+  start: 'Start',
+  end: 'End',
+  turn: 'Turn',
+  decision_point: 'Decision Point',
+  landmark: 'Landmark',
+  hazard: 'Hazard',
+  door: 'Door',
+  elevator: 'Elevator',
+  stairs: 'Stairs',
+  ramp: 'Ramp',
+  crossing: 'Crossing',
+  regular: 'Waypoint',
+};
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function SaveRouteScreen() {
@@ -78,6 +95,7 @@ export default function SaveRouteScreen() {
 function SaveRouteScreenInner() {
   const accent = useSectionColor();
   const { session, clearSession } = useRecordingStore();
+  const reviewWaypoints = session ? buildReviewWaypointList(session) : [];
 
   // Form state
   const [name, setName]                             = useState('');
@@ -99,6 +117,7 @@ function SaveRouteScreenInner() {
   const [saving, setSaving]                         = useState(false);
   const [saveStageLabel, setSaveStageLabel]         = useState('');
   const [saveError, setSaveError]                   = useState<string | null>(null);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   // If there's no session (e.g. direct navigation), go back
   useEffect(() => {
@@ -192,6 +211,9 @@ function SaveRouteScreenInner() {
     }
     if (!session) return;
 
+    const startBuildingName = buildings.find((b) => b.id === startBuildingId)?.name ?? '';
+    const endBuildingName = buildings.find((b) => b.id === endBuildingId)?.name ?? '';
+
     setSaving(true);
     setSaveError(null);
 
@@ -203,7 +225,11 @@ function SaveRouteScreenInner() {
       tags,
     };
 
-    const result = await saveRoute(session, metadata, (stage) => {
+    const result = await saveRoute({
+      ...session,
+      fromLabel: startBuildingName,
+      toLabel: endBuildingName,
+    }, metadata, (stage) => {
       const label = STAGE_LABELS[stage];
       setSaveStageLabel(label);
       AccessibilityInfo.announceForAccessibility(label);
@@ -225,26 +251,12 @@ function SaveRouteScreenInner() {
     AccessibilityInfo.announceForAccessibility('Route saved successfully.');
     clearSession();
     router.replace('/(tabs)/routes');
-  }, [validate, session, name, startBuildingId, endBuildingId, difficulty, tags, clearSession]);
+  }, [validate, session, buildings, name, startBuildingId, endBuildingId, difficulty, tags, clearSession]);
 
   // ── Discard ────────────────────────────────────────────────────────────────
 
   const handleDiscard = useCallback(() => {
-    Alert.alert(
-      'Discard Recording',
-      'The recorded track and waypoints will be permanently deleted.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Discard',
-          style: 'destructive',
-          onPress: () => {
-            clearSession();
-            router.replace('/(tabs)/routes');
-          },
-        },
-      ],
-    );
+    setShowDiscardConfirm(true);
   }, [clearSession]);
 
   if (!session) return null;
@@ -262,9 +274,12 @@ function SaveRouteScreenInner() {
         </Text>
 
         <Text style={styles.subheading}>
-          {session.pendingWaypoints.length} waypoint
-          {session.pendingWaypoints.length !== 1 ? 's' : ''} recorded
+          {reviewWaypoints.length} waypoint
+          {reviewWaypoints.length !== 1 ? 's' : ''} ready to save
         </Text>
+
+        <Text style={styles.label}>Recorded waypoints</Text>
+        <WaypointReviewList waypoints={reviewWaypoints} />
 
         {/* ── Route name ────────────────────────────────────────────────── */}
         <Text style={styles.label}>Route name *</Text>
@@ -437,6 +452,19 @@ function SaveRouteScreenInner() {
           </Pressable>
         </View>
       </ScrollView>
+      <ConfirmDialog
+        visible={showDiscardConfirm}
+        title="Discard recording?"
+        message="The recorded track and waypoints will be permanently deleted."
+        confirmLabel="Discard"
+        destructive
+        onCancel={() => setShowDiscardConfirm(false)}
+        onConfirm={() => {
+          setShowDiscardConfirm(false);
+          clearSession();
+          router.replace('/(tabs)/routes');
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -499,6 +527,104 @@ function BuildingPicker({ value, buildings, placeholder, onSelect, onNew }: Buil
   );
 }
 
+function WaypointReviewList({ waypoints }: { waypoints: PendingWaypoint[] }) {
+  if (waypoints.length === 0) {
+    return (
+      <View style={styles.reviewEmpty}>
+        <Text style={styles.reviewEmptyText}>No waypoints available yet.</Text>
+      </View>
+    );
+  }
+
+  const orderedWaypoints = [...waypoints].sort((a, b) => a.capturedAt - b.capturedAt);
+
+  return (
+    <View style={styles.reviewList}>
+      {orderedWaypoints.map((waypoint, index) => (
+        <View key={waypoint.localId} style={styles.reviewRow}>
+          <View style={styles.reviewIndexBadge}>
+            <Text style={styles.reviewIndexText}>{index + 1}</Text>
+          </View>
+          <View style={styles.reviewContent}>
+            <View style={styles.reviewHeader}>
+              <Text style={styles.reviewType}>
+                {WAYPOINT_TYPE_LABEL[waypoint.type] ?? waypoint.type}
+              </Text>
+              <View style={styles.reviewAttachmentRow}>
+                {waypoint.audioAnnotationUri && (
+                  <View style={styles.reviewAttachmentBadge}>
+                    <Text style={styles.reviewAttachmentText}>Audio</Text>
+                  </View>
+                )}
+                {waypoint.photoUri && (
+                  <View style={styles.reviewAttachmentBadge}>
+                    <Text style={styles.reviewAttachmentText}>Photo</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+
+            <Text style={styles.reviewTranscript}>
+              {waypoint.audioLabel?.trim() || waypoint.description?.trim() || 'No transcript yet'}
+            </Text>
+
+            <Text style={styles.reviewCoords}>
+              {waypoint.coordinate.latitude.toFixed(5)}, {waypoint.coordinate.longitude.toFixed(5)}
+            </Text>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function buildReviewWaypointList(session: RecordingSession): PendingWaypoint[] {
+  const waypoints: PendingWaypoint[] = [...session.pendingWaypoints];
+
+  const hasExplicitStart = waypoints.some((w) => w.type === 'start');
+  const hasExplicitEnd = waypoints.some((w) => w.type === 'end');
+
+  if (session.trackPoints.length > 0) {
+    const first = session.trackPoints[0];
+    if (!hasExplicitStart) {
+      waypoints.unshift({
+        localId: 'auto-start',
+        coordinate: {
+          latitude: first.latitude,
+          longitude: first.longitude,
+          altitude: first.altitude,
+        },
+        type: 'start',
+        audioLabel: 'Start',
+        description: null,
+        photoUri: null,
+        audioAnnotationUri: null,
+        capturedAt: first.timestamp,
+      });
+    }
+
+    const last = session.trackPoints[session.trackPoints.length - 1];
+    if (!hasExplicitEnd && session.trackPoints.length > 1) {
+      waypoints.push({
+        localId: 'auto-end',
+        coordinate: {
+          latitude: last.latitude,
+          longitude: last.longitude,
+          altitude: last.altitude,
+        },
+        type: 'end',
+        audioLabel: 'End',
+        description: null,
+        photoUri: null,
+        audioAnnotationUri: null,
+        capturedAt: last.timestamp,
+      });
+    }
+  }
+
+  return waypoints.sort((a, b) => a.capturedAt - b.capturedAt);
+}
+
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const C = {
@@ -519,6 +645,61 @@ const styles = StyleSheet.create({
   heading:              { fontSize: 24, fontWeight: '700', color: C.text, marginBottom: 4 },
   subheading:           { fontSize: 14, color: C.textMuted, marginBottom: 24 },
   label:                { fontSize: 14, color: C.textMuted, fontWeight: '600', marginBottom: 8, marginTop: 16 },
+  reviewList: {
+    backgroundColor:    C.surface,
+    borderWidth:        1,
+    borderColor:        C.border,
+    borderRadius:       12,
+    overflow:           'hidden',
+    marginBottom:       12,
+  },
+  reviewRow: {
+    flexDirection:      'row',
+    alignItems:         'flex-start',
+    gap:                12,
+    paddingHorizontal:  14,
+    paddingVertical:    14,
+    borderBottomWidth:  1,
+    borderBottomColor:  '#1A1A22',
+  },
+  reviewIndexBadge: {
+    width:              28,
+    height:             28,
+    borderRadius:       999,
+    backgroundColor:    '#1A1A22',
+    alignItems:         'center',
+    justifyContent:     'center',
+    marginTop:          2,
+  },
+  reviewIndexText:     { color: C.text, fontSize: 12, fontWeight: '700' },
+  reviewContent:       { flex: 1, gap: 6 },
+  reviewHeader: {
+    flexDirection:      'row',
+    alignItems:         'center',
+    justifyContent:     'space-between',
+    gap:                8,
+  },
+  reviewType:          { color: C.text, fontSize: 13, fontWeight: '700' },
+  reviewAttachmentRow: { flexDirection: 'row', gap: 6 },
+  reviewAttachmentBadge: {
+    backgroundColor:    '#1A2230',
+    borderRadius:       999,
+    paddingHorizontal:  8,
+    paddingVertical:    4,
+  },
+  reviewAttachmentText:{ color: '#A9C3FF', fontSize: 11, fontWeight: '700' },
+  reviewTranscript:    { color: C.text, fontSize: 13, lineHeight: 18 },
+  reviewCoords:        { color: C.textMuted, fontSize: 11 },
+  reviewEmpty: {
+    backgroundColor:    C.surface,
+    borderWidth:        1,
+    borderColor:        C.border,
+    borderRadius:       12,
+    paddingHorizontal:  14,
+    paddingVertical:    16,
+    marginBottom:       12,
+  },
+  reviewEmptyText:     { color: C.textMuted, fontSize: 13 },
   input: {
     backgroundColor:    C.surface,
     borderWidth:        1,

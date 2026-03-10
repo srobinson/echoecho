@@ -14,6 +14,11 @@ import type { HazardType } from '@echoecho/shared';
 
 import { useRecordingStore } from '../stores/recordingStore';
 
+interface Props {
+  onOpenSheet?: () => void;
+  renderSheet?: boolean;
+}
+
 const HAZARD_LABELS: Record<HazardType, string> = {
   uneven_surface:  'Uneven Surface',
   construction:    'Construction',
@@ -24,13 +29,17 @@ const HAZARD_LABELS: Record<HazardType, string> = {
   other:           'Other Hazard',
 };
 
-export function HazardButton() {
+export function HazardButton({ onOpenSheet, renderSheet = true }: Props) {
   const sheetRef = useRef<BottomSheet>(null);
   const store = useRecordingStore();
 
   const openSheet = useCallback(() => {
+    if (onOpenSheet) {
+      onOpenSheet();
+      return;
+    }
     sheetRef.current?.snapToIndex(0);
-  }, []);
+  }, [onOpenSheet]);
 
   const handleConfirm = useCallback(
     ({ type, expiresAt }: { type: HazardType; expiresAt: string | null }) => {
@@ -75,11 +84,13 @@ export function HazardButton() {
         <Text style={styles.btnLabel}>Hazard</Text>
       </Pressable>
 
-      <HazardPickerSheet
-        ref={sheetRef}
-        onConfirm={handleConfirm}
-        onDismiss={handleDismiss}
-      />
+      {renderSheet && (
+        <HazardPickerSheet
+          ref={sheetRef}
+          onConfirm={handleConfirm}
+          onDismiss={handleDismiss}
+        />
+      )}
     </>
   );
 }

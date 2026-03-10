@@ -35,6 +35,7 @@ export default function RootLayout() {
           headerTintColor: '#F0F0F5',
           headerTitleStyle: { fontWeight: '700' },
           contentStyle: { backgroundColor: '#0A0A0F' },
+          animation: 'fade',
         }}
       >
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
@@ -44,12 +45,20 @@ export default function RootLayout() {
           options={{ title: 'Campus', headerBackTitle: 'Back' }}
         />
         <Stack.Screen
+          name="building/[id]"
+          options={{ title: 'Building', headerBackTitle: 'Back' }}
+        />
+        <Stack.Screen
           name="route/[id]"
           options={{ title: 'Route', headerBackTitle: 'Back' }}
         />
         <Stack.Screen
           name="record"
-          options={{ title: 'Record Route', presentation: 'fullScreenModal' }}
+          options={{
+            title: 'Record Route',
+            presentation: 'card',
+            contentStyle: { backgroundColor: '#0A0A0F' },
+          }}
         />
         <Stack.Screen
           name="haptic-lab"
@@ -63,5 +72,6 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+    backgroundColor: '#0A0A0F',
   },
 });
