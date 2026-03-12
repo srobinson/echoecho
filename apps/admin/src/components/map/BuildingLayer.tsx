@@ -16,6 +16,7 @@ import MapboxGL from '@rnmapbox/maps';
 import type { Feature, FeatureCollection, Polygon, Point } from 'geojson';
 import type { Building } from '@echoecho/shared';
 import { useSectionColor } from '../../contexts/SectionColorContext';
+import { filterLngLatPairs, hasFiniteCoordinate, toClosedRing } from '../../lib/mapboxCoordinates';
 
 interface Props {
   buildings: Building[];
@@ -34,52 +35,66 @@ export const BuildingLayer = memo(function BuildingLayer({ buildings, onBuilding
   const accent = useSectionColor();
   const featureCollection: FeatureCollection<Polygon> = {
     type: 'FeatureCollection',
-    features: buildings.map((b): Feature<Polygon> => ({
-      type: 'Feature',
-      id: b.id,
-      properties: {
-        id: b.id,
-        name: b.name,
-        category: b.category,
-      },
-      geometry: {
-        type: 'Polygon',
-        coordinates: [b.footprint],
-      },
-    })),
+    features: buildings.flatMap((building): Feature<Polygon>[] => {
+      const ring = toClosedRing(building.footprint);
+      if (!ring) return [];
+
+      return [{
+        type: 'Feature',
+        id: building.id,
+        properties: {
+          id: building.id,
+          name: building.name,
+          category: building.category,
+        },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [ring],
+        },
+      }];
+    }),
   };
 
   // Label centroids — approximate centroid via averaging footprint vertices
   const labelCollection: FeatureCollection<Point> = {
     type: 'FeatureCollection',
-    features: buildings.map((b): Feature<Point> => ({
-      type: 'Feature',
-      id: `label-${b.id}`,
-      properties: { name: b.name },
-      geometry: {
-        type: 'Point',
-        coordinates: buildingCentroid(b.footprint),
-      },
-    })),
+    features: buildings.flatMap((building): Feature<Point>[] => {
+      const footprint = filterLngLatPairs(building.footprint);
+      if (footprint.length === 0) return [];
+
+      return [{
+        type: 'Feature',
+        id: `label-${building.id}`,
+        properties: { name: building.name },
+        geometry: {
+          type: 'Point',
+          coordinates: buildingCentroid(footprint),
+        },
+      }];
+    }),
   };
 
   const entranceCollection: FeatureCollection<Point> = {
     type: 'FeatureCollection',
-    features: buildings.flatMap((b) =>
-      (b.entrances ?? []).map((entrance): Feature<Point> => ({
-        type: 'Feature',
-        id: entrance.id,
-        properties: {
+    features: buildings.flatMap((building) =>
+      (building.entrances ?? []).flatMap((entrance): Feature<Point>[] => {
+        if (!hasFiniteCoordinate(entrance.coordinate)) return [];
+
+        return [{
+          type: 'Feature',
           id: entrance.id,
-          buildingId: b.id,
-          name: entrance.name,
-          isMain: entrance.isMain,
-        },
-        geometry: {
-          type: 'Point',
-          coordinates: [entrance.coordinate.longitude, entrance.coordinate.latitude],
-        },
-      })),
+          properties: {
+            id: entrance.id,
+            buildingId: building.id,
+            name: entrance.name,
+            isMain: entrance.isMain,
+          },
+          geometry: {
+            type: 'Point',
+            coordinates: [entrance.coordinate.longitude, entrance.coordinate.latitude],
+          },
+        }];
+      }),
     ),
   };
 

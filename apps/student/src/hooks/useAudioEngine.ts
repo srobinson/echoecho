@@ -54,7 +54,7 @@ export interface UseAudioEngineResult {
   setPositionRef: (ref: React.MutableRefObject<TrackPositionUpdate | null>) => void;
   /** Provide waypoints so the engine can look up annotation text. */
   setWaypoints: (waypoints: LocalWaypoint[]) => void;
-  /** Provide a clip URL resolver: waypointId → Supabase Storage URL. */
+  /** Optional fallback resolver when a local clip path has not been cached yet. */
   setClipUrlResolver: (fn: (waypointId: string) => string | undefined) => void;
 }
 
@@ -171,16 +171,32 @@ export function useAudioEngine(): UseAudioEngineResult {
     return haversineM(pos.lat, pos.lng, wp.lat, wp.lng);
   }, []);
 
+  const getWaypoint = useCallback((waypointId: string): LocalWaypoint | null => (
+    waypointsRef.current.find((waypoint) => waypoint.id === waypointId) ?? null
+  ), []);
+
   const getClipUri = useCallback(async (waypointId: string): Promise<string | null> => {
     if (clipCacheRef.current.has(waypointId)) {
       return clipCacheRef.current.get(waypointId)!;
     }
-    const url = clipUrlResolverRef.current?.(waypointId);
-    if (!url) return null;
-    // Cache the Supabase Storage URL directly; expo-av can load from https
-    clipCacheRef.current.set(waypointId, url);
-    return url;
-  }, []);
+    const waypoint = getWaypoint(waypointId);
+    const localPath = waypoint?.annotationAudioPath?.trim() || null;
+    if (localPath) {
+      clipCacheRef.current.set(waypointId, localPath);
+      return localPath;
+    }
+
+    const fallbackUrl = clipUrlResolverRef.current?.(waypointId);
+    if (!fallbackUrl) return null;
+
+    clipCacheRef.current.set(waypointId, fallbackUrl);
+    return fallbackUrl;
+  }, [getWaypoint]);
+
+  const getAnnotationText = useCallback((waypointId: string): string | null => {
+    const text = getWaypoint(waypointId)?.annotationText?.trim() ?? '';
+    return text.length > 0 ? text : null;
+  }, [getWaypoint]);
 
   const onNavEvent = useCallback(async (event: NavEvent) => {
     switch (event.type) {
@@ -212,23 +228,32 @@ export function useAudioEngine(): UseAudioEngineResult {
           straight: 'Continue straight.',
           arrived: 'You have arrived at your destination.',
         };
-        const text = dirText[event.turnDirection] ?? 'Continue.';
+        const turnText = dirText[event.turnDirection] ?? 'Continue.';
+        const annotationText = getAnnotationText(event.waypointId);
 
         // Try to play recorded clip for this waypoint
         const clipUri = await getClipUri(event.waypointId);
-        enqueue({
-          priority: PRIORITY.waypoint_annotation,
-          text,
-          clipUri: clipUri ?? undefined,
-          enqueuedAt: Date.now(),
-        });
-        // Follow-up text announcement only when a clip will play first.
-        // Without a clip, the first enqueue's text fallback already covers
-        // the direction. Enqueueing both produces duplicate speech.
-        if (clipUri && event.turnDirection !== 'arrived') {
+        if (clipUri || annotationText) {
+          enqueue({
+            priority: PRIORITY.waypoint_annotation,
+            text: annotationText ?? undefined,
+            clipUri: clipUri ?? undefined,
+            enqueuedAt: Date.now(),
+          });
+        }
+
+        // Always keep turn guidance. When there is no annotation clip/text,
+        // this becomes the only spoken output for the waypoint.
+        if (event.turnDirection !== 'arrived') {
           enqueue({
             priority: PRIORITY.turn,
-            text,
+            text: turnText,
+            enqueuedAt: Date.now(),
+          });
+        } else if (!clipUri && !annotationText) {
+          enqueue({
+            priority: PRIORITY.route_event,
+            text: turnText,
             enqueuedAt: Date.now(),
           });
         }
@@ -261,7 +286,7 @@ export function useAudioEngine(): UseAudioEngineResult {
       default:
         break;
     }
-  }, [enqueue, currentDistToWaypoint, getClipUri]);
+  }, [enqueue, currentDistToWaypoint, getAnnotationText, getClipUri]);
 
   const setPositionRef = useCallback(
     (ref: React.MutableRefObject<TrackPositionUpdate | null>) => {

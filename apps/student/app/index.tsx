@@ -38,7 +38,8 @@ import { useCampus } from '../src/context/CampusContext';
 import { getLocalRoutesForCampus, type LocalRoute } from '../src/lib/localDb';
 import { supabase } from '../src/lib/supabase';
 import { matchRoute, preloadRoute } from '../src/lib/routeMatchingService';
-import type { Route } from '@echoecho/shared';
+import { syncCampus } from '../src/lib/syncEngine';
+import { haversineM, type Campus, type Route } from '@echoecho/shared';
 
 // Show at most 5 favorites on the home screen; remainder accessible via "See all"
 const HOME_FAVORITES_LIMIT = 5;
@@ -52,10 +53,62 @@ interface AssistRoute {
   toLabel: string;
 }
 
+const NEARBY_CAMPUS_RADIUS_M = 1_500;
+
+async function resolveCampusForCoords(
+  latitude: number,
+  longitude: number,
+): Promise<{
+  selectedCampus: Campus | null;
+  nearestCampus: Campus | null;
+  nearestDistanceMeters: number | null;
+}> {
+  const { data, error } = await supabase
+    .from('v_campuses' as 'campuses')
+    .select('id, name, center, bounds, defaultZoom')
+    .order('name');
+
+  if (error || !data || data.length === 0) {
+    return {
+      selectedCampus: null,
+      nearestCampus: null,
+      nearestDistanceMeters: null,
+    };
+  }
+
+  const campuses = data as Campus[];
+  let nearest = campuses[0];
+  let nearestDistance = haversineM(
+    latitude,
+    longitude,
+    nearest.center.latitude,
+    nearest.center.longitude,
+  );
+
+  for (const campus of campuses.slice(1)) {
+    const distance = haversineM(
+      latitude,
+      longitude,
+      campus.center.latitude,
+      campus.center.longitude,
+    );
+    if (distance < nearestDistance) {
+      nearest = campus;
+      nearestDistance = distance;
+    }
+  }
+
+  return {
+    selectedCampus: nearestDistance <= NEARBY_CAMPUS_RADIUS_M ? nearest : null,
+    nearestCampus: nearest,
+    nearestDistanceMeters: nearestDistance,
+  };
+}
+
 export default function HomeScreen() {
   const { userId, setCurrentSession } = useNavigationStore();
   const { favorites, isFavorite, toggleFavorite } = useRouteHistory(userId);
-  const { campus, nearestCampus, isLoaded: campusLoaded, loadFailed } = useCampus();
+  const { campus, nearestCampus, isLoaded: campusLoaded, loadFailed, refresh: refreshCampus } = useCampus();
   const [showKeyboardFallback, setShowKeyboardFallback] = useState(false);
   const [keyboardQuery, setKeyboardQuery] = useState('');
   const [showLocationPermissionHelp, setShowLocationPermissionHelp] = useState(false);
@@ -102,15 +155,6 @@ export default function HomeScreen() {
   }, [setCurrentSession, userId]);
 
   const resolveRouteForDestination = useCallback(async (destinationBuildingId: string, name: string) => {
-    if (!campus?.id) {
-      if (nearestCampus) {
-        throw new Error(
-          `No nearby campus detected. The nearest campus is ${nearestCampus.name}, ${formatCampusDistance(nearestCampus.distanceMeters)} away.`,
-        );
-      }
-      throw new Error('No nearby campus detected.');
-    }
-
     let permission = await Location.getForegroundPermissionsAsync();
     if (permission.status !== 'granted') {
       permission = await Location.requestForegroundPermissionsAsync();
@@ -120,16 +164,40 @@ export default function HomeScreen() {
       throw new Error('Location permission required. Enable location access in Settings.');
     }
 
+    if (!campus?.id) {
+      await refreshCampus();
+    }
+
     const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: 60_000 });
     const current = lastKnown ?? await Location.getCurrentPositionAsync({
       accuracy: Location.Accuracy.Balanced,
     });
 
+    const campusSelection = await resolveCampusForCoords(
+      current.coords.latitude,
+      current.coords.longitude,
+    );
+    const activeCampusId = campus?.id ?? campusSelection.selectedCampus?.id ?? null;
+
+    if (!activeCampusId) {
+      if (campusSelection.nearestCampus && campusSelection.nearestDistanceMeters != null) {
+        throw new Error(
+          `No nearby campus detected. The nearest campus is ${campusSelection.nearestCampus.name}, ${formatCampusDistance(campusSelection.nearestDistanceMeters)} away.`,
+        );
+      }
+      if (nearestCampus) {
+        throw new Error(
+          `No nearby campus detected. The nearest campus is ${nearestCampus.name}, ${formatCampusDistance(nearestCampus.distanceMeters)} away.`,
+        );
+      }
+      throw new Error('No nearby campus detected.');
+    }
+
     const matched = await matchRoute({
       lat: current.coords.latitude,
       lng: current.coords.longitude,
       destinationText: name,
-      campusId: campus.id,
+      campusId: activeCampusId,
       limit: 5,
     });
 
@@ -141,7 +209,13 @@ export default function HomeScreen() {
       ?? matched.data.matches[0];
 
     if (!bestRoute) {
-      throw new Error(`No published route found for ${name}`);
+      if (matched.data.nearestBuildingId === destinationBuildingId) {
+        throw new Error(`You are already at ${name}.`);
+      }
+      if (matched.data.nearestBuildingName) {
+        throw new Error(`No published route from ${matched.data.nearestBuildingName} to ${name}.`);
+      }
+      throw new Error(`No published route found for ${name}.`);
     }
 
     await startRouteNavigation(
@@ -149,7 +223,7 @@ export default function HomeScreen() {
       bestRoute.routeName,
       bestRoute.endBuildingName,
     );
-  }, [campus, nearestCampus, startRouteNavigation]);
+  }, [campus, nearestCampus, refreshCampus, startRouteNavigation]);
 
   const handleDestinationSelect = useCallback((routeId: string, label: string) => {
     void startRouteNavigation(routeId, label);
@@ -178,7 +252,7 @@ export default function HomeScreen() {
     startListening,
     stopListening,
     resetToIdle,
-  } = useSttDestination(handleDestinationConfirmed);
+  } = useSttDestination(handleDestinationConfirmed, campus?.id);
 
   useEffect(() => {
     let cancelled = false;
@@ -189,6 +263,11 @@ export default function HomeScreen() {
         setAvailableRouteSummaries([]);
         return;
       }
+
+      // CampusProvider can complete a background sync after the home screen has
+      // already rendered from cached campus data. Force a sync here so the
+      // local route list reflects newly published routes immediately.
+      await syncCampus(campus.id, undefined, true);
 
       const [localRoutes, routeHeaders, buildingRows] = await Promise.all([
         getLocalRoutesForCampus(campus.id),
@@ -270,7 +349,7 @@ export default function HomeScreen() {
   }, [sttUnavailable, startListening]);
 
   const handleKeyboardSearch = useCallback((query: string) => {
-    const results = fuzzySearch(query);
+    const results = fuzzySearch(query, campus?.id);
     if (results.length === 0) {
       AccessibilityInfo.announceForAccessibility(`No destination found for ${query}.`);
       return;
@@ -279,7 +358,7 @@ export default function HomeScreen() {
     handleDestinationConfirmed(best.item.id, best.item.name);
     setShowKeyboardFallback(false);
     setKeyboardQuery('');
-  }, [handleDestinationConfirmed]);
+  }, [campus?.id, handleDestinationConfirmed]);
 
   useEffect(() => {
     if (sttState === 'transcribing') {

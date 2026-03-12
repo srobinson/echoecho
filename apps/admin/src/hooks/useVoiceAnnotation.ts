@@ -23,6 +23,7 @@ import {
 export type VoiceAnnotationPhase =
   | 'idle'
   | 'recording'
+  | 'processing'
   | 'preview'
   | 'uploading'
   | 'done'
@@ -37,8 +38,14 @@ export interface VoiceAnnotationState {
   showSilencePrompt: boolean;
 }
 
+export interface VoiceAnnotationAudioSupport {
+  supported: boolean;
+  explanation: string | null;
+}
+
 export interface UseVoiceAnnotationReturn {
   state: VoiceAnnotationState;
+  audioSupport: VoiceAnnotationAudioSupport;
   startRecording: () => Promise<void>;
   stopRecording: () => Promise<void>;
   dismissSilencePrompt: () => void;
@@ -76,9 +83,27 @@ function mergeTranscriptSegments(base: string, incoming: string): string {
   return `${left} ${right}`.trim();
 }
 
+function getVoiceAnnotationAudioSupport(): VoiceAnnotationAudioSupport {
+  if (Platform.OS === 'android') {
+    const sdkVersion = typeof Platform.Version === 'number'
+      ? Platform.Version
+      : Number.parseInt(String(Platform.Version), 10);
+
+    if (Number.isFinite(sdkVersion) && sdkVersion < 33) {
+      return {
+        supported: false,
+        explanation: 'This device does not support playback clips. You can still save the transcript.',
+      };
+    }
+  }
+
+  return { supported: true, explanation: null };
+}
+
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useVoiceAnnotation(): UseVoiceAnnotationReturn {
+  const audioSupportRef = useRef<VoiceAnnotationAudioSupport>(getVoiceAnnotationAudioSupport());
   const [state, setState] = useState<VoiceAnnotationState>({
     phase: 'idle',
     transcript: '',
@@ -153,7 +178,7 @@ export function useVoiceAnnotation(): UseVoiceAnnotationReturn {
 
     const result = await startVoiceAnnotationRecording({
       onAutoStop: () => {
-        setState((s) => ({ ...s, isTimeLimitReached: true }));
+        setState((s) => ({ ...s, isTimeLimitReached: true, phase: 'processing' }));
         void doStop().then(({ audioUri }) => {
           setState((s) => ({ ...s, phase: 'preview', audioUri }));
           AccessibilityInfo.announceForAccessibility(
@@ -210,6 +235,11 @@ export function useVoiceAnnotation(): UseVoiceAnnotationReturn {
   }, [doStop]);
 
   const stopRecording = useCallback(async (): Promise<void> => {
+    setState((s) => ({
+      ...s,
+      phase: 'processing',
+      showSilencePrompt: false,
+    }));
     const { audioUri } = await doStop();
     setState((s) => ({
       ...s,
@@ -287,6 +317,7 @@ export function useVoiceAnnotation(): UseVoiceAnnotationReturn {
 
   return {
     state,
+    audioSupport: audioSupportRef.current,
     startRecording,
     stopRecording,
     dismissSilencePrompt,

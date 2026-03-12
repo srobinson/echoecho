@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import type { RecordingSession, TrackPoint, PendingWaypoint, PendingHazard } from '@echoecho/shared';
 
+import { hasFiniteCoordinate } from '../lib/mapboxCoordinates';
+
 interface RecordingStore {
   session: RecordingSession | null;
   startRecording: () => void;
@@ -77,6 +79,7 @@ export const useRecordingStore = create<RecordingStore>((set, get) => ({
   appendTrackPoint: (point) => {
     const s = get().session;
     if (!s || s.state !== 'recording') return;
+    if (!hasFiniteCoordinate(point)) return;
     // Mutate in place to avoid O(n) copy on every 1 Hz GPS tick.
     // Spreading the session creates a new reference so Zustand notifies subscribers.
     s.trackPoints.push(point);

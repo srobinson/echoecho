@@ -16,6 +16,8 @@ import MapboxGL from '@rnmapbox/maps';
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import type { Waypoint } from '@echoecho/shared';
 
+import { hasFiniteCoordinate } from '../../lib/mapboxCoordinates';
+
 interface Props {
   waypoints: Waypoint[];
   onWaypointPress: (waypoint: Waypoint) => void;
@@ -43,21 +45,24 @@ const TYPE_EMOJI: Record<string, string> = {
 export const PoiLayer = memo(function PoiLayer({ waypoints, onWaypointPress }: Props) {
   const featureCollection: FeatureCollection<Point> = {
     type: 'FeatureCollection',
-    features: waypoints.map((w): Feature<Point> => ({
-      type: 'Feature',
-      id: w.id,
-      properties: {
+    features: waypoints.flatMap((w): Feature<Point>[] => {
+      if (!hasFiniteCoordinate(w.coordinate)) return [];
+      return [{
+        type: 'Feature',
         id: w.id,
-        routeId: w.routeId,
-        type: w.type,
-        label: w.audioLabel ?? w.type,
-        emoji: TYPE_EMOJI[w.type] ?? '●',
-      },
-      geometry: {
-        type: 'Point',
-        coordinates: [w.coordinate.longitude, w.coordinate.latitude],
-      },
-    })),
+        properties: {
+          id: w.id,
+          routeId: w.routeId,
+          type: w.type,
+          label: w.audioLabel ?? w.type,
+          emoji: TYPE_EMOJI[w.type] ?? '●',
+        },
+        geometry: {
+          type: 'Point',
+          coordinates: [w.coordinate.longitude, w.coordinate.latitude],
+        },
+      }];
+    }),
   };
 
   function handlePress(event: { features?: Feature[] }) {

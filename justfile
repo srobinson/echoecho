@@ -195,6 +195,24 @@ build-admin-android:
 build-student-android:
     yarn workspace @echoecho/student android
 
+# Build/install admin debug APK on a specific Android device.
+# Example:
+#   just admin-android-device adb-R5CR50X37XA-ADP1cS._adb-tls-connect._tcp
+admin-android-device device:
+    ./scripts/android-device.sh admin "{{device}}" --build
+
+# Build/install admin debug APK on a specific Android device, forcing a clean reinstall.
+admin-android-device-fresh device:
+    ./scripts/android-device.sh admin "{{device}}" --build --fresh
+
+# Build/install student debug APK on a specific Android device.
+student-android-device device:
+    ./scripts/android-device.sh student "{{device}}" --build
+
+# Build/install student debug APK on a specific Android device, forcing a clean reinstall.
+student-android-device-fresh device:
+    ./scripts/android-device.sh student "{{device}}" --build --fresh
+
 # Clean all node_modules and caches
 clean:
     find . -name node_modules -type d -prune -exec rm -rf {} +

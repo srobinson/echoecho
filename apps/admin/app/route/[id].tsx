@@ -23,6 +23,7 @@ import { supabase } from '../../src/lib/supabase';
 import type { Building, Route, RouteStatus, Waypoint, WaypointType } from '@echoecho/shared';
 import { ConfirmDialog } from '../../src/components/ConfirmDialog';
 import { RoutePreviewMap } from '../../src/components/route/RoutePreviewMap';
+import { publishRoute, retractRoute } from '../../src/services/routeSaveService';
 
 import { tabColors } from '@echoecho/ui';
 import { SectionColorProvider, useSectionColor } from '../../src/contexts/SectionColorContext';
@@ -174,13 +175,25 @@ function RouteDetailScreenInner() {
 
     setConfirmBusy(true);
     if (confirmAction.kind === 'status') {
-      const { error } = await supabase
-        .from('routes')
-        .update({ status: confirmAction.nextStatus })
-        .eq('id', route.id);
+      let errorMessage: string | null = null;
+
+      if (confirmAction.nextStatus === 'published') {
+        const result = await publishRoute(route.id);
+        if (!result.ok) errorMessage = result.error;
+      } else if (confirmAction.nextStatus === 'retracted') {
+        const result = await retractRoute(route.id);
+        if (!result.ok) errorMessage = result.error;
+      } else {
+        const { error } = await supabase
+          .from('routes')
+          .update({ status: confirmAction.nextStatus })
+          .eq('id', route.id);
+        if (error) errorMessage = error.message;
+      }
+
       setConfirmBusy(false);
-      if (error) {
-        Alert.alert('Failed', error.message);
+      if (errorMessage) {
+        Alert.alert('Failed', errorMessage);
         return;
       }
       setRoute({ ...route, status: confirmAction.nextStatus });

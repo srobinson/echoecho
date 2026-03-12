@@ -128,11 +128,20 @@ export async function updateBuildingIndex(buildings: BuildingEntry[]): Promise<v
  * Returns matches sorted by score (best first). The caller decides whether
  * a single match or multiple close matches requires disambiguation.
  */
-export function fuzzySearch(query: string): FuseMatch[] {
-  if (!_index) {
-    _index = buildFuseIndex(_entries);
+export function fuzzySearch(query: string, campusId?: string): FuseMatch[] {
+  const entries = campusId
+    ? _entries.filter((entry) => entry.campusId === campusId)
+    : _entries;
+
+  const index = campusId
+    ? buildFuseIndex(entries)
+    : (_index ?? buildFuseIndex(_entries));
+
+  if (!campusId && !_index) {
+    _index = index;
   }
-  const results = _index.search(query);
+
+  const results = index.search(query);
   return results.map((r) => ({ item: r.item, score: r.score ?? 1 }));
 }
 

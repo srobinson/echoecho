@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useCampusStore } from '../stores/campusStore';
 import { useAuthStore } from '../stores/authStore';
 import { haversineM, type Campus } from '@echoecho/shared';
+import { createCampus as createCampusRecord } from '../services/campusService';
 
 // Accuracy.High uses GPS directly and accepts mock locations on emulator.
 // Accuracy.Balanced uses Wi-Fi/cell towers which are unavailable on emulator,
@@ -98,56 +99,12 @@ export function useCampusDetection() {
     // Determine whether this is the first campus (bootstrap path).
     // useCampusStore is populated by detect() before createCampus is ever called.
     const isBootstrap = useCampusStore.getState().campuses.length === 0;
-
-    let campusId: string;
-
-    if (isBootstrap) {
-      // Bootstrap path: RPC creates the campus and promotes caller to admin
-      // in a single SECURITY DEFINER transaction, bypassing the campuses_insert
-      // RLS policy that normally requires role='admin'.
-      const { data, error } = await supabase.rpc('create_bootstrap_campus', {
-        p_name: name,
-        p_latitude: latitude,
-        p_longitude: longitude,
-      });
-
-      if (error || !data) {
-        throw new Error(error?.message ?? 'Failed to create campus');
-      }
-
-      campusId = data as string;
-    } else {
-      // Standard path: direct insert (requires role='admin' via RLS)
-      const BOUNDS_OFFSET = 0.005;
-      const { data, error } = await supabase
-        .from('campuses')
-        .insert({
-          name,
-          short_name: name,
-          location: `SRID=4326;POINT(${longitude} ${latitude})`,
-          bounds: `SRID=4326;POLYGON((${longitude - BOUNDS_OFFSET} ${latitude - BOUNDS_OFFSET}, ${longitude + BOUNDS_OFFSET} ${latitude - BOUNDS_OFFSET}, ${longitude + BOUNDS_OFFSET} ${latitude + BOUNDS_OFFSET}, ${longitude - BOUNDS_OFFSET} ${latitude + BOUNDS_OFFSET}, ${longitude - BOUNDS_OFFSET} ${latitude - BOUNDS_OFFSET}))`,
-        })
-        .select('id')
-        .single();
-
-      if (error || !data) {
-        throw new Error(error?.message ?? 'Failed to create campus');
-      }
-
-      campusId = data.id;
-    }
-
-    const { data: created, error: fetchErr } = await supabase
-      .from('v_campuses' as 'campuses')
-      .select('*')
-      .eq('id', campusId)
-      .single();
-
-    if (fetchErr || !created) {
-      throw new Error(fetchErr?.message ?? 'Failed to fetch created campus');
-    }
-
-    const campus = created as unknown as Campus;
+    const campus = await createCampusRecord({
+      name,
+      latitude,
+      longitude,
+      isBootstrap,
+    });
     addCampus(campus);
     setActiveCampus(campus);
     setState({ phase: 'found', campus });

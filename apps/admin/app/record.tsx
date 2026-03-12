@@ -38,6 +38,7 @@ import { RecordingBottomBar } from '../src/components/RecordingBottomBar';
 import { VoiceAnnotationSheet } from '../src/components/VoiceAnnotationSheet';
 import { HazardButton } from '../src/components/HazardButton';
 import { BuildingLayer } from '../src/components/map/BuildingLayer';
+import { hasFiniteCoordinate, toLngLat } from '../src/lib/mapboxCoordinates';
 import type { HazardType } from '@echoecho/shared';
 
 function logRecordDebug(step: string, details?: unknown) {
@@ -281,7 +282,7 @@ export default function RecordScreen() {
 
   const handleWaypoint = useCallback(() => {
     const last = trackPoints[trackPoints.length - 1];
-    if (!last) return;
+    if (!hasFiniteCoordinate(last)) return;
 
     const localId = `manual-${Date.now()}`;
     store.addPendingWaypoint({
@@ -307,7 +308,7 @@ export default function RecordScreen() {
       hazardSheetRef.current?.close();
 
       const last = trackPoints[trackPoints.length - 1];
-      if (!last) return;
+      if (!hasFiniteCoordinate(last)) return;
 
       store.addPendingHazard({
         localId: `hazard-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -329,16 +330,23 @@ export default function RecordScreen() {
 
   // ── Map GeoJSON ────────────────────────────────────────────────────────────
 
+  const trackCoordinates = useMemo(
+    () => trackPoints
+      .map((point) => toLngLat(point))
+      .filter((point): point is [number, number] => point != null),
+    [trackPoints],
+  );
+
   const trackGeoJSON: GeoJSON.Feature<GeoJSON.LineString> = useMemo(
     () => ({
       type: 'Feature',
       geometry: {
         type: 'LineString',
-        coordinates: trackPoints.map((p) => [p.longitude, p.latitude]),
+        coordinates: trackCoordinates,
       },
       properties: {},
     }),
-    [trackPoints],
+    [trackCoordinates],
   );
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -372,7 +380,7 @@ export default function RecordScreen() {
           onBuildingPress={() => {}}
         />
 
-        {trackPoints.length > 1 && (
+        {trackCoordinates.length > 1 && (
           <MapboxGL.ShapeSource id="live-track" shape={trackGeoJSON}>
             <MapboxGL.LineLayer
               id="live-track-line"
@@ -388,7 +396,7 @@ export default function RecordScreen() {
         )}
 
         {/* Pending waypoint markers */}
-        {pendingWaypoints.map((wp) => (
+        {pendingWaypoints.filter((wp) => hasFiniteCoordinate(wp.coordinate)).map((wp) => (
           <MapboxGL.MarkerView
             key={wp.localId}
             coordinate={[wp.coordinate.longitude, wp.coordinate.latitude]}
@@ -401,7 +409,7 @@ export default function RecordScreen() {
         ))}
 
         {/* Pending hazard markers */}
-        {pendingHazards.map((hz) => (
+        {pendingHazards.filter((hz) => hasFiniteCoordinate(hz.coordinate)).map((hz) => (
           <MapboxGL.MarkerView
             key={hz.localId}
             coordinate={[hz.coordinate.longitude, hz.coordinate.latitude]}

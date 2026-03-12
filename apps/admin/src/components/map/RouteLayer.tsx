@@ -17,6 +17,8 @@ import MapboxGL from '@rnmapbox/maps';
 import type { Feature, FeatureCollection, LineString } from 'geojson';
 import type { Route } from '@echoecho/shared';
 
+import { toLngLat } from '../../lib/mapboxCoordinates';
+
 interface Props {
   routes: Route[];
   onRoutePress: (route: Route) => void;
@@ -29,24 +31,27 @@ const TOUCH_LAYER_ID = 'admin-routes-touch';
 export const RouteLayer = memo(function RouteLayer({ routes, onRoutePress }: Props) {
   const featureCollection: FeatureCollection<LineString> = {
     type: 'FeatureCollection',
-    features: routes
-      .filter((r) => r.waypoints.length >= 2)
-      .map((r): Feature<LineString> => ({
+    features: routes.flatMap((route): Feature<LineString>[] => {
+      const coordinates = route.waypoints
+        .map((waypoint) => toLngLat(waypoint.coordinate))
+        .filter((point): point is [number, number] => point != null);
+
+      if (coordinates.length < 2) return [];
+
+      return [{
         type: 'Feature',
-        id: r.id,
+        id: route.id,
         properties: {
-          id: r.id,
-          name: r.name,
-          status: r.status,
+          id: route.id,
+          name: route.name,
+          status: route.status,
         },
         geometry: {
           type: 'LineString',
-          coordinates: r.waypoints.map((w) => [
-            w.coordinate.longitude,
-            w.coordinate.latitude,
-          ]),
+          coordinates,
         },
-      })),
+      }];
+    }),
   };
 
   const colorExpression = [

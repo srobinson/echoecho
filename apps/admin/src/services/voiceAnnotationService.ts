@@ -13,7 +13,9 @@
  *
  * Upload failure: transcript text is saved locally; audio upload is queued for retry.
  */
-import { ExpoSpeechRecognitionModule } from 'expo-speech-recognition';
+import {
+  ExpoSpeechRecognitionModule,
+} from 'expo-speech-recognition';
 import * as FileSystem from 'expo-file-system';
 
 import { supabase } from '../lib/supabase';
@@ -44,6 +46,8 @@ export type AudioUploadResult =
 
 const MAX_DURATION_MS = 60_000;
 const SILENCE_CHECK_MS = 3_000;
+const AUDIO_URI_WAIT_MS = 5_000;
+const AUDIO_UPLOAD_TIMEOUT_MS = 15_000;
 const STORAGE_BUCKET = 'route-audio';
 
 // ── Recording lifecycle ───────────────────────────────────────────────────────
@@ -70,6 +74,55 @@ export type StartRecordingResult =
         | 'start_failed'
         | 'already_recording';
     };
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getRecognizerPackageName(): string | null {
+  try {
+    return ExpoSpeechRecognitionModule.getDefaultRecognitionService().packageName || null;
+  } catch {
+    return null;
+  }
+}
+
+async function verifyPersistedAudioFile(uri: string | null): Promise<string | null> {
+  if (!uri) return null;
+
+  const deadline = Date.now() + AUDIO_URI_WAIT_MS;
+  let lastSize = -1;
+  let stableCount = 0;
+
+  while (Date.now() < deadline) {
+    try {
+      const info = await FileSystem.getInfoAsync(uri);
+      const size = info.exists && typeof info.size === 'number' ? info.size : 0;
+
+      console.log('[voice-annotation] verify-file', JSON.stringify({
+        uri,
+        exists: info.exists,
+        isDirectory: info.isDirectory,
+        size,
+      }));
+
+      if (info.exists && !info.isDirectory && size > 0) {
+        stableCount = size === lastSize ? stableCount + 1 : 0;
+        lastSize = size;
+
+        if (stableCount >= 1) {
+          return uri;
+        }
+      }
+    } catch (error) {
+      console.warn('[voice-annotation] verify-file-error', error);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+}
 
 /**
  * Start speech recognition with persisted audio capture.
@@ -103,10 +156,17 @@ export async function startVoiceAnnotationRecording(options: {
   try {
     let heardAudibleInput = false;
     let hasResolvedAudioUri = false;
+    let candidateAudioUri: string | null = null;
     let resolveAudioUri: (uri: string | null) => void = () => {};
     const audioUriPromise = new Promise<string | null>((resolve) => {
       resolveAudioUri = resolve;
     });
+    const recognizerPackage = getRecognizerPackageName();
+
+    console.log('[voice-annotation] start', JSON.stringify({
+      recognizerPackage,
+      persist: true,
+    }));
 
     const finalizeAudioUri = (uri: string | null) => {
       if (hasResolvedAudioUri) return;
@@ -117,13 +177,46 @@ export async function startVoiceAnnotationRecording(options: {
     const sttSubs = [
       ExpoSpeechRecognitionModule.addListener('result', (event) => {
         const text = event.results[0]?.transcript ?? '';
+        if (event.isFinal) {
+          console.log('[voice-annotation] result-final', JSON.stringify({
+            recognizerPackage,
+            transcriptLength: text.length,
+          }));
+        }
         if (text) onTranscriptUpdate(text, event.isFinal);
       }),
+      ExpoSpeechRecognitionModule.addListener('audiostart', (event) => {
+        candidateAudioUri = event.uri ?? null;
+        console.log('[voice-annotation] audiostart', JSON.stringify({
+          recognizerPackage,
+          uri: candidateAudioUri,
+        }));
+      }),
       ExpoSpeechRecognitionModule.addListener('error', (event) => {
+        console.warn('[voice-annotation] error', JSON.stringify({
+          recognizerPackage,
+          message: event.message ?? 'Speech recognition error',
+        }));
         onSTTError(event.message ?? 'Speech recognition error');
       }),
       ExpoSpeechRecognitionModule.addListener('audioend', (event) => {
+        candidateAudioUri = event.uri ?? candidateAudioUri;
+        console.log('[voice-annotation] audioend', JSON.stringify({
+          recognizerPackage,
+          uri: event.uri ?? null,
+          candidateAudioUri,
+        }));
         finalizeAudioUri(event.uri ?? null);
+      }),
+      ExpoSpeechRecognitionModule.addListener('end', () => {
+        console.log('[voice-annotation] end', JSON.stringify({
+          recognizerPackage,
+          candidateAudioUri,
+          hasResolvedAudioUri,
+        }));
+        if (!hasResolvedAudioUri && candidateAudioUri) {
+          finalizeAudioUri(candidateAudioUri);
+        }
       }),
       ExpoSpeechRecognitionModule.addListener('volumechange', (event) => {
         if (event.value >= 0) {
@@ -145,7 +238,7 @@ export async function startVoiceAnnotationRecording(options: {
         intervalMillis: 250,
       },
       androidRecognitionServicePackage:
-        ExpoSpeechRecognitionModule.getDefaultRecognitionService().packageName || undefined,
+        recognizerPackage ?? undefined,
     });
 
     const autoStopTimer = setTimeout(() => {
@@ -202,13 +295,18 @@ export async function stopVoiceAnnotationRecording(
   }
 
   try {
-    const audioUri = await Promise.race<string | null>([
+    const rawAudioUri = await Promise.race<string | null>([
       audioUriPromise,
       new Promise<string | null>((resolve) => {
-        setTimeout(() => resolve(null), 1500);
+        setTimeout(() => resolve(null), AUDIO_URI_WAIT_MS);
       }),
     ]);
+    const audioUri = await verifyPersistedAudioFile(rawAudioUri);
     sttSubscriptions.forEach((s) => s.remove());
+    console.log('[voice-annotation] stop-complete', JSON.stringify({
+      rawAudioUri,
+      verifiedAudioUri: audioUri,
+    }));
     return {
       audioUri,
       durationMs: Math.max(0, Date.now() - startedAt),
@@ -271,16 +369,39 @@ export async function uploadVoiceAnnotation(
   const { storageKey, contentType } = getAudioUploadTarget(localUri, waypointLocalId);
 
   try {
-    const blob = await uriToBlob(localUri);
+    console.log('[voice-annotation] upload-start', JSON.stringify({
+      localUri,
+      waypointLocalId,
+      storageKey,
+      contentType,
+    }));
+    const uploadTask = (async () => {
+      const blob = await uriToBlob(localUri);
+      const { error } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(storageKey, blob, { contentType, upsert: true });
 
-    const { error } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .upload(storageKey, blob, { contentType, upsert: true });
+      if (error) throw error;
+    })();
 
-    if (error) throw error;
+    await Promise.race([
+      uploadTask,
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Audio upload timed out')), AUDIO_UPLOAD_TIMEOUT_MS);
+      }),
+    ]);
 
+    console.log('[voice-annotation] upload-success', JSON.stringify({
+      waypointLocalId,
+      storageKey,
+    }));
     return { ok: true, storageKey };
-  } catch {
+  } catch (error) {
+    console.warn('[voice-annotation] upload-failed', JSON.stringify({
+      waypointLocalId,
+      storageKey,
+      error: error instanceof Error ? error.message : String(error),
+    }));
     await enqueueAudioRetry({ localUri, waypointLocalId, storageKey, queuedAt: Date.now() });
     return { ok: false, queued: true, localUri };
   }

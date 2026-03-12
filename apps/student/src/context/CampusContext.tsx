@@ -296,7 +296,10 @@ const NEARBY_CAMPUS_RADIUS_M = 1_500;
 
 async function getDeviceCoords(): Promise<{ latitude: number; longitude: number } | null> {
   try {
-    const permission = await Location.getForegroundPermissionsAsync();
+    let permission = await Location.getForegroundPermissionsAsync();
+    if (permission.status !== 'granted' && permission.canAskAgain) {
+      permission = await Location.requestForegroundPermissionsAsync();
+    }
     if (permission.status !== 'granted') {
       return null;
     }

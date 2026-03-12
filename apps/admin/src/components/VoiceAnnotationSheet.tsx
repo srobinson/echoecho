@@ -43,6 +43,7 @@ export const VoiceAnnotationSheet = forwardRef<BottomSheet, VoiceAnnotationSheet
   ({ waypointLocalId, onSave, onDismiss }, ref) => {
     const {
       state,
+      audioSupport,
       startRecording,
       stopRecording,
       dismissSilencePrompt,
@@ -52,6 +53,10 @@ export const VoiceAnnotationSheet = forwardRef<BottomSheet, VoiceAnnotationSheet
       openMicSettings,
     } = useVoiceAnnotation();
     const accent = useSectionColor();
+    const hasCapturedAudio = state.audioUri != null;
+    const isTranscriptOnlyDevice = !audioSupport.supported;
+    const transcriptOnlyExplanation = audioSupport.explanation
+      ?? 'This device does not support playback clips. You can still save the transcript.';
 
     const handleSave = useCallback(async () => {
       const result = await confirm(waypointLocalId);
@@ -59,6 +64,22 @@ export const VoiceAnnotationSheet = forwardRef<BottomSheet, VoiceAnnotationSheet
         onSave(result);
       }
     }, [confirm, waypointLocalId, onSave]);
+
+    const handleTranscriptOnlySave = useCallback(() => {
+      Alert.alert(
+        isTranscriptOnlyDevice ? 'Save Transcript?' : 'Save Transcript Only?',
+        isTranscriptOnlyDevice
+          ? `${transcriptOnlyExplanation} Saving now will keep the transcript only.`
+          : 'No verified audio clip was found for this take. You can re-record, or continue and save only the transcript text.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: isTranscriptOnlyDevice ? 'Save Transcript' : 'Save Transcript Only',
+            onPress: () => void handleSave(),
+          },
+        ],
+      );
+    }, [handleSave, isTranscriptOnlyDevice, transcriptOnlyExplanation]);
 
     const handleDiscard = useCallback(() => {
       Alert.alert('Discard annotation?', 'Your recording will be lost.', [
@@ -165,7 +186,9 @@ export const VoiceAnnotationSheet = forwardRef<BottomSheet, VoiceAnnotationSheet
               )}
 
               <Text style={styles.supportingHint}>
-                Audio is being captured even if live transcript text has not appeared yet.
+                {isTranscriptOnlyDevice
+                  ? transcriptOnlyExplanation
+                  : 'Transcript may lag while recording. The app will verify the playback clip after you stop.'}
               </Text>
 
               {state.transcript.length > 0 && (
@@ -173,6 +196,24 @@ export const VoiceAnnotationSheet = forwardRef<BottomSheet, VoiceAnnotationSheet
                   <Text style={styles.transcriptText}>{state.transcript}</Text>
                 </View>
               )}
+            </View>
+          )}
+
+          {state.phase === 'processing' && (
+            <View style={styles.centeredContent} accessibilityLiveRegion="polite">
+              <ActivityIndicator
+                size="large"
+                color={accent}
+                accessibilityLabel={isTranscriptOnlyDevice ? 'Finishing transcript' : 'Finalizing audio clip'}
+              />
+              <Text style={styles.hint}>
+                {isTranscriptOnlyDevice ? 'Finishing transcript...' : 'Finalizing audio clip...'}
+              </Text>
+              <Text style={styles.supportingHint}>
+                {isTranscriptOnlyDevice
+                  ? transcriptOnlyExplanation
+                  : 'This usually takes 1 to 5 seconds. We are waiting for the speech engine to finish writing the local playback file.'}
+              </Text>
             </View>
           )}
 
@@ -189,14 +230,59 @@ export const VoiceAnnotationSheet = forwardRef<BottomSheet, VoiceAnnotationSheet
 
               {!state.transcript && (
                 <Text style={styles.supportingHint}>
-                  No transcription was returned, but the audio clip can still be saved with this waypoint.
+                  {isTranscriptOnlyDevice
+                    ? 'No transcription was returned, and this device does not support playback clips for this take.'
+                    : 'No transcription was returned, but the audio clip can still be saved with this waypoint.'}
                 </Text>
               )}
 
+              <View
+                style={[
+                  styles.captureStatus,
+                  hasCapturedAudio ? styles.captureStatusReady : styles.captureStatusTranscriptOnly,
+                ]}
+              >
+                <Ionicons
+                  name={hasCapturedAudio ? 'checkmark-circle' : 'document-text-outline'}
+                  size={16}
+                  color={hasCapturedAudio ? '#81C784' : '#A0AEC0'}
+                />
+                <Text
+                  style={[
+                    styles.captureStatusText,
+                    hasCapturedAudio ? styles.captureStatusTextReady : styles.captureStatusTextTranscriptOnly,
+                  ]}
+                >
+                  {hasCapturedAudio
+                    ? 'Audio attached. Safe to save.'
+                    : isTranscriptOnlyDevice
+                      ? transcriptOnlyExplanation
+                      : 'Transcript ready. Saving now will keep the text, but not an audio playback clip.'}
+                </Text>
+              </View>
+
               <View style={styles.actionRow}>
-                <ActionButton label="Re-record" onPress={reRecord} color="#718096" />
-                <ActionButton label="Discard" onPress={handleDiscard} color="#F06292" />
-                <ActionButton label="Save" onPress={() => void handleSave()} color="#66BB6A" />
+                {hasCapturedAudio ? (
+                  <>
+                    <ActionButton label="Re-record" onPress={reRecord} color="#718096" />
+                    <ActionButton label="Discard" onPress={handleDiscard} color="#F06292" />
+                    <ActionButton
+                      label="Save"
+                      onPress={() => void handleSave()}
+                      color="#66BB6A"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <ActionButton label="Re-record" onPress={reRecord} color="#66BB6A" />
+                    <ActionButton label="Discard" onPress={handleDiscard} color="#F06292" />
+                    <ActionButton
+                      label={isTranscriptOnlyDevice ? 'Save Transcript' : 'Save Transcript Only'}
+                      onPress={handleTranscriptOnlySave}
+                      color="#4A5568"
+                    />
+                  </>
+                )}
               </View>
             </View>
           )}
@@ -205,7 +291,9 @@ export const VoiceAnnotationSheet = forwardRef<BottomSheet, VoiceAnnotationSheet
           {state.phase === 'uploading' && (
             <View style={styles.centeredContent} accessibilityLiveRegion="polite">
               <ActivityIndicator size="large" color={accent} accessibilityLabel="Saving annotation" />
-              <Text style={styles.hint}>Saving annotation...</Text>
+              <Text style={styles.hint}>
+                {hasCapturedAudio ? 'Uploading audio and saving annotation...' : 'Saving transcript annotation...'}
+              </Text>
             </View>
           )}
         </BottomSheetView>
@@ -291,6 +379,34 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  captureStatus: {
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  captureStatusReady: {
+    backgroundColor: '#81C78418',
+    borderColor: '#81C78433',
+  },
+  captureStatusTranscriptOnly: {
+    backgroundColor: '#A0AEC018',
+    borderColor: '#A0AEC033',
+  },
+  captureStatusText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  captureStatusTextReady: {
+    color: '#C6F6D5',
+  },
+  captureStatusTextTranscriptOnly: {
+    color: '#CBD5E0',
   },
   limitText: { color: '#F06292', fontSize: 14, fontWeight: '600' },
   transcriptBox: {

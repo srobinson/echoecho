@@ -6,6 +6,7 @@ import type { Feature, FeatureCollection, Point } from 'geojson';
 import { BuildingLayer } from '../map/BuildingLayer';
 import { PoiLayer } from '../map/PoiLayer';
 import { RouteLayer } from '../map/RouteLayer';
+import { filterLngLatPairs, hasFiniteCoordinate } from '../../lib/mapboxCoordinates';
 
 interface Props {
   route: Route;
@@ -64,15 +65,19 @@ const HAZARD_SYMBOL_LAYER_ID = 'route-preview-hazards-symbol';
 const HazardPreviewLayer = memo(function HazardPreviewLayer({ route }: { route: Route }) {
   const shape = useMemo((): FeatureCollection<Point> => ({
     type: 'FeatureCollection',
-    features: (route.hazards ?? []).map((hazard): Feature<Point> => ({
-      type: 'Feature',
-      id: hazard.id,
-      properties: { id: hazard.id },
-      geometry: {
-        type: 'Point',
-        coordinates: [hazard.coordinate.longitude, hazard.coordinate.latitude],
-      },
-    })),
+    features: (route.hazards ?? []).flatMap((hazard): Feature<Point>[] => {
+      if (!hasFiniteCoordinate(hazard.coordinate)) return [];
+
+      return [{
+        type: 'Feature',
+        id: hazard.id,
+        properties: { id: hazard.id },
+        geometry: {
+          type: 'Point',
+          coordinates: [hazard.coordinate.longitude, hazard.coordinate.latitude],
+        },
+      }];
+    }),
   }), [route.hazards]);
 
   if ((route.hazards?.length ?? 0) === 0) {
@@ -109,17 +114,23 @@ function computeBounds(route: Route, buildings: Building[]) {
   const points: [number, number][] = [];
 
   for (const waypoint of route.waypoints) {
-    points.push([waypoint.coordinate.longitude, waypoint.coordinate.latitude]);
+    if (hasFiniteCoordinate(waypoint.coordinate)) {
+      points.push([waypoint.coordinate.longitude, waypoint.coordinate.latitude]);
+    }
   }
   for (const hazard of route.hazards ?? []) {
-    points.push([hazard.coordinate.longitude, hazard.coordinate.latitude]);
+    if (hasFiniteCoordinate(hazard.coordinate)) {
+      points.push([hazard.coordinate.longitude, hazard.coordinate.latitude]);
+    }
   }
   for (const building of buildings) {
-    for (const vertex of building.footprint ?? []) {
+    for (const vertex of filterLngLatPairs(building.footprint ?? [])) {
       points.push(vertex);
     }
     for (const entrance of building.entrances ?? []) {
-      points.push([entrance.coordinate.longitude, entrance.coordinate.latitude]);
+      if (hasFiniteCoordinate(entrance.coordinate)) {
+        points.push([entrance.coordinate.longitude, entrance.coordinate.latitude]);
+      }
     }
   }
 

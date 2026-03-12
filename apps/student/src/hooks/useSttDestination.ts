@@ -64,7 +64,8 @@ export interface UseSttDestinationResult {
 // ── Hook ────────────────────────────────────────────────────────────────────
 
 export function useSttDestination(
-  onDestinationSelected: (buildingId: string, name: string) => void
+  onDestinationSelected: (buildingId: string, name: string) => void,
+  campusId?: string,
 ): UseSttDestinationResult {
   const [sttState, setSttState] = useState<SttState>('idle');
   const [transcript, setTranscript] = useState<string | null>(null);
@@ -107,11 +108,79 @@ export function useSttDestination(
     setError(null);
   }, [clearTimers]);
 
+  const confirmMatch = useCallback((match: DestinationMatch) => {
+    setPendingMatch(match);
+    setMatches([]);
+    setSttState('confirming');
+    Speech.stop();
+    Speech.speak(`Destination matched. Starting navigation to ${match.name}.`);
+    AccessibilityInfo.announceForAccessibility(
+      `Destination matched. Starting navigation to ${match.name}.`
+    );
+
+    confirmTimerRef.current = setTimeout(() => {
+      onDestinationSelected(match.buildingId, match.name);
+      resetToIdle();
+    }, 900);
+  }, [onDestinationSelected, resetToIdle]);
+
+  const resolveDisambiguationMatch = useCallback((
+    text: string,
+    options: DestinationMatch[],
+  ): DestinationMatch | null => {
+    const normalized = text.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!normalized) return null;
+
+    const ordinalMap: Record<string, number> = {
+      '1': 0,
+      'one': 0,
+      'first': 0,
+      '2': 1,
+      'two': 1,
+      'second': 1,
+    };
+    if (normalized in ordinalMap) {
+      return options[ordinalMap[normalized]] ?? null;
+    }
+
+    const normalizedOptions = options.map((option) => ({
+      option,
+      normalizedName: option.name.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim(),
+    }));
+
+    const exact = normalizedOptions.find(({ normalizedName }) => normalizedName === normalized);
+    if (exact) return exact.option;
+
+    const prefixMatches = normalizedOptions.filter(({ normalizedName }) => normalizedName.startsWith(normalized));
+    if (prefixMatches.length === 1) return prefixMatches[0].option;
+
+    const includesMatches = normalizedOptions.filter(({ normalizedName }) => normalizedName.includes(normalized));
+    if (includesMatches.length === 1) return includesMatches[0].option;
+
+    return null;
+  }, []);
+
   // ── Match processing (defined before event handlers to avoid stale closure) ──
 
   const processTranscript = useCallback((text: string) => {
     setSttState('transcribing');
-    const results = fuzzySearch(text);
+
+    if (sttState === 'disambiguating' && matches.length > 0) {
+      const selected = resolveDisambiguationMatch(text, matches);
+      if (selected) {
+        confirmMatch(selected);
+        return;
+      }
+
+      const names = matches.map((match) => match.name).join(' or ');
+      setSttState('disambiguating');
+      Speech.stop();
+      Speech.speak(`I heard ${text}. Did you mean ${names}?`);
+      AccessibilityInfo.announceForAccessibility(`I heard ${text}. Did you mean ${names}?`);
+      return;
+    }
+
+    const results = fuzzySearch(text, campusId);
 
     if (results.length === 0) {
       setError(`No destination found for "${text}". Try again or spell it out.`);
@@ -132,25 +201,16 @@ export function useSttDestination(
         (r: FuseMatch) => ({ buildingId: r.item.id, name: r.item.name })
       );
       setMatches(topTwo);
+      setPendingMatch(null);
       setSttState('disambiguating');
       const names = topTwo.map((m) => m.name).join(' or ');
+      Speech.stop();
+      Speech.speak(`Did you mean ${names}?`);
       AccessibilityInfo.announceForAccessibility(`Did you mean: ${names}?`);
     } else {
-      const match = { buildingId: best.item.id, name: best.item.name };
-      setPendingMatch(match);
-      setSttState('confirming');
-      Speech.stop();
-      Speech.speak(`Destination matched. Starting navigation to ${match.name}.`);
-      AccessibilityInfo.announceForAccessibility(
-        `Destination matched. Starting navigation to ${match.name}.`
-      );
-
-      confirmTimerRef.current = setTimeout(() => {
-        onDestinationSelected(match.buildingId, match.name);
-        resetToIdle();
-      }, 900);
+      confirmMatch({ buildingId: best.item.id, name: best.item.name });
     }
-  }, [onDestinationSelected, resetToIdle]);
+  }, [campusId, confirmMatch, matches, resolveDisambiguationMatch, sttState]);
 
   // ── STT event handlers (wrapped in useCallback for stable references) ──
 
