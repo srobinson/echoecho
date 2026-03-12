@@ -39,7 +39,8 @@ import { getLocalRoutesForCampus, type LocalRoute } from '../src/lib/localDb';
 import { supabase } from '../src/lib/supabase';
 import { matchRoute, preloadRoute } from '../src/lib/routeMatchingService';
 import { syncCampus } from '../src/lib/syncEngine';
-import { haversineM, type Campus, type Route } from '@echoecho/shared';
+import { type Campus, type Route } from '@echoecho/shared';
+import { selectCampusForCoords } from '../src/lib/campusDetection';
 
 // Show at most 5 favorites on the home screen; remainder accessible via "See all"
 const HOME_FAVORITES_LIMIT = 5;
@@ -77,31 +78,12 @@ async function resolveCampusForCoords(
   }
 
   const campuses = data as Campus[];
-  let nearest = campuses[0];
-  let nearestDistance = haversineM(
-    latitude,
-    longitude,
-    nearest.center.latitude,
-    nearest.center.longitude,
-  );
-
-  for (const campus of campuses.slice(1)) {
-    const distance = haversineM(
-      latitude,
-      longitude,
-      campus.center.latitude,
-      campus.center.longitude,
-    );
-    if (distance < nearestDistance) {
-      nearest = campus;
-      nearestDistance = distance;
-    }
-  }
+  const selection = selectCampusForCoords(campuses, { latitude, longitude }, NEARBY_CAMPUS_RADIUS_M);
 
   return {
-    selectedCampus: nearestDistance <= NEARBY_CAMPUS_RADIUS_M ? nearest : null,
-    nearestCampus: nearest,
-    nearestDistanceMeters: nearestDistance,
+    selectedCampus: selection?.selectedCampus ?? null,
+    nearestCampus: selection?.nearestCampus ?? null,
+    nearestDistanceMeters: selection?.nearestDistanceMeters ?? null,
   };
 }
 

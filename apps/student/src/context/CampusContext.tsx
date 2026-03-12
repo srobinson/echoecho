@@ -29,7 +29,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { supabase } from '../lib/supabase';
 import { syncCampus } from '../lib/syncEngine';
-import { haversineM, type Campus, type Entrance, type Waypoint } from '@echoecho/shared';
+import { type Campus, type Entrance, type Waypoint } from '@echoecho/shared';
+import { selectCampusForCoords } from '../lib/campusDetection';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -94,7 +95,7 @@ export function CampusProvider({ children }: CampusProviderProps) {
 
       const { data: campusRows, error: campusErr } = await supabase
         .from('v_campuses' as 'campuses')
-        .select('id, name, center, securityPhone')
+        .select('id, name, center, bounds, securityPhone')
         .order('name');
 
       if (campusErr) {
@@ -106,9 +107,10 @@ export function CampusProvider({ children }: CampusProviderProps) {
         return false;
       }
 
-      const campusSelection = selectCampusForDevice(
+      const campusSelection = selectCampusForCoords(
         campusRows as Array<Campus & { securityPhone?: string | null }>,
         deviceCoords,
+        NEARBY_CAMPUS_RADIUS_M,
       );
 
       setNearestCampus(
@@ -316,44 +318,4 @@ async function getDeviceCoords(): Promise<{ latitude: number; longitude: number 
   } catch {
     return null;
   }
-}
-
-function selectCampusForDevice(
-  campuses: Array<Campus & { securityPhone?: string | null }>,
-  coords: { latitude: number; longitude: number } | null,
-): {
-  selectedCampus: (Campus & { securityPhone?: string | null }) | null;
-  nearestCampus: Campus & { securityPhone?: string | null };
-  nearestDistanceMeters: number;
-} | null {
-  if (campuses.length === 0 || !coords) {
-    return null;
-  }
-
-  let nearest = campuses[0];
-  let nearestDistance = haversineM(
-    coords.latitude,
-    coords.longitude,
-    nearest.center.latitude,
-    nearest.center.longitude,
-  );
-
-  for (const campus of campuses.slice(1)) {
-    const distance = haversineM(
-      coords.latitude,
-      coords.longitude,
-      campus.center.latitude,
-      campus.center.longitude,
-    );
-    if (distance < nearestDistance) {
-      nearest = campus;
-      nearestDistance = distance;
-    }
-  }
-
-  return {
-    selectedCampus: nearestDistance <= NEARBY_CAMPUS_RADIUS_M ? nearest : null,
-    nearestCampus: nearest,
-    nearestDistanceMeters: nearestDistance,
-  };
 }
