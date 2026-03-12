@@ -8,7 +8,6 @@ import {
   StyleSheet,
   Pressable,
   Alert,
-  FlatList,
   TextInput,
   ActivityIndicator,
 } from 'react-native';
@@ -22,7 +21,7 @@ import type { Campus } from '@echoecho/shared';
 import { tabColors } from '@echoecho/ui';
 import { SectionColorProvider, useSectionColor } from '../../src/contexts/SectionColorContext';
 import { useHasRole } from '../../src/hooks/useProtectedRoute';
-import { createCampus, softDeleteCampus } from '../../src/services/campusService';
+import { softDeleteCampus } from '../../src/services/campusService';
 
 const LOCATION_TIMEOUT_MS = 10_000;
 
@@ -45,11 +44,11 @@ export default function SettingsScreen() {
 
 function SettingsScreenInner() {
   const accent = useSectionColor();
-  const { activeCampus, campuses, setActiveCampus, addCampus, removeCampus } = useCampusStore();
-  const { signOut, session, refreshProfile } = useAuthStore();
+  const { activeCampus, campuses, setActiveCampus, removeCampus } = useCampusStore();
+  const { signOut, session } = useAuthStore();
   const isAdmin = useHasRole('admin');
   const [newCampusName, setNewCampusName] = useState('');
-  const [isCreatingCampus, setIsCreatingCampus] = useState(false);
+  const [isLaunchingBoundaryFlow, setIsLaunchingBoundaryFlow] = useState(false);
   const [isDeletingCampusId, setIsDeletingCampusId] = useState<string | null>(null);
   const [menuCampusId, setMenuCampusId] = useState<string | null>(null);
 
@@ -65,7 +64,7 @@ function SettingsScreenInner() {
       return;
     }
 
-    setIsCreatingCampus(true);
+    setIsLaunchingBoundaryFlow(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
@@ -74,37 +73,40 @@ function SettingsScreenInner() {
 
       const cached = await Location.getLastKnownPositionAsync({ maxAge: 30_000 });
       const loc = cached ?? await getCurrentPosition();
-
-      const createdCampus = await createCampus({
-        name: trimmedName,
-        latitude: loc.coords.latitude,
-        longitude: loc.coords.longitude,
-        isBootstrap: campuses.length === 0,
-      });
-
-      addCampus(createdCampus);
-      setActiveCampus(createdCampus);
       setNewCampusName('');
-
-      if (campuses.length === 0) {
-        await refreshProfile();
-      }
+      router.push({
+        // Expo Router typed-route generation lags new files during local typecheck.
+        pathname: '/campus-boundary' as any,
+        params: {
+          mode: 'create',
+          name: trimmedName,
+          latitude: String(loc.coords.latitude),
+          longitude: String(loc.coords.longitude),
+        },
+      });
     } catch (err) {
       Alert.alert('Create Campus Failed', err instanceof Error ? err.message : 'Unknown error');
     } finally {
-      setIsCreatingCampus(false);
+      setIsLaunchingBoundaryFlow(false);
     }
   };
 
-  const confirmDeleteCampus = (campus: Campus) => {
-    if (campuses.length <= 1) {
-      Alert.alert('Cannot Delete Campus', 'At least one campus must remain configured.');
-      return;
-    }
+  const handleRecreateBoundary = (campus: Campus) => {
+    setMenuCampusId(null);
+    router.push({
+      // Expo Router typed-route generation lags new files during local typecheck.
+      pathname: '/campus-boundary' as any,
+      params: {
+        mode: 'recreate',
+        campusId: campus.id,
+      },
+    });
+  };
 
+  const confirmDeleteCampus = (campus: Campus) => {
     Alert.alert(
       'Delete Campus',
-      `Remove ${campus.name} from the active campus list? Existing campus-linked records will be hidden rather than hard-deleted.`,
+      `Delete ${campus.name}? This permanently removes the campus and deletes its linked buildings, routes, hazards, and POIs.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -150,7 +152,7 @@ function SettingsScreenInner() {
         </Pressable>
       </View>
 
-      <View style={styles.section}>
+      <View style={[styles.section, menuCampusId && styles.sectionMenuActive]}>
         <Text style={styles.sectionTitle}>Campuses</Text>
         {campuses.map((campus) => {
           const isActive = campus.id === activeCampus?.id;
@@ -216,10 +218,23 @@ function SettingsScreenInner() {
                         style={({ pressed }) => [
                           styles.contextMenuItem,
                           pressed && styles.rowPressed,
-                          (isDeleting || campuses.length <= 1) && styles.buttonDisabled,
+                        ]}
+                        onPress={() => handleRecreateBoundary(campus)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Recreate boundary for ${campus.name}`}
+                      >
+                        <Ionicons name="scan-outline" size={16} color={accent} />
+                        <Text style={[styles.contextMenuActionText, { color: accent }]}>Recreate boundary</Text>
+                      </Pressable>
+                      <View style={styles.contextMenuDivider} />
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.contextMenuItem,
+                          pressed && styles.rowPressed,
+                          isDeleting && styles.buttonDisabled,
                         ]}
                         onPress={() => confirmDeleteCampus(campus)}
-                        disabled={isDeleting || campuses.length <= 1}
+                        disabled={isDeleting}
                         accessibilityRole="button"
                         accessibilityLabel={`Delete ${campus.name}`}
                       >
@@ -258,19 +273,19 @@ function SettingsScreenInner() {
               style={({ pressed }) => [
                 styles.primaryButton,
                 pressed && styles.rowPressed,
-                isCreatingCampus && styles.buttonDisabled,
+                isLaunchingBoundaryFlow && styles.buttonDisabled,
               ]}
               onPress={() => void handleCreateCampus()}
-              disabled={isCreatingCampus}
+              disabled={isLaunchingBoundaryFlow}
               accessibilityRole="button"
-              accessibilityLabel="Create campus using current location"
+              accessibilityLabel="Draw campus boundary using current location as starting point"
             >
-              {isCreatingCampus ? (
+              {isLaunchingBoundaryFlow ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
                 <>
-                  <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
-                  <Text style={styles.primaryButtonText}>Create Campus</Text>
+                  <Ionicons name="map-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.primaryButtonText}>Draw Boundary</Text>
                 </>
               )}
             </Pressable>
@@ -313,6 +328,11 @@ const styles = StyleSheet.create({
     borderColor: '#1E1E26',
     marginBottom: 16,
     overflow: 'visible',
+  },
+  sectionMenuActive: {
+    position: 'relative',
+    zIndex: 100,
+    elevation: 100,
   },
   sectionTitle: {
     color: '#606070',
@@ -440,8 +460,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 10,
   },
+  contextMenuDivider: {
+    height: 1,
+    backgroundColor: '#2A2A34',
+    marginVertical: 6,
+  },
   contextMenuDeleteText: {
     color: '#F06292',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  contextMenuActionText: {
     fontSize: 13,
     fontWeight: '600',
   },

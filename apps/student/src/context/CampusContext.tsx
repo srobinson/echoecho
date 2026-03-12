@@ -95,7 +95,7 @@ export function CampusProvider({ children }: CampusProviderProps) {
 
       const { data: campusRows, error: campusErr } = await supabase
         .from('v_campuses' as 'campuses')
-        .select('id, name, center, bounds, securityPhone')
+        .select('id, name, center, bounds, footprint, securityPhone')
         .order('name');
 
       if (campusErr) {

@@ -2,9 +2,8 @@ import { useState, useCallback } from 'react';
 import * as Location from 'expo-location';
 import { supabase } from '../lib/supabase';
 import { useCampusStore } from '../stores/campusStore';
-import { useAuthStore } from '../stores/authStore';
-import { haversineM, type Campus } from '@echoecho/shared';
-import { createCampus as createCampusRecord } from '../services/campusService';
+import type { Campus } from '@echoecho/shared';
+import { selectNearestCampus } from '../lib/campusDetection';
 
 // Accuracy.High uses GPS directly and accepts mock locations on emulator.
 // Accuracy.Balanced uses Wi-Fi/cell towers which are unavailable on emulator,
@@ -37,9 +36,7 @@ type DetectionState =
 export function useCampusDetection() {
   const [state, setState] = useState<DetectionState>({ phase: 'idle' });
   const setCampuses = useCampusStore((s) => s.setCampuses);
-  const addCampus = useCampusStore((s) => s.addCampus);
   const setActiveCampus = useCampusStore((s) => s.setActiveCampus);
-  const refreshProfile = useAuthStore((s) => s.refreshProfile);
 
   const detect = useCallback(async () => {
     setState({ phase: 'requesting_permission' });
@@ -76,7 +73,10 @@ export function useCampusDetection() {
     const campuses = (data ?? []) as unknown as Campus[];
     setCampuses(campuses);
 
-    const nearest = findNearestCampus(campuses, coords.latitude, coords.longitude);
+    const nearest = selectNearestCampus(campuses, {
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+    }, NEARBY_RADIUS_KM);
 
     if (nearest) {
       setActiveCampus(nearest);
@@ -95,47 +95,5 @@ export function useCampusDetection() {
     setState({ phase: 'found', campus });
   }, [setActiveCampus]);
 
-  const createCampus = useCallback(async (name: string, latitude: number, longitude: number) => {
-    // Determine whether this is the first campus (bootstrap path).
-    // useCampusStore is populated by detect() before createCampus is ever called.
-    const isBootstrap = useCampusStore.getState().campuses.length === 0;
-    const campus = await createCampusRecord({
-      name,
-      latitude,
-      longitude,
-      isBootstrap,
-    });
-    addCampus(campus);
-    setActiveCampus(campus);
-    setState({ phase: 'found', campus });
-
-    // Bootstrap case: the RPC promoted the caller to admin. Refresh the auth
-    // profile so the rest of the app reflects the new role immediately.
-    if (isBootstrap) {
-      await refreshProfile();
-    }
-
-    return campus;
-  }, [addCampus, setActiveCampus, refreshProfile]);
-
-  return { state, detect, selectCampus, createCampus };
-}
-
-function findNearestCampus(
-  campuses: Campus[],
-  lat: number,
-  lng: number,
-): Campus | null {
-  let nearest: Campus | null = null;
-  let minDist = Infinity;
-
-  for (const c of campuses) {
-    const dist = haversineM(lat, lng, c.center.latitude, c.center.longitude) / 1000;
-    if (dist < NEARBY_RADIUS_KM && dist < minDist) {
-      minDist = dist;
-      nearest = c;
-    }
-  }
-
-  return nearest;
+  return { state, detect, selectCampus };
 }

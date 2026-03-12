@@ -4,9 +4,11 @@ import MapboxGL from '@rnmapbox/maps';
 import type { Building, Route } from '@echoecho/shared';
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { BuildingLayer } from '../map/BuildingLayer';
+import { CampusBoundaryLayer } from '../map/CampusBoundaryLayer';
 import { PoiLayer } from '../map/PoiLayer';
 import { RouteLayer } from '../map/RouteLayer';
 import { filterLngLatPairs, hasFiniteCoordinate } from '../../lib/mapboxCoordinates';
+import { useCampusStore } from '../../stores/campusStore';
 
 interface Props {
   route: Route;
@@ -21,7 +23,11 @@ export const RoutePreviewMap = memo(function RoutePreviewMap({
   height,
   interactive = false,
 }: Props) {
-  const bounds = useMemo(() => computeBounds(route, buildings), [route, buildings]);
+  const activeCampus = useCampusStore((s) => s.activeCampus);
+  const bounds = useMemo(
+    () => computeBounds(activeCampus?.footprint ?? [], route, buildings),
+    [activeCampus?.footprint, buildings, route],
+  );
   const cameraPadding = useMemo(
     () => ({ paddingTop: 28, paddingBottom: 28, paddingLeft: 28, paddingRight: 28 }),
     [],
@@ -49,6 +55,16 @@ export const RoutePreviewMap = memo(function RoutePreviewMap({
             ...cameraPadding,
           }}
         />
+        {activeCampus?.footprint?.length ? (
+          <CampusBoundaryLayer
+            idPrefix={`route-preview-campus-${route.id}`}
+            vertices={activeCampus.footprint}
+            lineColor="#4FC3F7"
+            fillColor="#4FC3F7"
+            lineOpacity={0.65}
+            fillOpacity={0.08}
+          />
+        ) : null}
         <BuildingLayer buildings={buildings} onBuildingPress={() => {}} />
         <RouteLayer routes={[route]} onRoutePress={() => {}} />
         <PoiLayer waypoints={route.waypoints} onWaypointPress={() => {}} />
@@ -110,7 +126,12 @@ const HazardPreviewLayer = memo(function HazardPreviewLayer({ route }: { route: 
   );
 });
 
-function computeBounds(route: Route, buildings: Building[]) {
+function computeBounds(campusFootprint: [number, number][], route: Route, buildings: Building[]) {
+  const campusVertices = filterLngLatPairs(campusFootprint);
+  if (campusVertices.length >= 3) {
+    return polygonBounds(campusVertices, 0.0002);
+  }
+
   const points: [number, number][] = [];
 
   for (const waypoint of route.waypoints) {
@@ -141,6 +162,10 @@ function computeBounds(route: Route, buildings: Building[]) {
     };
   }
 
+  return polygonBounds(points, 0.00035);
+}
+
+function polygonBounds(points: [number, number][], minimumPad: number) {
   let minLng = points[0][0];
   let maxLng = points[0][0];
   let minLat = points[0][1];
@@ -153,8 +178,8 @@ function computeBounds(route: Route, buildings: Building[]) {
     maxLat = Math.max(maxLat, lat);
   }
 
-  const lngPad = Math.max((maxLng - minLng) * 0.2, 0.00035);
-  const latPad = Math.max((maxLat - minLat) * 0.2, 0.00035);
+  const lngPad = Math.max((maxLng - minLng) * 0.2, minimumPad);
+  const latPad = Math.max((maxLat - minLat) * 0.2, minimumPad);
 
   return {
     ne: [maxLng + lngPad, maxLat + latPad] as [number, number],

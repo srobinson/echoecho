@@ -66,7 +66,7 @@ async function resolveCampusForCoords(
 }> {
   const { data, error } = await supabase
     .from('v_campuses' as 'campuses')
-    .select('id, name, center, bounds, defaultZoom')
+    .select('id, name, center, bounds, footprint, defaultZoom')
     .order('name');
 
   if (error || !data || data.length === 0) {

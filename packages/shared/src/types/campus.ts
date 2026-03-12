@@ -8,6 +8,8 @@ export interface Campus {
   name: string;
   shortName: string;
   center: Coordinate;
+  /** Polygon ring of the campus boundary, as [lng, lat] pairs */
+  footprint: [number, number][];
   bounds: BoundingBox;
   defaultZoom: number;
   createdAt: string; // ISO 8601

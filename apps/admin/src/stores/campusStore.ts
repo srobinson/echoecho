@@ -9,6 +9,7 @@ interface CampusStore {
   setActiveCampus: (campus: Campus | null) => void;
   setCampuses: (campuses: Campus[]) => void;
   addCampus: (campus: Campus) => void;
+  updateCampus: (campus: Campus) => void;
   removeCampus: (campusId: string, nextActiveCampus?: Campus | null) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
@@ -24,6 +25,12 @@ export const useCampusStore = create<CampusStore>((set) => ({
   setCampuses: (campuses) => set({ campuses }),
   addCampus: (campus) => set((s) => ({
     campuses: [...s.campuses, campus].sort((a, b) => a.name.localeCompare(b.name)),
+  })),
+  updateCampus: (campus) => set((s) => ({
+    campuses: s.campuses
+      .map((item) => item.id === campus.id ? campus : item)
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    activeCampus: s.activeCampus?.id === campus.id ? campus : s.activeCampus,
   })),
   removeCampus: (campusId, nextActiveCampus) => set((s) => ({
     campuses: s.campuses.filter((campus) => campus.id !== campusId),

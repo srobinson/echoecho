@@ -7,17 +7,17 @@
  *
  * MapDetailPanel's `detailContent` slot is the extension point for ALP-966/967/968.
  */
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { View, StyleSheet, Pressable, Text, Platform, ActivityIndicator } from 'react-native';
 import MapboxGL from '@rnmapbox/maps';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import * as Location from 'expo-location';
 
 import { MapLayerControl } from '../../src/components/MapLayerControl';
 import { BuildingLayer } from '../../src/components/map/BuildingLayer';
+import { CampusBoundaryLayer } from '../../src/components/map/CampusBoundaryLayer';
 import { RouteLayer } from '../../src/components/map/RouteLayer';
 import { PoiLayer } from '../../src/components/map/PoiLayer';
 import { MapDetailPanel, type DetailFeature } from '../../src/components/map/MapDetailPanel';
@@ -38,6 +38,7 @@ import { WaypointBeforeAfterModal } from '../../src/components/waypoint/Waypoint
 import { useCampusStore } from '../../src/stores/campusStore';
 import { useMapViewportStore } from '../../src/stores/mapViewportStore';
 import { MAPBOX_STYLE_SATELLITE } from '../../src/lib/mapbox';
+import { filterLngLatPairs } from '../../src/lib/mapboxCoordinates';
 import { useAdminMapData } from '../../src/hooks/useAdminMapData';
 import { useBuildingDraw } from '../../src/hooks/useBuildingDraw';
 import { useWaypointEdit } from '../../src/hooks/useWaypointEdit';
@@ -76,8 +77,9 @@ function MapScreenInner() {
   const [pendingEntranceToken, setPendingEntranceToken] = useState<string | null>(null);
   const { activeCampus } = useCampusStore();
   const setViewport = useMapViewportStore((s) => s.setViewport);
-  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
-  const [hasInitializedViewport, setHasInitializedViewport] = useState(false);
+  const savedCampusId = useMapViewportStore((s) => s.campusId);
+  const savedCenter = useMapViewportStore((s) => s.center);
+  const savedZoom = useMapViewportStore((s) => s.zoom);
 
   const { buildings, routes, annotationWaypoints, isLoading, error, refresh } = useAdminMapData(
     activeCampus?.id ?? null,
@@ -89,51 +91,23 @@ function MapScreenInner() {
   const campusCenter: [number, number] = activeCampus?.center
     ? [activeCampus.center.longitude, activeCampus.center.latitude]
     : TSBVI_CENTER;
+  const shouldRestoreViewport = savedCampusId === activeCampus?.id && savedCenter && savedZoom != null;
+  const initialCenter = shouldRestoreViewport ? savedCenter : campusCenter;
+  const initialZoom = shouldRestoreViewport ? savedZoom : (activeCampus?.defaultZoom ?? DEFAULT_ZOOM);
+  const campusBounds = useMemo(() => computeCampusBounds(activeCampus?.footprint ?? []), [activeCampus?.footprint]);
 
   useEffect(() => {
-    let isCancelled = false;
-
-    async function initializeFromCurrentLocation() {
-      if (hasInitializedViewport) return;
-
-      try {
-        const foreground = await Location.getForegroundPermissionsAsync();
-        if (foreground.status !== 'granted') {
-          if (!isCancelled) {
-            setMapCenter(campusCenter);
-            setHasInitializedViewport(true);
-          }
-          return;
-        }
-
-        const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: 60_000 });
-        const current = lastKnown ?? await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
-        });
-
-        if (!isCancelled) {
-          setMapCenter([current.coords.longitude, current.coords.latitude]);
-          setHasInitializedViewport(true);
-        }
-      } catch {
-        if (!isCancelled) {
-          setMapCenter(campusCenter);
-          setHasInitializedViewport(true);
-        }
-      }
+    if (!activeCampus?.id || !campusBounds || shouldRestoreViewport) {
+      return;
     }
 
-    void initializeFromCurrentLocation();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [campusCenter, hasInitializedViewport]);
-
-  useEffect(() => {
-    if (!mapCenter) return;
-    setViewport(mapCenter, DEFAULT_ZOOM);
-  }, [mapCenter, setViewport]);
+    cameraRef.current?.fitBounds(
+      campusBounds.ne,
+      campusBounds.sw,
+      [32, 32, 32, 32],
+      0,
+    );
+  }, [activeCampus?.id, campusBounds, shouldRestoreViewport]);
 
   const handleClose = useCallback(() => setSelected(null), []);
 
@@ -165,9 +139,9 @@ function MapScreenInner() {
   const handleMapIdle = useCallback((state: MapboxGL.MapState) => {
     const { center: c, zoom: z } = state.properties;
     if (c && z != null) {
-      setViewport([c[0], c[1]], z);
+      setViewport([c[0], c[1]], z, activeCampus?.id ?? null);
     }
-  }, [setViewport]);
+  }, [activeCampus?.id, setViewport]);
 
   // Handle map press depending on current mode
   const handleMapPress = useCallback((feature: GeoJSON.Feature) => {
@@ -260,16 +234,25 @@ function MapScreenInner() {
           <MapboxGL.Camera
             ref={cameraRef}
             defaultSettings={{
-              centerCoordinate: mapCenter ?? campusCenter,
-              zoomLevel: DEFAULT_ZOOM,
+              centerCoordinate: initialCenter,
+              zoomLevel: initialZoom,
             }}
-            centerCoordinate={mapCenter ?? campusCenter}
-            zoomLevel={DEFAULT_ZOOM}
             animationMode="moveTo"
             animationDuration={0}
           />
 
           <MapboxGL.UserLocation visible animated />
+
+          {activeCampus?.footprint?.length ? (
+            <CampusBoundaryLayer
+              idPrefix={`main-map-campus-${activeCampus.id}`}
+              vertices={activeCampus.footprint}
+              lineColor="#4FC3F7"
+              fillColor="#4FC3F7"
+              lineOpacity={0.65}
+              fillOpacity={0.07}
+            />
+          ) : null}
 
           {activeLayers.buildings && (
             <BuildingLayer
@@ -478,6 +461,31 @@ function MapScreenInner() {
       </SafeAreaView>
     </GestureHandlerRootView>
   );
+}
+
+function computeCampusBounds(footprint: [number, number][]) {
+  const ring = filterLngLatPairs(footprint);
+  if (ring.length < 3) return null;
+
+  let minLng = ring[0][0];
+  let maxLng = ring[0][0];
+  let minLat = ring[0][1];
+  let maxLat = ring[0][1];
+
+  for (const [lng, lat] of ring) {
+    minLng = Math.min(minLng, lng);
+    maxLng = Math.max(maxLng, lng);
+    minLat = Math.min(minLat, lat);
+    maxLat = Math.max(maxLat, lat);
+  }
+
+  const lngPad = Math.max((maxLng - minLng) * 0.12, 0.0002);
+  const latPad = Math.max((maxLat - minLat) * 0.12, 0.0002);
+
+  return {
+    ne: [maxLng + lngPad, maxLat + latPad] as [number, number],
+    sw: [minLng - lngPad, minLat - latPad] as [number, number],
+  };
 }
 
 const styles = StyleSheet.create({

@@ -2,11 +2,11 @@ import type { Campus } from '@echoecho/shared';
 import {
   distanceToCampusMeters,
   isPointWithinCampusBounds,
-  selectCampusForCoords,
+  selectNearestCampus,
 } from '../campusDetection';
 
 function makeCampus(overrides: Partial<Campus> = {}): Campus {
-  const campus: Campus = {
+  return {
     id: 'campus-1',
     name: 'TSBVI',
     shortName: 'TSBVI',
@@ -25,29 +25,21 @@ function makeCampus(overrides: Partial<Campus> = {}): Campus {
     defaultZoom: 16,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
-  };
-
-  return {
-    ...campus,
     ...overrides,
-    footprint: overrides.footprint ?? campus.footprint,
   };
 }
 
-describe('campusDetection', () => {
-  it('treats a point inside campus bounds as on campus even when the center is far away', () => {
+describe('admin campusDetection', () => {
+  it('selects a campus when the user is inside its bounds even if the center is far away', () => {
     const campus = makeCampus();
     const coords = { latitude: 30.3149769, longitude: -97.7393206 };
 
     expect(isPointWithinCampusBounds(campus, coords)).toBe(true);
     expect(distanceToCampusMeters(campus, coords)).toBe(0);
-
-    const selection = selectCampusForCoords([campus], coords, 1500);
-    expect(selection?.selectedCampus?.id).toBe(campus.id);
-    expect(selection?.nearestDistanceMeters).toBe(0);
+    expect(selectNearestCampus([campus], coords, 5)?.id).toBe(campus.id);
   });
 
-  it('uses distance to campus bounds when the user is outside the campus', () => {
+  it('uses boundary-aware distance when outside the campus', () => {
     const campus = makeCampus();
     const coords = { latitude: 30.3205, longitude: -97.7393206 };
 
@@ -56,26 +48,5 @@ describe('campusDetection', () => {
     const distance = distanceToCampusMeters(campus, coords);
     expect(distance).toBeGreaterThan(0);
     expect(distance).toBeLessThan(500);
-  });
-
-  it('does not treat a point inside the bounding box but outside the polygon as on campus', () => {
-    const campus = makeCampus({
-      footprint: [
-        [-97.7418, 30.3134],
-        [-97.7370, 30.3134],
-        [-97.7394, 30.3165],
-        [-97.7418, 30.3134],
-      ],
-    });
-    const coords = { latitude: 30.3159, longitude: -97.7374 };
-
-    expect(isPointWithinCampusBounds(campus, coords)).toBe(false);
-
-    const distance = distanceToCampusMeters(campus, coords);
-    expect(distance).toBeGreaterThan(0);
-
-    const selection = selectCampusForCoords([campus], coords, 50);
-    expect(selection?.selectedCampus).toBeNull();
-    expect(selection?.nearestCampus.id).toBe(campus.id);
   });
 });

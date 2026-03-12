@@ -62,7 +62,7 @@ supabase-push-staging:
 # What it does:
 #   1. Dumps the current remote schema
 #   2. Fixes the profiles_insert policy to admin-only (migration 022 equivalent)
-#   3. Appends the create_bootstrap_campus RPC
+#   3. Appends campus boundary management RPCs
 #   4. Writes it as supabase/migrations/20260310000001_baseline.sql
 #   5. Deletes all other numbered migration files
 #   6. Marks the baseline as already applied in Supabase migration history
@@ -98,62 +98,9 @@ supabase-baseline:
 
       cat <<'BOOTSTRAP'
 
-    -- ============================================================
-    -- BOOTSTRAP CAMPUS RPC
-    -- Allows the first user on a fresh instance to create a campus
-    -- and be promoted to admin atomically. Only works when no
-    -- campuses exist.
-    -- ============================================================
-
-    CREATE OR REPLACE FUNCTION "public"."create_bootstrap_campus"(
-      "p_name"      text,
-      "p_latitude"  float8,
-      "p_longitude" float8
-    )
-    RETURNS uuid
-    LANGUAGE plpgsql
-    SECURITY DEFINER
-    SET search_path = public, extensions
-    AS $$
-    DECLARE
-      v_campus_id     uuid;
-      v_caller_id     uuid;
-      v_bounds_offset constant float8 := 0.005;
-    BEGIN
-      v_caller_id := auth.uid();
-      IF v_caller_id IS NULL THEN
-        RAISE EXCEPTION 'Authentication required';
-      END IF;
-      IF NOT EXISTS (SELECT 1 FROM profiles WHERE id = v_caller_id AND is_active = true) THEN
-        RAISE EXCEPTION 'Profile not found. Complete signup before creating a campus.';
-      END IF;
-      IF EXISTS (SELECT 1 FROM campuses WHERE deleted_at IS NULL) THEN
-        RAISE EXCEPTION 'Bootstrap unavailable: campuses already exist.';
-      END IF;
-      IF p_name IS NULL OR trim(p_name) = '' THEN RAISE EXCEPTION 'Campus name is required'; END IF;
-      IF p_latitude  < -90  OR p_latitude  > 90  THEN RAISE EXCEPTION 'Invalid latitude';  END IF;
-      IF p_longitude < -180 OR p_longitude > 180 THEN RAISE EXCEPTION 'Invalid longitude'; END IF;
-      INSERT INTO campuses (name, short_name, location, bounds)
-      VALUES (
-        trim(p_name), trim(p_name),
-        ST_SetSRID(ST_MakePoint(p_longitude, p_latitude), 4326),
-        ST_SetSRID(ST_MakePolygon(ST_GeomFromText(format(
-          'LINESTRING(%s %s, %s %s, %s %s, %s %s, %s %s)',
-          p_longitude - v_bounds_offset, p_latitude - v_bounds_offset,
-          p_longitude + v_bounds_offset, p_latitude - v_bounds_offset,
-          p_longitude + v_bounds_offset, p_latitude + v_bounds_offset,
-          p_longitude - v_bounds_offset, p_latitude + v_bounds_offset,
-          p_longitude - v_bounds_offset, p_latitude - v_bounds_offset
-        ))), 4326)
-      )
-      RETURNING id INTO v_campus_id;
-      UPDATE profiles SET role = 'admin', campus_id = v_campus_id WHERE id = v_caller_id;
-      RETURN v_campus_id;
-    END;
-    $$;
-
-    ALTER FUNCTION "public"."create_bootstrap_campus"(text, float8, float8) OWNER TO "postgres";
-    GRANT EXECUTE ON FUNCTION "public"."create_bootstrap_campus"(text, float8, float8) TO "authenticated";
+    -- Campus boundary management RPCs are maintained directly in the checked-in baseline.
+    -- If this helper is used again, append the latest RPC definitions from
+    -- supabase/migrations/20260310000001_baseline.sql rather than the old point-based bootstrap RPC.
     BOOTSTRAP
     } > "$BASELINE"
 
@@ -166,12 +113,19 @@ supabase-baseline:
     rm -f "$DUMP_TMP"
     echo "✓ Done. Run 'supabase db push --project-ref \$STAGING_PROJECT_REF' to confirm no pending migrations."
 
-# Apply staging seed data (creates test users, campus, buildings, routes, hazards).
-# Fully automated — no manual SQL steps required.
-# Requires: STAGING_DB_URL, STAGING_PROJECT_REF, SUPABASE_SERVICE_ROLE_KEY.
+# Apply staging seed data.
+# For the current empty-db workflow, this recreates test auth users and only runs SQL cleanup if STAGING_DB_URL is set.
+# Requires: SUPABASE_SERVICE_ROLE_KEY. STAGING_PROJECT_REF is optional when the repo is linked.
 supabase-seed-staging:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -f apps/admin/.env ]; then
+        set -a
+        . apps/admin/.env
+        set +a
+    fi
     node supabase/seed_staging_auth.cjs
-    psql "$STAGING_DB_URL" -f supabase/seed_staging.sql
+    if [ -n "${STAGING_DB_URL:-}" ]; then psql "$STAGING_DB_URL" -f supabase/seed_staging.sql; else echo "Skipping supabase/seed_staging.sql because STAGING_DB_URL is not set."; fi
 
 # Generate TypeScript types from the local database schema
 supabase-types:

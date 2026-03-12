@@ -2,9 +2,14 @@
 -- Single clean baseline replacing all prior incremental migrations.
 -- Generated from live remote schema dump on 2026-03-10.
 -- Includes: full schema, corrected profiles_insert policy (admin-only),
---           and the create_bootstrap_campus RPC.
+--           reverse-route publish/retract support,
+--           and campus boundary management RPCs.
 
 SET search_path TO public, extensions;
+
+CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA "extensions";
+CREATE EXTENSION IF NOT EXISTS "pg_trgm" WITH SCHEMA "extensions";
+CREATE EXTENSION IF NOT EXISTS "postgis" WITH SCHEMA "extensions";
 
 
 
@@ -220,25 +225,145 @@ CREATE OR REPLACE FUNCTION "public"."publish_route"("route_id" "uuid") RETURNS "
     AS $$
 DECLARE
   v_count integer;
+  v_route public.routes%ROWTYPE;
+  v_reverse_route_id uuid;
+  v_source_route_id uuid := route_id;
 BEGIN
   IF NOT (current_user_role() IN ('admin', 'om_specialist')) THEN
     RAISE EXCEPTION 'permission_denied';
   END IF;
 
-  UPDATE routes SET
-    status       = 'published',
-    published_by = auth.uid(),
-    published_at = now(),
-    updated_at   = now()
-  WHERE id = route_id AND status = 'draft';
+  SELECT *
+  INTO v_route
+  FROM public.routes
+  WHERE id = v_source_route_id
+    AND status = 'draft'
+    AND deleted_at IS NULL
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'route_not_found_or_not_draft';
+  END IF;
+
+  UPDATE public.routes
+  SET status       = 'published',
+      published_by = auth.uid(),
+      published_at = now(),
+      updated_at   = now()
+  WHERE id = v_source_route_id;
 
   GET DIAGNOSTICS v_count = ROW_COUNT;
   IF v_count = 0 THEN
     RAISE EXCEPTION 'route_not_found_or_not_draft';
   END IF;
 
+  IF v_route.start_building_id IS NOT NULL AND v_route.end_building_id IS NOT NULL THEN
+    v_reverse_route_id := v_route.reverse_route_id;
+
+    IF v_reverse_route_id IS NULL THEN
+      INSERT INTO public.routes (
+        campus_id,
+        start_building_id,
+        end_building_id,
+        name,
+        difficulty,
+        tags,
+        status,
+        path,
+        total_distance_m,
+        recorded_by,
+        from_label,
+        to_label,
+        recorded_duration_sec,
+        recorded_at,
+        description
+      ) VALUES (
+        v_route.campus_id,
+        v_route.end_building_id,
+        v_route.start_building_id,
+        v_route.name || ' (Reverse)',
+        v_route.difficulty,
+        v_route.tags,
+        'draft',
+        CASE WHEN v_route.path IS NOT NULL THEN extensions.ST_Reverse(v_route.path) ELSE NULL END,
+        v_route.total_distance_m,
+        v_route.recorded_by,
+        v_route.to_label,
+        v_route.from_label,
+        v_route.recorded_duration_sec,
+        v_route.recorded_at,
+        v_route.description
+      )
+      RETURNING id INTO v_reverse_route_id;
+    ELSE
+      UPDATE public.routes
+      SET campus_id              = v_route.campus_id,
+          start_building_id      = v_route.end_building_id,
+          end_building_id        = v_route.start_building_id,
+          name                   = v_route.name || ' (Reverse)',
+          difficulty             = v_route.difficulty,
+          tags                   = v_route.tags,
+          path                   = CASE WHEN v_route.path IS NOT NULL THEN extensions.ST_Reverse(v_route.path) ELSE NULL END,
+          total_distance_m       = v_route.total_distance_m,
+          recorded_by            = v_route.recorded_by,
+          from_label             = v_route.to_label,
+          to_label               = v_route.from_label,
+          recorded_duration_sec  = v_route.recorded_duration_sec,
+          recorded_at            = v_route.recorded_at,
+          description            = v_route.description,
+          status                 = 'draft',
+          deleted_at             = NULL,
+          updated_at             = now()
+      WHERE id = v_reverse_route_id;
+
+      DELETE FROM public.waypoints
+      WHERE route_id = v_reverse_route_id;
+    END IF;
+
+    INSERT INTO public.waypoints (
+      route_id,
+      position,
+      recorded_at,
+      geom,
+      heading,
+      annotation_text,
+      annotation_audio_url,
+      photo_url,
+      hazard_type,
+      type
+    )
+    SELECT
+      v_reverse_route_id,
+      row_number() OVER (ORDER BY w.position DESC),
+      w.recorded_at,
+      w.geom,
+      w.heading,
+      w.annotation_text,
+      w.annotation_audio_url,
+      w.photo_url,
+      w.hazard_type,
+      w.type
+    FROM public.waypoints w
+    WHERE w.route_id = v_source_route_id
+    ORDER BY w.position DESC;
+
+    PERFORM public.recompute_route_content_hash(v_reverse_route_id);
+
+    UPDATE public.routes
+    SET status           = 'published',
+        published_by     = auth.uid(),
+        published_at     = now(),
+        updated_at       = now(),
+        reverse_route_id = v_source_route_id
+    WHERE id = v_reverse_route_id;
+
+    UPDATE public.routes
+    SET reverse_route_id = v_reverse_route_id
+    WHERE id = v_source_route_id;
+  END IF;
+
   INSERT INTO activity_log (actor_id, action, target_type, target_id)
-  VALUES (auth.uid(), 'route.publish', 'route', route_id::text);
+  VALUES (auth.uid(), 'route.publish', 'route', v_source_route_id::text);
 END;
 $$;
 
@@ -281,23 +406,42 @@ CREATE OR REPLACE FUNCTION "public"."retract_route"("route_id" "uuid") RETURNS "
     AS $$
 DECLARE
   v_count integer;
+  v_reverse_route_id uuid;
+  v_source_route_id uuid := route_id;
 BEGIN
   IF NOT (current_user_role() IN ('admin', 'om_specialist')) THEN
     RAISE EXCEPTION 'permission_denied';
   END IF;
 
-  UPDATE routes SET
-    status     = 'retracted',
-    updated_at = now()
-  WHERE id = route_id AND status = 'published';
+  SELECT reverse_route_id
+  INTO v_reverse_route_id
+  FROM public.routes
+  WHERE id = v_source_route_id
+    AND status = 'published'
+    AND deleted_at IS NULL
+  FOR UPDATE;
+
+  UPDATE public.routes
+  SET status     = 'retracted',
+      updated_at = now()
+  WHERE id = v_source_route_id
+    AND status = 'published';
 
   GET DIAGNOSTICS v_count = ROW_COUNT;
   IF v_count = 0 THEN
     RAISE EXCEPTION 'route_not_found_or_not_published';
   END IF;
 
+  IF v_reverse_route_id IS NOT NULL THEN
+    UPDATE public.routes
+    SET status     = 'retracted',
+        updated_at = now()
+    WHERE id = v_reverse_route_id
+      AND status = 'published';
+  END IF;
+
   INSERT INTO activity_log (actor_id, action, target_type, target_id)
-  VALUES (auth.uid(), 'route.retract', 'route', route_id::text);
+  VALUES (auth.uid(), 'route.retract', 'route', v_source_route_id::text);
 END;
 $$;
 
@@ -621,6 +765,7 @@ CREATE TABLE IF NOT EXISTS "public"."routes" (
     "recorded_duration_sec" integer,
     "recorded_at" timestamp with time zone,
     "description" "text",
+    "reverse_route_id" "uuid",
     CONSTRAINT "routes_difficulty_check" CHECK (("difficulty" = ANY (ARRAY['easy'::"text", 'moderate'::"text", 'hard'::"text"]))),
     CONSTRAINT "routes_published_requires_hash" CHECK ((("status" <> 'published'::"text") OR ("content_hash" IS NOT NULL))),
     CONSTRAINT "routes_status_check" CHECK (("status" = ANY (ARRAY['pending_save'::"text", 'draft'::"text", 'published'::"text", 'retracted'::"text"])))
@@ -672,7 +817,8 @@ CREATE OR REPLACE VIEW "public"."v_campuses" WITH ("security_invoker"='true') AS
     COALESCE("default_zoom", 16) AS "defaultZoom",
     "security_phone" AS "securityPhone",
     "created_at" AS "createdAt",
-    "updated_at" AS "updatedAt"
+    "updated_at" AS "updatedAt",
+    ((("extensions"."st_asgeojson"("bounds"))::"jsonb" -> 'coordinates'::"text") -> 0) AS "footprint"
    FROM "public"."campuses" "c"
   WHERE ("deleted_at" IS NULL);
 
@@ -915,6 +1061,10 @@ CREATE INDEX "routes_path_idx" ON "public"."routes" USING "gist" ("path");
 
 
 
+CREATE UNIQUE INDEX "routes_reverse_route_id_unique" ON "public"."routes" USING "btree" ("reverse_route_id") WHERE ("reverse_route_id" IS NOT NULL);
+
+
+
 CREATE INDEX "routes_start_building_id_idx" ON "public"."routes" USING "btree" ("start_building_id");
 
 
@@ -994,12 +1144,12 @@ ALTER TABLE ONLY "public"."building_entrances"
 
 
 ALTER TABLE ONLY "public"."buildings"
-    ADD CONSTRAINT "buildings_campus_id_fkey" FOREIGN KEY ("campus_id") REFERENCES "public"."campuses"("id");
+    ADD CONSTRAINT "buildings_campus_id_fkey" FOREIGN KEY ("campus_id") REFERENCES "public"."campuses"("id") ON DELETE CASCADE;
 
 
 
 ALTER TABLE ONLY "public"."hazards"
-    ADD CONSTRAINT "hazards_campus_id_fkey" FOREIGN KEY ("campus_id") REFERENCES "public"."campuses"("id");
+    ADD CONSTRAINT "hazards_campus_id_fkey" FOREIGN KEY ("campus_id") REFERENCES "public"."campuses"("id") ON DELETE CASCADE;
 
 
 
@@ -1019,12 +1169,12 @@ ALTER TABLE ONLY "public"."hazards"
 
 
 ALTER TABLE ONLY "public"."pois"
-    ADD CONSTRAINT "pois_campus_id_fkey" FOREIGN KEY ("campus_id") REFERENCES "public"."campuses"("id");
+    ADD CONSTRAINT "pois_campus_id_fkey" FOREIGN KEY ("campus_id") REFERENCES "public"."campuses"("id") ON DELETE CASCADE;
 
 
 
 ALTER TABLE ONLY "public"."profiles"
-    ADD CONSTRAINT "profiles_campus_id_fkey" FOREIGN KEY ("campus_id") REFERENCES "public"."campuses"("id") ON UPDATE CASCADE ON DELETE CASCADE;
+    ADD CONSTRAINT "profiles_campus_id_fkey" FOREIGN KEY ("campus_id") REFERENCES "public"."campuses"("id") ON UPDATE CASCADE ON DELETE SET NULL;
 
 
 
@@ -1034,7 +1184,7 @@ ALTER TABLE ONLY "public"."profiles"
 
 
 ALTER TABLE ONLY "public"."routes"
-    ADD CONSTRAINT "routes_campus_id_fkey" FOREIGN KEY ("campus_id") REFERENCES "public"."campuses"("id");
+    ADD CONSTRAINT "routes_campus_id_fkey" FOREIGN KEY ("campus_id") REFERENCES "public"."campuses"("id") ON DELETE CASCADE;
 
 
 
@@ -1045,6 +1195,11 @@ ALTER TABLE ONLY "public"."routes"
 
 ALTER TABLE ONLY "public"."routes"
     ADD CONSTRAINT "routes_published_by_fkey" FOREIGN KEY ("published_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."routes"
+    ADD CONSTRAINT "routes_reverse_route_id_fkey" FOREIGN KEY ("reverse_route_id") REFERENCES "public"."routes"("id");
 
 
 
@@ -1483,15 +1638,15 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 
 
 -- ============================================================
--- BOOTSTRAP CAMPUS RPC
--- Allows the first user on a fresh instance to create a campus
--- and be promoted to admin in a single atomic operation.
+-- CAMPUS BOUNDARY MANAGEMENT RPCs
+-- Creates and replaces campuses from explicit boundary polygons,
+-- and keeps soft-delete support in the baseline.
 -- ============================================================
 
-CREATE OR REPLACE FUNCTION "public"."create_bootstrap_campus"(
-  "p_name"      text,
-  "p_latitude"  float8,
-  "p_longitude" float8
+CREATE OR REPLACE FUNCTION "public"."create_campus_with_bounds"(
+  "p_name" text,
+  "p_short_name" text,
+  "p_boundary_wkt" text
 )
 RETURNS uuid
 LANGUAGE plpgsql
@@ -1499,9 +1654,78 @@ SECURITY DEFINER
 SET search_path = public, extensions
 AS $$
 DECLARE
-  v_campus_id     uuid;
-  v_caller_id     uuid;
-  v_bounds_offset constant float8 := 0.005;
+  v_campus_id uuid;
+  v_bounds geometry(Polygon, 4326);
+  v_centroid geometry(Point, 4326);
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Authentication required';
+  END IF;
+
+  IF current_user_role() <> 'admin' THEN
+    RAISE EXCEPTION 'Admin role required';
+  END IF;
+
+  IF p_name IS NULL OR trim(p_name) = '' THEN
+    RAISE EXCEPTION 'Campus name is required';
+  END IF;
+
+  IF p_boundary_wkt IS NULL OR trim(p_boundary_wkt) = '' THEN
+    RAISE EXCEPTION 'Campus boundary is required';
+  END IF;
+
+  BEGIN
+    v_bounds := ST_GeomFromEWKT(p_boundary_wkt)::geometry(Polygon, 4326);
+  EXCEPTION WHEN OTHERS THEN
+    RAISE EXCEPTION 'Invalid campus boundary polygon';
+  END;
+
+  IF GeometryType(v_bounds) <> 'POLYGON' THEN
+    RAISE EXCEPTION 'Campus boundary must be a polygon';
+  END IF;
+
+  IF NOT ST_IsValid(v_bounds) THEN
+    RAISE EXCEPTION 'Campus boundary polygon is invalid';
+  END IF;
+
+  IF ST_NPoints(v_bounds) < 4 THEN
+    RAISE EXCEPTION 'Campus boundary must contain at least 3 points';
+  END IF;
+
+  v_centroid := ST_Centroid(v_bounds)::geometry(Point, 4326);
+
+  INSERT INTO campuses (name, short_name, location, bounds)
+  VALUES (
+    trim(p_name),
+    NULLIF(trim(COALESCE(p_short_name, p_name)), ''),
+    v_centroid,
+    v_bounds
+  )
+  RETURNING id INTO v_campus_id;
+
+  RETURN v_campus_id;
+END;
+$$;
+
+ALTER FUNCTION "public"."create_campus_with_bounds"(text, text, text) OWNER TO "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."create_campus_with_bounds"(text, text, text) TO "authenticated";
+
+
+CREATE OR REPLACE FUNCTION "public"."create_bootstrap_campus_with_bounds"(
+  "p_name" text,
+  "p_boundary_wkt" text
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE
+  v_campus_id uuid;
+  v_caller_id uuid;
+  v_bounds geometry(Polygon, 4326);
+  v_centroid geometry(Point, 4326);
 BEGIN
   v_caller_id := auth.uid();
   IF v_caller_id IS NULL THEN
@@ -1513,33 +1737,43 @@ BEGIN
   END IF;
 
   IF EXISTS (SELECT 1 FROM campuses WHERE deleted_at IS NULL) THEN
-    RAISE EXCEPTION 'Bootstrap unavailable: campuses already exist. Only administrators can create additional campuses.';
+    RAISE EXCEPTION 'Bootstrap unavailable: campuses already exist.';
   END IF;
 
   IF p_name IS NULL OR trim(p_name) = '' THEN
     RAISE EXCEPTION 'Campus name is required';
   END IF;
-  IF p_latitude  < -90  OR p_latitude  > 90  THEN RAISE EXCEPTION 'Invalid latitude';  END IF;
-  IF p_longitude < -180 OR p_longitude > 180 THEN RAISE EXCEPTION 'Invalid longitude'; END IF;
+
+  IF p_boundary_wkt IS NULL OR trim(p_boundary_wkt) = '' THEN
+    RAISE EXCEPTION 'Campus boundary is required';
+  END IF;
+
+  BEGIN
+    v_bounds := ST_GeomFromEWKT(p_boundary_wkt)::geometry(Polygon, 4326);
+  EXCEPTION WHEN OTHERS THEN
+    RAISE EXCEPTION 'Invalid campus boundary polygon';
+  END;
+
+  IF GeometryType(v_bounds) <> 'POLYGON' THEN
+    RAISE EXCEPTION 'Campus boundary must be a polygon';
+  END IF;
+
+  IF NOT ST_IsValid(v_bounds) THEN
+    RAISE EXCEPTION 'Campus boundary polygon is invalid';
+  END IF;
+
+  IF ST_NPoints(v_bounds) < 4 THEN
+    RAISE EXCEPTION 'Campus boundary must contain at least 3 points';
+  END IF;
+
+  v_centroid := ST_Centroid(v_bounds)::geometry(Point, 4326);
 
   INSERT INTO campuses (name, short_name, location, bounds)
   VALUES (
     trim(p_name),
     trim(p_name),
-    ST_SetSRID(ST_MakePoint(p_longitude, p_latitude), 4326),
-    ST_SetSRID(
-      ST_MakePolygon(
-        ST_GeomFromText(format(
-          'LINESTRING(%s %s, %s %s, %s %s, %s %s, %s %s)',
-          p_longitude - v_bounds_offset, p_latitude - v_bounds_offset,
-          p_longitude + v_bounds_offset, p_latitude - v_bounds_offset,
-          p_longitude + v_bounds_offset, p_latitude + v_bounds_offset,
-          p_longitude - v_bounds_offset, p_latitude + v_bounds_offset,
-          p_longitude - v_bounds_offset, p_latitude - v_bounds_offset
-        ))
-      ),
-      4326
-    )
+    v_centroid,
+    v_bounds
   )
   RETURNING id INTO v_campus_id;
 
@@ -1551,6 +1785,114 @@ BEGIN
 END;
 $$;
 
-ALTER FUNCTION "public"."create_bootstrap_campus"("p_name" text, "p_latitude" float8, "p_longitude" float8) OWNER TO "postgres";
+ALTER FUNCTION "public"."create_bootstrap_campus_with_bounds"(text, text) OWNER TO "postgres";
 
-GRANT EXECUTE ON FUNCTION "public"."create_bootstrap_campus"(text, float8, float8) TO "authenticated";
+GRANT EXECUTE ON FUNCTION "public"."create_bootstrap_campus_with_bounds"(text, text) TO "authenticated";
+
+
+CREATE OR REPLACE FUNCTION "public"."replace_campus_bounds"(
+  "p_campus_id" uuid,
+  "p_boundary_wkt" text
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+DECLARE
+  v_bounds geometry(Polygon, 4326);
+  v_centroid geometry(Point, 4326);
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Authentication required';
+  END IF;
+
+  IF current_user_role() <> 'admin' THEN
+    RAISE EXCEPTION 'Admin role required';
+  END IF;
+
+  IF p_campus_id IS NULL THEN
+    RAISE EXCEPTION 'Campus id is required';
+  END IF;
+
+  IF p_boundary_wkt IS NULL OR trim(p_boundary_wkt) = '' THEN
+    RAISE EXCEPTION 'Campus boundary is required';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM campuses WHERE id = p_campus_id AND deleted_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'Campus not found';
+  END IF;
+
+  BEGIN
+    v_bounds := ST_GeomFromEWKT(p_boundary_wkt)::geometry(Polygon, 4326);
+  EXCEPTION WHEN OTHERS THEN
+    RAISE EXCEPTION 'Invalid campus boundary polygon';
+  END;
+
+  IF GeometryType(v_bounds) <> 'POLYGON' THEN
+    RAISE EXCEPTION 'Campus boundary must be a polygon';
+  END IF;
+
+  IF NOT ST_IsValid(v_bounds) THEN
+    RAISE EXCEPTION 'Campus boundary polygon is invalid';
+  END IF;
+
+  IF ST_NPoints(v_bounds) < 4 THEN
+    RAISE EXCEPTION 'Campus boundary must contain at least 3 points';
+  END IF;
+
+  v_centroid := ST_Centroid(v_bounds)::geometry(Point, 4326);
+
+  UPDATE campuses
+  SET location = v_centroid,
+      bounds = v_bounds
+  WHERE id = p_campus_id
+    AND deleted_at IS NULL;
+END;
+$$;
+
+ALTER FUNCTION "public"."replace_campus_bounds"(uuid, text) OWNER TO "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."replace_campus_bounds"(uuid, text) TO "authenticated";
+
+
+CREATE OR REPLACE FUNCTION "public"."soft_delete_campus"(
+  "p_campus_id" uuid
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Authentication required';
+  END IF;
+
+  IF current_user_role() <> 'admin' THEN
+    RAISE EXCEPTION 'Admin role required';
+  END IF;
+
+  IF p_campus_id IS NULL THEN
+    RAISE EXCEPTION 'Campus id is required';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM campuses
+    WHERE id = p_campus_id
+      AND deleted_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'Campus not found';
+  END IF;
+
+  DELETE FROM campuses
+  WHERE id = p_campus_id;
+END;
+$$;
+
+ALTER FUNCTION "public"."soft_delete_campus"(uuid) OWNER TO "postgres";
+
+GRANT EXECUTE ON FUNCTION "public"."soft_delete_campus"(uuid) TO "authenticated";

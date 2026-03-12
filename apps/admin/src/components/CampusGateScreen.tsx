@@ -11,6 +11,7 @@ import {
   AccessibilityInfo,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCampusDetection } from '../hooks/useCampusDetection';
 import { useCampusStore } from '../stores/campusStore';
@@ -18,10 +19,9 @@ import type { Campus } from '@echoecho/shared';
 import { colors } from '@echoecho/ui';
 
 export function CampusGateScreen() {
-  const { state, detect, selectCampus, createCampus } = useCampusDetection();
+  const { state, detect, selectCampus } = useCampusDetection();
   const campuses = useCampusStore((s) => s.campuses);
   const [campusName, setCampusName] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
     void detect();
@@ -107,20 +107,22 @@ export function CampusGateScreen() {
   }
 
   if (state.phase === 'not_found') {
-    const handleCreate = async () => {
+    const handleCreate = () => {
       const trimmed = campusName.trim();
       if (!trimmed) {
         Alert.alert('Required', 'Please enter a campus name.');
         return;
       }
-      setIsCreating(true);
-      try {
-        await createCampus(trimmed, state.latitude, state.longitude);
-      } catch (err) {
-        Alert.alert('Failed', (err as Error).message);
-      } finally {
-        setIsCreating(false);
-      }
+      router.push({
+        // Expo Router typed-route generation lags new files during local typecheck.
+        pathname: '/campus-boundary' as any,
+        params: {
+          mode: 'create',
+          name: trimmed,
+          latitude: String(state.latitude),
+          longitude: String(state.longitude),
+        },
+      });
     };
 
     return (
@@ -150,17 +152,12 @@ export function CampusGateScreen() {
           </View>
 
           <Pressable
-            style={[styles.primaryBtn, isCreating && styles.btnDisabled]}
-            onPress={() => void handleCreate()}
-            disabled={isCreating}
+            style={styles.primaryBtn}
+            onPress={handleCreate}
             accessibilityLabel="Create campus"
             accessibilityRole="button"
           >
-            {isCreating ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.primaryBtnText}>Create Campus</Text>
-            )}
+            <Text style={styles.primaryBtnText}>Draw Campus Boundary</Text>
           </Pressable>
 
           {campuses.length > 0 && (
@@ -243,7 +240,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: '100%',
   },
-  btnDisabled: { opacity: 0.6 },
   primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   dividerText: {
     color: '#404050',

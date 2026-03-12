@@ -61,6 +61,10 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="campus-boundary"
+          options={{ title: 'Campus Boundary', headerBackTitle: 'Back' }}
+        />
+        <Stack.Screen
           name="haptic-lab"
           options={{ title: 'Haptic Lab', headerBackTitle: 'Settings' }}
         />
