@@ -103,7 +103,7 @@ function getVoiceAnnotationAudioSupport(): VoiceAnnotationAudioSupport {
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useVoiceAnnotation(): UseVoiceAnnotationReturn {
-  const audioSupportRef = useRef<VoiceAnnotationAudioSupport>(getVoiceAnnotationAudioSupport());
+  const [audioSupport] = useState<VoiceAnnotationAudioSupport>(getVoiceAnnotationAudioSupport);
   const [state, setState] = useState<VoiceAnnotationState>({
     phase: 'idle',
     transcript: '',
@@ -317,7 +317,7 @@ export function useVoiceAnnotation(): UseVoiceAnnotationReturn {
 
   return {
     state,
-    audioSupport: audioSupportRef.current,
+    audioSupport,
     startRecording,
     stopRecording,
     dismissSilencePrompt,

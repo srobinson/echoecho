@@ -257,7 +257,7 @@ function SaveRouteScreenInner() {
 
   const handleDiscard = useCallback(() => {
     setShowDiscardConfirm(true);
-  }, [clearSession]);
+  }, []);
 
   if (!session) return null;
 
