@@ -2,63 +2,109 @@
 
 ## Purpose
 
-EchoEcho is a monorepo for two Expo/React Native apps backed by Supabase:
+EchoEcho is a VI (visually impaired) spatial awareness platform for campus navigation. The student says "Take me to Room 312" from anywhere on campus, and the system routes them there: outdoors via Mapbox walking directions, through the best building entrance, then indoors via a pre-authored navigation graph.
 
-- `apps/admin`: admin/operations app for campus setup, buildings, hazards, and route authoring
-- `apps/student`: student navigation app for destination search, local/offline route sync, and turn-by-turn guidance
-- `packages/shared`: shared TypeScript contracts and geo utilities used by both apps
+The repo is a monorepo for two Expo/React Native apps backed by Supabase:
+
+- `apps/admin`: campus setup, buildings, hazards, indoor graph authoring, route governance
+- `apps/student`: voice-first navigation, real-time routing, turn-by-turn guidance, offline-capable
+- `packages/shared`: shared TypeScript contracts and geo utilities
 
 The repo uses Yarn workspaces and Turbo.
 
-## Product Notes
+## Product Vision
 
-Two focused product docs now live under `docs/`:
+### Real-Time Three-Segment Routing
+
+Navigation is computed on demand from the student's current position to any room in any building. No pre-authored route required.
+
+1. **Outdoor**: Mapbox Directions API (`mapbox/walking`, `walkway_bias: 1`). Campus pedestrian paths are already mapped in OSM. GPS positioning. Phone in pocket.
+2. **Transition**: BLE beacons at building entrances create a GPS-to-BLE overlap zone. The `outdoor_indoor_connector` entity is the handoff point.
+3. **Indoor**: A* on the `indoor_node` / `indoor_edge` graph. BLE + IMU positioning (2-3m accuracy). Voronoi-weighted corridor centerline routing.
+
+EchoEcho only maps indoors. Outdoors is free infrastructure via Mapbox/OSM.
+
+### Pre-Authored Routes Are Curated Experiences
+
+Pre-authored routes do not drive the navigation infrastructure. They are content:
+
+- orientation day walkthroughs
+- accessible-only paths (pre-validated, avoiding all stairs and heavy doors)
+- scenic or preferred paths (landmark-rich, socially comfortable)
+- emergency evacuation routes
+
+The infrastructure is the indoor graph + entrance connectors + Mapbox.
+
+### Phased Platform
+
+| Phase | What Ships | Hardware |
+|-------|-----------|----------|
+| 1 | Real-time routing + indoor graph + BLE positioning + audio turn-by-turn | Phone only |
+| 2 | + obstacle detection + on-demand scene description via smart glasses | Phone + Ray-Ban Meta ($299) |
+| 3 | + temporal memory + cross-visit recognition + on-device VLM | Same |
+| 4 | Multi-campus platform with crowd-sourced graph refinement | Expanding glasses support |
+
+Phase 1 alone addresses the killer gap. Full research at `~/.mdx/research/echoecho-vi-spatial-awareness-platform.md`.
+
+### Voice-First Interaction
+
+- "Take me to Room 312" - full three-segment route
+- "Find the nearest restroom" - query by destination type
+- "Where am I?" - position described relative to graph context
+- "What's nearby?" - destinations within radius on current floor
+- "What's around me?" - cloud VLM scene description (Phase 2+)
+
+## Roles
+
+- `student`: anonymous-first, consumes published navigation
+- `volunteer`: field router role, validates indoor graphs and captures landmarks/hazards
+- `om_specialist`: elevated operational author, proposes and walks routes
+- `admin`: governance role, manages campuses/buildings, publishes reviewed content
+
+Product split guidance:
+
+- split responsibilities and permissions before splitting codebases
+- treat the current mobile admin app as the temporary home of router workflows
+- plan for long-term separation into `router mobile` and `admin web`
+
+## Indoor Domain Model
+
+Full spec at `docs/interior-domain-model.md`. Core entities:
+
+- `building`, `level`, `destination`
+- `indoor_node`, `indoor_edge` (the navigation graph)
+- `vertical_connector` (elevator, stairs, ramp)
+- `outdoor_indoor_connector` (building entrance, the outdoor-to-indoor handoff)
+- `landmark`, `hazard`
+
+The `outdoor_indoor_connector` needs: GPS coordinates (for Mapbox routing target), accessibility attributes, access hours, card-access flag, floor level, and an attached `indoor_node`.
+
+Indoor data follows three truth levels:
+
+1. `structural_draft`: web-authored baseline, not yet trusted
+2. `field_validated`: volunteer confirmed in the real building
+3. `published`: admin approved for student use
+
+Do not collapse these. A floorplan draft, a validated graph, and a published route are different things.
+
+## Product Docs
 
 - `docs/route-authoring-proposal.md`
 - `docs/route-domain-model.md`
 - `docs/interior-mapping-proposal.md`
 - `docs/interior-domain-model.md`
 - `docs/spec-router-admin-app-split.md`
+- `docs/spec-router-admin-auth-model.md`
+- `docs/spec-router-admin-route-lifecycle.md`
 - `docs/permission-matrix-current-roles.md`
 - `docs/user-management-spec.md`
 - `docs/web-admin-v1-surface.md`
 
-Current working product direction:
+## Known Blockers
 
-- `student` is the end user who consumes published routes
-- `volunteer` is the primary field/content role that proposes and walks routes
-- `om_specialist` is the elevated operational author role
-- `admin` is the governance role that manages campuses/buildings and publishes reviewed routes
+**ALP-1055**: hazards, POIs, and building_entrances store coordinates as JSONB instead of PostGIS geometry. This makes spatial queries impossible. Must be resolved before indoor mapping adds more spatial data.
 
-Product split guidance:
-
-- split responsibilities and permissions before splitting codebases
-- treat the current mobile admin app as the temporary home of router workflows plus some embedded admin controls
-- plan for long-term separation into `router mobile` and `admin web`
-
-Important: point-and-click route creation should produce a draft route, not a publishable route. Publishable routes should remain tied to a walked and reviewed workflow.
-
-Operational role names currently remain:
-
-- `admin`
-- `om_specialist`
-- `volunteer`
-- `student`
-
-Current working interpretation:
-
-- `student` is anonymous-first
-- `volunteer` is the field router role
-- `om_specialist` is the elevated operational author role
-- `admin` is the governance role
-
-Indoor-mapping direction is now also captured:
-
-- interiors should be treated as floor-aware navigation graphs
-- structural interior authoring should be web-first
-- router/mobile should validate indoor route truth in the field
-
-## High-value Commands
+## High-Value Commands
 
 - `yarn workspace @echoecho/admin typecheck`
 - `yarn workspace @echoecho/student typecheck`
@@ -70,13 +116,13 @@ Indoor-mapping direction is now also captured:
 
 ### Campuses
 
-Campuses now have three distinct spatial representations:
+Three distinct spatial representations:
 
 - `location`: point geometry used as a reference center
 - `bounds`: polygon geometry in Postgres
 - `footprint`: polygon ring exposed through `v_campuses` for app use
 
-Important: app behavior should prefer `footprint` for real geometry decisions, not `center`.
+App behavior should prefer `footprint` for real geometry decisions, not `center`.
 
 ### Campus Creation
 
@@ -84,63 +130,31 @@ Campus creation is boundary-first, not point-first.
 
 - Admins draw a polygon in `apps/admin/app/campus-boundary.tsx`
 - The backend stores the polygon and derives `location` from its centroid
-- The relevant RPCs are:
-  - `create_campus_with_bounds`
-  - `create_bootstrap_campus_with_bounds`
-  - `replace_campus_bounds`
+- RPCs: `create_campus_with_bounds`, `create_bootstrap_campus_with_bounds`, `replace_campus_bounds`
 
 ### Campus Detection
 
-Student detection now uses the actual campus polygon footprint.
+Student detection uses the actual campus polygon footprint.
 
 - `apps/student/src/lib/campusDetection.ts`
-- It performs point-in-polygon first
-- It falls back to bounding-box logic only if a footprint is missing
-- The prior center-point-only bug is fixed
+- Point-in-polygon first, bounding-box fallback if footprint is missing
 
-Admin detection currently uses campus selection utilities under:
+Admin detection:
 
 - `apps/admin/src/lib/campusDetection.ts`
 - `apps/admin/src/hooks/useCampusDetection.ts`
 
-If future work touches campus selection again, keep admin and student logic aligned.
+Keep admin and student campus-selection logic aligned.
 
 ## Map Behavior
 
-### Admin Main Map
+Admin main map renders the campus boundary as a base context layer, fits to boundary on first entry or campus switch, then preserves the user's viewport. Depends on `apps/admin/src/stores/mapViewportStore.ts` (campusId, center, zoom).
 
-The admin main map:
-
-- renders the campus boundary as a base context layer
-- fits to the campus boundary on first entry or when switching campuses
-- preserves the user’s viewport for the currently active campus after that
-
-This behavior depends on `apps/admin/src/stores/mapViewportStore.ts`, which now stores:
-
-- `campusId`
-- `center`
-- `zoom`
-
-### Route Maps
-
-Admin route preview/detail maps now:
-
-- render the campus boundary
-- fit the camera to the campus footprint when available
-
-This is handled in `apps/admin/src/components/route/RoutePreviewMap.tsx`.
+Route preview/detail maps render the campus boundary and fit to the footprint. Handled in `apps/admin/src/components/route/RoutePreviewMap.tsx`.
 
 ## Campus Deletion Semantics
 
-Campus deletion is intended to be a real delete, not a soft hide.
-
-Current rule:
-
-- deleting a campus should delete linked buildings, routes, hazards, and POIs
-- deleting a campus should **not** delete user profiles
-- instead, `profiles.campus_id` should be set to `NULL`
-
-In the consolidated baseline:
+Campus deletion is a real delete, not a soft hide.
 
 - `buildings.campus_id` -> `ON DELETE CASCADE`
 - `routes.campus_id` -> `ON DELETE CASCADE`
@@ -152,54 +166,38 @@ The admin app still calls the RPC named `soft_delete_campus`, but the intended b
 
 ## Supabase / Migration Policy
 
-The repo has been consolidated to a single baseline migration:
+Consolidated to a single baseline migration: `supabase/migrations/20260310000001_baseline.sql`
 
-- `supabase/migrations/20260310000001_baseline.sql`
+Future schema work should update the baseline consistently or reintroduce incremental migrations deliberately.
 
-Older incremental migration files and historical down-migration clutter were removed. Future schema work should update the baseline consistently or reintroduce incremental migrations deliberately, not accidentally.
+Gotchas:
 
-Important gotchas already resolved:
-
-- the baseline must create `pgcrypto`, `pg_trgm`, and `postgis` explicitly
+- baseline must create `pgcrypto`, `pg_trgm`, and `postgis` explicitly
 - `campuses.location` is `geometry(Point,4326)`, not `geography`
-- `v_campuses` includes `footprint`; if modified later, avoid accidental column reordering
+- `v_campuses` includes `footprint`; avoid accidental column reordering
 
 ## Linked Remote Project
 
-The linked Supabase project ref used in this repo is:
+Supabase project ref: `drbcraxnnbpjlkbqtbfa`
 
-- `drbcraxnnbpjlkbqtbfa`
-
-The remote has been reset and aligned to the consolidated baseline during this workstream.
+The remote has been reset and aligned to the consolidated baseline.
 
 ## Seeding / Staging Workflow
 
-`just supabase-seed-staging` is now intended for lightweight auth/bootstrap support, not full campus fixture loading.
-
-Behavior:
+`just supabase-seed-staging` is lightweight auth/bootstrap support, not full campus fixture loading.
 
 - recreates seeded auth users
 - upserts matching `public.profiles`
 - skips SQL cleanup if `STAGING_DB_URL` is not set
-- can infer the project ref from:
-  - `STAGING_PROJECT_REF`
-  - `EXPO_PUBLIC_SUPABASE_URL`
-  - `supabase/.temp/project-ref`
+- infers project ref from `STAGING_PROJECT_REF`, `EXPO_PUBLIC_SUPABASE_URL`, or `supabase/.temp/project-ref`
 
-Current seeded users:
+Seeded users: `seed-admin@echoecho.test`, `seed-student@echoecho.test`
 
-- `seed-admin@echoecho.test`
-- `seed-student@echoecho.test`
+Do not store `SUPABASE_SERVICE_ROLE_KEY` in app runtime env files.
 
-Do not store `SUPABASE_SERVICE_ROLE_KEY` in app runtime env files unless there is a deliberate secure local-only workflow for it.
-
-## Settings Menu UI Note
-
-The settings campus context menu can be affected by stacking order. If menu items appear hidden behind lower sections, check z-index/elevation on the entire `Campuses` section, not only the menu itself.
-
-## Recommended Future Discipline
+## Discipline
 
 - Prefer real polygon geometry over center-point assumptions
-- Keep admin and student campus-selection logic behaviorally aligned
-- Treat `project.md` as the first place to record repo-specific operational knowledge after major fixes
-- If a future session changes staging workflow, seed behavior, or migration policy, update this file immediately
+- Keep admin and student campus-selection logic aligned
+- Treat `project.md` as the first place to record repo-specific operational knowledge
+- Update this file immediately when staging workflow, seed behavior, or migration policy changes
