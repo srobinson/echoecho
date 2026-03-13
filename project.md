@@ -24,6 +24,22 @@ Navigation is computed on demand from the student's current position to any room
 
 EchoEcho only maps indoors. Outdoors is free infrastructure via Mapbox/OSM.
 
+### Mapbox Navigation SDK for React Native (OSS)
+
+No official React Native wrapper for the Mapbox Navigation SDK exists. Helioy will build and open-source one. This fills a real gap in the ecosystem (the most requested missing piece for @rnmapbox/maps) and gives EchoEcho native turn-by-turn walking navigation with offline routing and automatic rerouting.
+
+The native SDK already supports walking alongside driving and cycling. The wrapper exposes:
+
+- Walking turn-by-turn navigation with voice instructions
+- Offline route calculation via downloadable navigation tiles
+- Automatic rerouting on deviation
+- Route progress tracking and ETA updates
+- Accessibility-aware audio guidance hooks
+
+Scope is deliberately narrow: walking navigation for accessibility. Not a full driving navigation UI. This keeps the surface area manageable and the library focused.
+
+Target repo: `helioy/react-native-mapbox-navigation` (or contributed upstream to `@rnmapbox`).
+
 ### Pre-Authored Routes Are Curated Experiences
 
 Pre-authored routes do not drive the navigation infrastructure. They are content:
