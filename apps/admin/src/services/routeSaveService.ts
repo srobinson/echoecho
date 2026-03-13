@@ -366,7 +366,7 @@ export async function saveRoute(
  * both the RLS layer and inside the SECURITY DEFINER function).
  */
 export async function publishRoute(routeId: string): Promise<PublishResult> {
-  const { error } = await supabase.rpc('publish_route', { route_id: routeId });
+  const { error } = await supabase.rpc('publish_route', { p_route_id: routeId });
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
@@ -377,7 +377,18 @@ export async function publishRoute(routeId: string): Promise<PublishResult> {
  * Callable only by admin/om_specialist.
  */
 export async function retractRoute(routeId: string): Promise<PublishResult> {
-  const { error } = await supabase.rpc('retract_route', { route_id: routeId });
+  const { error } = await supabase.rpc('retract_route', { p_route_id: routeId });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/**
+ * Delete a route and its paired reverse route (if any).
+ * The DB function selects the reverse_route_id first, deletes that row,
+ * then deletes the requested route. Waypoints cascade automatically.
+ */
+export async function deleteRoute(routeId: string): Promise<PublishResult> {
+  const { error } = await supabase.rpc('delete_route', { p_route_id: routeId });
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }

@@ -19,7 +19,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useVoiceAnnotation } from '../hooks/useVoiceAnnotation';
@@ -109,13 +109,13 @@ export const VoiceAnnotationSheet = forwardRef<BottomSheet, VoiceAnnotationSheet
     return (
       <BottomSheet
         ref={ref}
-        snapPoints={['40%', '60%']}
+        snapPoints={['55%', '80%']}
         enablePanDownToClose
         onClose={onDismiss}
         backgroundStyle={styles.sheetBackground}
         handleIndicatorStyle={styles.handleIndicator}
       >
-        <BottomSheetView style={styles.container}>
+        <BottomSheetScrollView contentContainerStyle={styles.container}>
           <Text style={styles.title} accessibilityRole="header">Voice Annotation</Text>
 
           {/* Silence prompt */}
@@ -184,12 +184,6 @@ export const VoiceAnnotationSheet = forwardRef<BottomSheet, VoiceAnnotationSheet
               ) : (
                 <Text style={styles.hint}>Listening now. Tap stop when you are done speaking.</Text>
               )}
-
-              <Text style={styles.supportingHint}>
-                {isTranscriptOnlyDevice
-                  ? transcriptOnlyExplanation
-                  : 'Transcript may lag while recording. The app will verify the playback clip after you stop.'}
-              </Text>
 
               {state.transcript.length > 0 && (
                 <View style={styles.transcriptBox}>
@@ -296,7 +290,7 @@ export const VoiceAnnotationSheet = forwardRef<BottomSheet, VoiceAnnotationSheet
               </Text>
             </View>
           )}
-        </BottomSheetView>
+        </BottomSheetScrollView>
       </BottomSheet>
     );
   },

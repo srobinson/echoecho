@@ -243,16 +243,17 @@ function MapScreenInner() {
 
           <MapboxGL.UserLocation visible animated />
 
-          {activeCampus?.footprint?.length ? (
-            <CampusBoundaryLayer
-              idPrefix={`main-map-campus-${activeCampus.id}`}
-              vertices={activeCampus.footprint}
-              lineColor="#4FC3F7"
-              fillColor="#4FC3F7"
-              lineOpacity={0.65}
-              fillOpacity={0.07}
-            />
-          ) : null}
+          {/* Always mounted with a stable source ID so Mapbox never re-adds
+              a source that is still being cleaned up on the native side.
+              CampusBoundaryLayer renders nothing when footprint has < 3 points. */}
+          <CampusBoundaryLayer
+            idPrefix="main-map-campus"
+            vertices={activeCampus?.footprint ?? []}
+            lineColor="#4FC3F7"
+            fillColor="#4FC3F7"
+            lineOpacity={0.65}
+            fillOpacity={0.07}
+          />
 
           {activeLayers.buildings && (
             <BuildingLayer

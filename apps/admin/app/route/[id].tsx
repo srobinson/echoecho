@@ -23,7 +23,7 @@ import { supabase } from '../../src/lib/supabase';
 import type { Building, Route, RouteStatus, Waypoint, WaypointType } from '@echoecho/shared';
 import { ConfirmDialog } from '../../src/components/ConfirmDialog';
 import { RoutePreviewMap } from '../../src/components/route/RoutePreviewMap';
-import { publishRoute, retractRoute } from '../../src/services/routeSaveService';
+import { publishRoute, retractRoute, deleteRoute } from '../../src/services/routeSaveService';
 
 import { tabColors } from '@echoecho/ui';
 import { SectionColorProvider, useSectionColor } from '../../src/contexts/SectionColorContext';
@@ -202,13 +202,10 @@ function RouteDetailScreenInner() {
       return;
     }
 
-    const { error } = await supabase
-      .from('routes')
-      .delete()
-      .eq('id', route.id);
+    const result = await deleteRoute(route.id);
     setConfirmBusy(false);
-    if (error) {
-      Alert.alert('Delete failed', error.message);
+    if (!result.ok) {
+      Alert.alert('Delete failed', result.error);
       return;
     }
     setConfirmAction(null);

@@ -38,6 +38,7 @@ import { RecordingBottomBar } from '../src/components/RecordingBottomBar';
 import { VoiceAnnotationSheet } from '../src/components/VoiceAnnotationSheet';
 import { HazardButton } from '../src/components/HazardButton';
 import { BuildingLayer } from '../src/components/map/BuildingLayer';
+import { CampusBoundaryLayer } from '../src/components/map/CampusBoundaryLayer';
 import { hasFiniteCoordinate, toLngLat } from '../src/lib/mapboxCoordinates';
 import type { HazardType } from '@echoecho/shared';
 
@@ -374,6 +375,15 @@ export default function RecordScreen() {
         />
 
         <MapboxGL.UserLocation visible animated />
+
+        <CampusBoundaryLayer
+          idPrefix="record-map-campus"
+          vertices={activeCampus?.footprint ?? []}
+          lineColor="#4FC3F7"
+          fillColor="#4FC3F7"
+          lineOpacity={0.65}
+          fillOpacity={0.07}
+        />
 
         <BuildingLayer
           buildings={buildings}

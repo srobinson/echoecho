@@ -291,7 +291,7 @@ describe('publishRoute', () => {
     const result = await publishRoute('some-route-id');
 
     expect(result.ok).toBe(true);
-    expect(mockRpc).toHaveBeenCalledWith('publish_route', { route_id: 'some-route-id' });
+    expect(mockRpc).toHaveBeenCalledWith('publish_route', { p_route_id: 'some-route-id' });
   });
 
   it('returns ok:false when RPC returns an error', async () => {
@@ -311,7 +311,7 @@ describe('retractRoute', () => {
     const result = await retractRoute('some-route-id');
 
     expect(result.ok).toBe(true);
-    expect(mockRpc).toHaveBeenCalledWith('retract_route', { route_id: 'some-route-id' });
+    expect(mockRpc).toHaveBeenCalledWith('retract_route', { p_route_id: 'some-route-id' });
   });
 
   it('returns ok:false when RPC returns an error', async () => {
