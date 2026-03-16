@@ -27,6 +27,10 @@ import { cacheRouteMedia } from './mediaCache';
 
 const SYNC_THROTTLE_MS = 15 * 60 * 1000; // 15 minutes
 
+// Mutex: concurrent callers wait for the in-progress sync rather than
+// spawning redundant parallel fetches.
+let activeSyncPromise: Promise<void> | null = null;
+
 interface ServerRouteHeader {
   id: string;
   content_hash: string;
@@ -48,8 +52,15 @@ interface ServerRouteHeader {
 export async function syncCampus(
   campusId: string,
   activeRouteId?: string,
-  force = false
+  force = false,
 ): Promise<void> {
+  // If a sync is already running, wait for it instead of starting another.
+  if (activeSyncPromise) {
+    console.log('[syncEngine] Sync already in progress, waiting...');
+    await activeSyncPromise;
+    return;
+  }
+
   // Throttle guard — skip if last sync was recent (unless forced).
   if (!force) {
     const lastSync = await getLastSyncedAt(campusId);
@@ -58,9 +69,16 @@ export async function syncCampus(
     }
   }
 
-  // Fetch only published route headers. RLS blocks retracted routes for
-  // anonymous users anyway. Retractions are detected by absence: any locally
-  // cached route that no longer appears in the published set is marked retracted.
+  activeSyncPromise = doSync(campusId, activeRouteId);
+  try {
+    await activeSyncPromise;
+  } finally {
+    activeSyncPromise = null;
+  }
+}
+
+async function doSync(campusId: string, activeRouteId?: string): Promise<void> {
+  console.log(`[syncEngine] Fetching published routes for campus ${campusId}`);
   const { data: serverRoutes, error: routesError } = await supabase
     .from('routes')
     .select('id, content_hash, status, campus_id, name, difficulty, tags, total_distance_m')
@@ -73,6 +91,7 @@ export async function syncCampus(
   }
 
   const routes = (serverRoutes ?? []) as ServerRouteHeader[];
+  console.log(`[syncEngine] Got ${routes.length} published routes from server`);
   const serverRouteIds = new Set(routes.map((r) => r.id));
 
   // Compare content_hash against local cache. Stale = missing or hash changed.
@@ -87,23 +106,29 @@ export async function syncCampus(
   }
 
   const staleRoutes = routes.filter(
-    (r) => !localHashes[r.id] || localHashes[r.id] !== r.content_hash
+    (r) => !localHashes[r.id] || localHashes[r.id] !== r.content_hash,
+  );
+  console.log(
+    `[syncEngine] ${staleRoutes.length} stale routes to sync (${Object.keys(localHashes).length} cached locally)`,
   );
 
-  for (const route of staleRoutes) {
-    // Skip the active navigation route — never modify data mid-session.
-    if (activeRouteId && route.id === activeRouteId) {
-      continue;
-    }
+  const routesToSync = staleRoutes.filter((r) => !(activeRouteId && r.id === activeRouteId));
 
-    // Fetch full waypoint payload for stale routes.
-    const { data: serverWaypoints, error: waypointError } = await supabase
-      .from('waypoints')
-      .select(
-        'id, position, heading, annotation_text, annotation_audio_url, hazard_type, geom'
-      )
-      .eq('route_id', route.id)
-      .order('position');
+  // Fetch all waypoint payloads in parallel (network-bound, no DB contention).
+  const waypointResults = await Promise.all(
+    routesToSync.map((route) =>
+      supabase
+        .from('waypoints')
+        .select('id, position, heading, annotation_text, annotation_audio_url, hazard_type, geom')
+        .eq('route_id', route.id)
+        .order('position'),
+    ),
+  );
+
+  // Write to SQLite sequentially (SQLite does not support concurrent writes).
+  for (let i = 0; i < routesToSync.length; i++) {
+    const route = routesToSync[i];
+    const { data: serverWaypoints, error: waypointError } = waypointResults[i];
 
     if (waypointError) {
       console.error(`[syncEngine] Failed to fetch waypoints for route ${route.id}:`, waypointError);
@@ -130,6 +155,9 @@ export async function syncCampus(
       hazardType: wp.hazard_type,
     }));
 
+    console.log(
+      `[syncEngine] Upserting route "${route.name}" with ${upsertWaypoints.length} waypoints`,
+    );
     await upsertRoute(
       {
         id: route.id,
@@ -141,7 +169,7 @@ export async function syncCampus(
         totalDistanceM: route.total_distance_m,
         contentHash: route.content_hash,
       },
-      upsertWaypoints
+      upsertWaypoints,
     );
 
     // Download audio annotations; failures fall back to TTS on annotation_text.
@@ -151,7 +179,7 @@ export async function syncCampus(
         id: wp.id,
         annotation_audio_url: wp.annotation_audio_url,
         annotation_text: wp.annotation_text,
-      }))
+      })),
     );
   }
 

@@ -1,40 +1,46 @@
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LogBox } from 'react-native';
+
+// Suppress the Supabase AuthApiError alert that surfaces in dev builds
+// when a stale refresh token is encountered after app reinstall.
+LogBox.ignoreLogs(['AuthApiError', 'Invalid Refresh Token']);
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
+const SESSION_KEY = 'echoecho-student-session';
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: AsyncStorage,
-    autoRefreshToken: true,
+    autoRefreshToken: false,
     persistSession: true,
     detectSessionInUrl: false,
-    storageKey: 'echoecho-student-session',
+    storageKey: SESSION_KEY,
   },
 });
 
 /**
  * Ensures the student app has an active, validated auth session.
  *
- * getSession() returns the cached session from local storage without network
- * validation. An expired session whose refresh token has also expired still
- * returns a non-null object. We call refreshSession() to validate it over the
- * network, and fall back to a fresh anonymous sign-in if refresh fails.
- *
- * Returns { ok: true } when a valid session is established, { ok: false } when
- * all attempts fail. Callers should gate network operations on the result.
+ * On reinstall the old session token is orphaned. We validate first,
+ * clear on failure, and fall back to a fresh anonymous sign-in.
  */
 export async function ensureAnonymousSession(): Promise<{ ok: boolean }> {
-  const { data: { session } } = await supabase.auth.getSession();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
 
   if (session) {
     const { error: refreshError } = await supabase.auth.refreshSession();
     if (!refreshError) return { ok: true };
-    console.warn('[supabase] Session refresh failed, re-authenticating:', refreshError.message);
+    await supabase.auth.signOut().catch(() => {});
   }
 
-  const { error } = await supabase.auth.signInAnonymously();
+  const { error } = await supabase.auth.signInAnonymously({
+    options: { data: { app: 'student' } },
+  });
   if (error) {
     console.error('[supabase] Anonymous sign-in failed:', error.message);
     return { ok: false };

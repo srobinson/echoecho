@@ -83,7 +83,10 @@ interface CampusProviderProps {
 
 export function CampusProvider({ children }: CampusProviderProps) {
   const [campus, setCampus] = useState<CampusInfo | null>(null);
-  const [nearestCampus, setNearestCampus] = useState<{ name: string; distanceMeters: number } | null>(null);
+  const [nearestCampus, setNearestCampus] = useState<{
+    name: string;
+    distanceMeters: number;
+  } | null>(null);
   const [entrances, setEntrances] = useState<Entrance[]>([]);
   const [securityWaypoints, setSecurityWaypoints] = useState<Waypoint[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -92,6 +95,7 @@ export function CampusProvider({ children }: CampusProviderProps) {
   const fetchFromNetwork = useCallback(async (): Promise<boolean> => {
     try {
       const deviceCoords = await getDeviceCoords();
+      console.log('[CampusContext] Device coords:', deviceCoords ? 'obtained' : 'unavailable');
 
       const { data: campusRows, error: campusErr } = await supabase
         .from('v_campuses' as 'campuses')
@@ -99,13 +103,14 @@ export function CampusProvider({ children }: CampusProviderProps) {
         .order('name');
 
       if (campusErr) {
-        console.error('[CampusContext] Failed to fetch campus:', campusErr.message);
+        console.error('[CampusContext] Failed to fetch campuses:', campusErr.message);
         return false;
       }
       if (!campusRows || campusRows.length === 0) {
-        console.warn('[CampusContext] No campus configured');
+        console.warn('[CampusContext] No campuses configured');
         return false;
       }
+      console.log(`[CampusContext] Fetched ${campusRows.length} campuses`);
 
       const campusSelection = selectCampusForCoords(
         campusRows as Array<Campus & { securityPhone?: string | null }>,
@@ -123,6 +128,10 @@ export function CampusProvider({ children }: CampusProviderProps) {
       );
 
       if (!campusSelection || !campusSelection.selectedCampus) {
+        console.log(
+          '[CampusContext] No campus within range',
+          campusSelection?.nearestDistanceMeters,
+        );
         setCampus(null);
         setEntrances([]);
         setSecurityWaypoints([]);
@@ -135,6 +144,10 @@ export function CampusProvider({ children }: CampusProviderProps) {
         return true;
       }
 
+      console.log(
+        `[CampusContext] Selected campus: ${campusSelection.selectedCampus.name} (${campusSelection.nearestDistanceMeters}m)`,
+      );
+
       const campusInfo: CampusInfo = {
         id: campusSelection.selectedCampus.id,
         name: campusSelection.selectedCampus.name,
@@ -144,23 +157,27 @@ export function CampusProvider({ children }: CampusProviderProps) {
       // Fetch all buildings with entrances for this campus
       const { data: buildings, error: buildErr } = await supabase
         .from('buildings')
-        .select('id, name, entrances:building_entrances(id, building_id, name, coordinate, is_main, accessibility_notes)')
+        .select(
+          'id, name, entrances:building_entrances(id, building_id, name, coordinate, is_main, accessibility_notes)',
+        )
         .eq('campus_id', campusInfo.id);
 
       if (buildErr || !buildings) return false;
 
-      const allEntrances: Entrance[] = (buildings as Array<{
-        id: string;
-        name: string;
-        entrances: Array<{
+      const allEntrances: Entrance[] = (
+        buildings as Array<{
           id: string;
-          building_id: string;
           name: string;
-          coordinate: { latitude: number; longitude: number };
-          is_main: boolean;
-          accessibility_notes: string | null;
-        }>;
-      }>).flatMap((b) =>
+          entrances: Array<{
+            id: string;
+            building_id: string;
+            name: string;
+            coordinate: { latitude: number; longitude: number };
+            is_main: boolean;
+            accessibility_notes: string | null;
+          }>;
+        }>
+      ).flatMap((b) =>
         (b.entrances ?? []).map((e) => ({
           id: e.id,
           buildingId: e.building_id,
@@ -168,7 +185,7 @@ export function CampusProvider({ children }: CampusProviderProps) {
           coordinate: e.coordinate,
           isMain: e.is_main,
           accessibilityNotes: e.accessibility_notes,
-        }))
+        })),
       );
 
       // Fetch security office waypoints (tagged as POI type 'security')
@@ -180,28 +197,30 @@ export function CampusProvider({ children }: CampusProviderProps) {
 
       const secWaypoints: Waypoint[] = secErr
         ? []
-        : (secPois ?? []).map((p: {
-            id: string;
-            name: string;
-            coordinate: { latitude: number; longitude: number; altitude?: number };
-            description: string | null;
-          }) => ({
-            id: p.id,
-            routeId: '',
-            sequenceIndex: 0,
-            coordinate: {
-              latitude: p.coordinate.latitude,
-              longitude: p.coordinate.longitude,
-              altitude: p.coordinate.altitude ?? 0,
-            },
-            type: 'landmark' as const,
-            headingOut: null,
-            audioLabel: p.name,
-            description: p.description,
-            photoUrl: null,
-            audioAnnotationUrl: null,
-            createdAt: new Date().toISOString(),
-          }));
+        : (secPois ?? []).map(
+            (p: {
+              id: string;
+              name: string;
+              coordinate: { latitude: number; longitude: number; altitude?: number };
+              description: string | null;
+            }) => ({
+              id: p.id,
+              routeId: '',
+              sequenceIndex: 0,
+              coordinate: {
+                latitude: p.coordinate.latitude,
+                longitude: p.coordinate.longitude,
+                altitude: p.coordinate.altitude ?? 0,
+              },
+              type: 'landmark' as const,
+              headingOut: null,
+              audioLabel: p.name,
+              description: p.description,
+              photoUrl: null,
+              audioAnnotationUrl: null,
+              createdAt: new Date().toISOString(),
+            }),
+          );
 
       // Persist to state and cache
       setCampus(campusInfo);
@@ -214,13 +233,28 @@ export function CampusProvider({ children }: CampusProviderProps) {
         AsyncStorage.setItem(STORAGE_KEY_SECURITY_WPS, JSON.stringify(secWaypoints)),
       ]);
 
+      // Persist campus_id to the user's profile so RLS policies that check
+      // current_user_campus() return the correct value.
+      supabase
+        .from('profiles')
+        .update({ campus_id: campusInfo.id })
+        .eq('id', (await supabase.auth.getUser()).data.user?.id ?? '')
+        .then(({ error: profileErr }) => {
+          if (profileErr)
+            console.warn('[CampusContext] Failed to update profile campus_id:', profileErr.message);
+          else console.log('[CampusContext] Profile campus_id updated');
+        });
+
       // Ensure the student app has local route data on first load, not only
       // after a later foreground event.
+      console.log(`[CampusContext] Starting syncCampus for ${campusInfo.id}`);
       await syncCampus(campusInfo.id, undefined, true);
+      console.log('[CampusContext] syncCampus complete');
 
       setLoadFailed(false);
       return true;
-    } catch {
+    } catch (err) {
+      console.error('[CampusContext] fetchFromNetwork error:', err);
       return false;
     }
   }, []);
@@ -262,7 +296,9 @@ export function CampusProvider({ children }: CampusProviderProps) {
   }, [fetchFromNetwork]);
 
   useEffect(() => {
-    const run = async () => { await restoreFromCache(); };
+    const run = async () => {
+      await restoreFromCache();
+    };
     void run();
   }, [restoreFromCache]);
 
@@ -288,7 +324,9 @@ export function CampusProvider({ children }: CampusProviderProps) {
   }, [fetchFromNetwork]);
 
   return (
-    <CampusContext.Provider value={{ campus, nearestCampus, entrances, securityWaypoints, isLoaded, loadFailed, refresh }}>
+    <CampusContext.Provider
+      value={{ campus, nearestCampus, entrances, securityWaypoints, isLoaded, loadFailed, refresh }}
+    >
       {children}
     </CampusContext.Provider>
   );
@@ -298,18 +336,19 @@ const NEARBY_CAMPUS_RADIUS_M = 1_500;
 
 async function getDeviceCoords(): Promise<{ latitude: number; longitude: number } | null> {
   try {
-    let permission = await Location.getForegroundPermissionsAsync();
-    if (permission.status !== 'granted' && permission.canAskAgain) {
-      permission = await Location.requestForegroundPermissionsAsync();
-    }
-    if (permission.status !== 'granted') {
+    // Only check permission status; do not request. The onboarding flow
+    // handles the permission request with proper accessibility support.
+    const { status } = await Location.getForegroundPermissionsAsync();
+    if (status !== 'granted') {
       return null;
     }
 
     const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: 60_000 });
-    const current = lastKnown ?? await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
+    const current =
+      lastKnown ??
+      (await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      }));
 
     return {
       latitude: current.coords.latitude,

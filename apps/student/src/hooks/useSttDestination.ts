@@ -15,10 +15,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { AccessibilityInfo } from 'react-native';
 import * as Speech from 'expo-speech';
-import {
-  ExpoSpeechRecognitionModule,
-  useSpeechRecognitionEvent,
-} from 'expo-speech-recognition';
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import type { SttSessionState } from '@echoecho/shared';
 import { fuzzySearch, type FuseMatch } from '../lib/buildingIndex';
 
@@ -108,134 +105,162 @@ export function useSttDestination(
     setError(null);
   }, [clearTimers]);
 
-  const confirmMatch = useCallback((match: DestinationMatch) => {
-    setPendingMatch(match);
-    setMatches([]);
-    setSttState('confirming');
-    Speech.stop();
-    Speech.speak(`Destination matched. Starting navigation to ${match.name}.`);
-    AccessibilityInfo.announceForAccessibility(
-      `Destination matched. Starting navigation to ${match.name}.`
-    );
+  const confirmMatch = useCallback(
+    (match: DestinationMatch) => {
+      setPendingMatch(match);
+      setMatches([]);
+      setSttState('confirming');
+      Speech.stop();
+      Speech.speak(`Destination matched. Starting navigation to ${match.name}.`);
+      AccessibilityInfo.announceForAccessibility(
+        `Destination matched. Starting navigation to ${match.name}.`,
+      );
 
-    confirmTimerRef.current = setTimeout(() => {
-      onDestinationSelected(match.buildingId, match.name);
-      resetToIdle();
-    }, 900);
-  }, [onDestinationSelected, resetToIdle]);
+      confirmTimerRef.current = setTimeout(() => {
+        onDestinationSelected(match.buildingId, match.name);
+        resetToIdle();
+      }, 900);
+    },
+    [onDestinationSelected, resetToIdle],
+  );
 
-  const resolveDisambiguationMatch = useCallback((
-    text: string,
-    options: DestinationMatch[],
-  ): DestinationMatch | null => {
-    const normalized = text.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
-    if (!normalized) return null;
+  const resolveDisambiguationMatch = useCallback(
+    (text: string, options: DestinationMatch[]): DestinationMatch | null => {
+      const normalized = text
+        .toLowerCase()
+        .replace(/[^\w\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!normalized) return null;
 
-    const ordinalMap: Record<string, number> = {
-      '1': 0,
-      'one': 0,
-      'first': 0,
-      '2': 1,
-      'two': 1,
-      'second': 1,
-    };
-    if (normalized in ordinalMap) {
-      return options[ordinalMap[normalized]] ?? null;
-    }
+      const ordinalMap: Record<string, number> = {
+        '1': 0,
+        one: 0,
+        first: 0,
+        '2': 1,
+        two: 1,
+        second: 1,
+      };
+      if (normalized in ordinalMap) {
+        return options[ordinalMap[normalized]] ?? null;
+      }
 
-    const normalizedOptions = options.map((option) => ({
-      option,
-      normalizedName: option.name.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim(),
-    }));
+      const normalizedOptions = options.map((option) => ({
+        option,
+        normalizedName: option.name
+          .toLowerCase()
+          .replace(/[^\w\s]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim(),
+      }));
 
-    const exact = normalizedOptions.find(({ normalizedName }) => normalizedName === normalized);
-    if (exact) return exact.option;
+      const exact = normalizedOptions.find(({ normalizedName }) => normalizedName === normalized);
+      if (exact) return exact.option;
 
-    const prefixMatches = normalizedOptions.filter(({ normalizedName }) => normalizedName.startsWith(normalized));
-    if (prefixMatches.length === 1) return prefixMatches[0].option;
+      const prefixMatches = normalizedOptions.filter(({ normalizedName }) =>
+        normalizedName.startsWith(normalized),
+      );
+      if (prefixMatches.length === 1) return prefixMatches[0].option;
 
-    const includesMatches = normalizedOptions.filter(({ normalizedName }) => normalizedName.includes(normalized));
-    if (includesMatches.length === 1) return includesMatches[0].option;
+      const includesMatches = normalizedOptions.filter(({ normalizedName }) =>
+        normalizedName.includes(normalized),
+      );
+      if (includesMatches.length === 1) return includesMatches[0].option;
 
-    return null;
-  }, []);
+      return null;
+    },
+    [],
+  );
 
   // ── Match processing (defined before event handlers to avoid stale closure) ──
 
-  const processTranscript = useCallback((text: string) => {
-    setSttState('transcribing');
+  const processTranscript = useCallback(
+    (text: string) => {
+      setSttState('transcribing');
 
-    if (sttState === 'disambiguating' && matches.length > 0) {
-      const selected = resolveDisambiguationMatch(text, matches);
-      if (selected) {
-        confirmMatch(selected);
+      if (sttState === 'disambiguating' && matches.length > 0) {
+        const selected = resolveDisambiguationMatch(text, matches);
+        if (selected) {
+          confirmMatch(selected);
+          return;
+        }
+
+        const names = matches.map((match) => match.name).join(' or ');
+        setSttState('disambiguating');
+        Speech.stop();
+        Speech.speak(`I heard ${text}. Did you mean ${names}?`);
+        AccessibilityInfo.announceForAccessibility(`I heard ${text}. Did you mean ${names}?`);
         return;
       }
 
-      const names = matches.map((match) => match.name).join(' or ');
-      setSttState('disambiguating');
-      Speech.stop();
-      Speech.speak(`I heard ${text}. Did you mean ${names}?`);
-      AccessibilityInfo.announceForAccessibility(`I heard ${text}. Did you mean ${names}?`);
-      return;
-    }
+      const results = fuzzySearch(text, campusId);
 
-    const results = fuzzySearch(text, campusId);
+      if (results.length === 0) {
+        setError(`No destination found for "${text}". Try again or spell it out.`);
+        AccessibilityInfo.announceForAccessibility(
+          `No destination found for ${text}. Try again or spell it out.`,
+        );
+        setSttState('error');
+        return;
+      }
 
-    if (results.length === 0) {
-      setError(`No destination found for "${text}". Try again or spell it out.`);
-      AccessibilityInfo.announceForAccessibility(
-        `No destination found for ${text}. Try again or spell it out.`
+      const best = results[0];
+      const ambiguous = results.filter(
+        (r: FuseMatch) => r.score - best.score <= AMBIGUITY_SCORE_DELTA,
       );
-      setSttState('error');
-      return;
-    }
 
-    const best = results[0];
-    const ambiguous = results.filter(
-      (r: FuseMatch) => (r.score - best.score) <= AMBIGUITY_SCORE_DELTA
-    );
-
-    if (ambiguous.length > 1) {
-      const topTwo = ambiguous.slice(0, 2).map(
-        (r: FuseMatch) => ({ buildingId: r.item.id, name: r.item.name })
-      );
-      setMatches(topTwo);
-      setPendingMatch(null);
-      setSttState('disambiguating');
-      const names = topTwo.map((m) => m.name).join(' or ');
-      Speech.stop();
-      Speech.speak(`Did you mean ${names}?`);
-      AccessibilityInfo.announceForAccessibility(`Did you mean: ${names}?`);
-    } else {
-      confirmMatch({ buildingId: best.item.id, name: best.item.name });
-    }
-  }, [campusId, confirmMatch, matches, resolveDisambiguationMatch, sttState]);
+      if (ambiguous.length > 1) {
+        const topTwo = ambiguous
+          .slice(0, 2)
+          .map((r: FuseMatch) => ({ buildingId: r.item.id, name: r.item.name }));
+        setMatches(topTwo);
+        setPendingMatch(null);
+        setSttState('disambiguating');
+        const names = topTwo.map((m) => m.name).join(' or ');
+        Speech.stop();
+        Speech.speak(`Did you mean ${names}?`);
+        AccessibilityInfo.announceForAccessibility(`Did you mean: ${names}?`);
+      } else {
+        confirmMatch({ buildingId: best.item.id, name: best.item.name });
+      }
+    },
+    [campusId, confirmMatch, matches, resolveDisambiguationMatch, sttState],
+  );
 
   // ── STT event handlers (wrapped in useCallback for stable references) ──
 
-  const handleResult = useCallback((event: { results: Array<{ transcript?: string }> }) => {
-    if (event.results.length === 0) return;
-    const text = event.results[0].transcript ?? '';
-    setTranscript(text);
-    clearTimers();
-    processTranscript(text);
-  }, [clearTimers, processTranscript]);
+  const handleResult = useCallback(
+    (event: { results: Array<{ transcript?: string }> }) => {
+      if (event.results.length === 0) return;
+      const text = event.results[0].transcript ?? '';
+      setTranscript(text);
+      clearTimers();
+      processTranscript(text);
+    },
+    [clearTimers, processTranscript],
+  );
 
-  const handleError = useCallback((event: { error: string; message: string }) => {
-    clearTimers();
-    if (event.error === 'no-speech') {
-      setError('No speech detected. Tap to try again.');
-      AccessibilityInfo.announceForAccessibility('No speech detected. Tap to try again.');
-      setSttState('error');
-    } else {
-      setError(`Recognition error: ${event.message}`);
-      setSttState('error');
-    }
-    isPausedRef.current = false;
-    pauseResolverRef.current?.();
-    pauseResolverRef.current = null;
-  }, [clearTimers]);
+  const handleError = useCallback(
+    (event: { error: string; message: string }) => {
+      clearTimers();
+      if (event.error === 'no-speech') {
+        setError('No speech detected. Tap to try again.');
+        AccessibilityInfo.announceForAccessibility('No speech detected. Tap to try again.');
+        setSttState('error');
+      } else if (event.error === 'aborted') {
+        // Triggered by our own abort() call (e.g. no-speech timeout). The
+        // no-speech message and state are already set before abort() fires,
+        // so there is nothing further to do here.
+      } else {
+        setError(`Recognition error: ${event.message}`);
+        setSttState('error');
+      }
+      isPausedRef.current = false;
+      pauseResolverRef.current?.();
+      pauseResolverRef.current = null;
+    },
+    [clearTimers],
+  );
 
   const handleEnd = useCallback(() => {
     isPausedRef.current = false;
@@ -335,10 +360,10 @@ export function useSttDestination(
     },
   };
 
-  // Request permissions eagerly on mount so the permission prompt does
-  // not surprise the user mid-dictation on their first tap.
+  // Check permission status on mount. The onboarding flow handles the
+  // actual permission request with proper accessibility support.
   useEffect(() => {
-    void ExpoSpeechRecognitionModule.requestPermissionsAsync().then((r) => {
+    void ExpoSpeechRecognitionModule.getPermissionsAsync().then((r) => {
       if (!r.granted) setSttUnavailable(true);
     });
   }, []);

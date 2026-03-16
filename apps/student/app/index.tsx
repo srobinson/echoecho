@@ -23,6 +23,10 @@ import {
   Animated,
   Easing,
   Linking,
+  ScrollView,
+  RefreshControl,
+  AppState,
+  ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -78,7 +82,11 @@ async function resolveCampusForCoords(
   }
 
   const campuses = data as Campus[];
-  const selection = selectCampusForCoords(campuses, { latitude, longitude }, NEARBY_CAMPUS_RADIUS_M);
+  const selection = selectCampusForCoords(
+    campuses,
+    { latitude, longitude },
+    NEARBY_CAMPUS_RADIUS_M,
+  );
 
   return {
     selectedCampus: selection?.selectedCampus ?? null,
@@ -90,12 +98,22 @@ async function resolveCampusForCoords(
 export default function HomeScreen() {
   const { userId, setCurrentSession } = useNavigationStore();
   const { favorites, isFavorite, toggleFavorite } = useRouteHistory(userId);
-  const { campus, nearestCampus, isLoaded: campusLoaded, loadFailed, refresh: refreshCampus } = useCampus();
+  const {
+    campus,
+    nearestCampus,
+    isLoaded: campusLoaded,
+    loadFailed,
+    refresh: refreshCampus,
+  } = useCampus();
   const [showKeyboardFallback, setShowKeyboardFallback] = useState(false);
   const [keyboardQuery, setKeyboardQuery] = useState('');
   const [showLocationPermissionHelp, setShowLocationPermissionHelp] = useState(false);
+  const [showMicPermissionHelp, setShowMicPermissionHelp] = useState(false);
   const [availableRoutes, setAvailableRoutes] = useState<LocalRoute[]>([]);
   const [availableRouteSummaries, setAvailableRouteSummaries] = useState<AssistRoute[]>([]);
+  const [routesLoading, setRoutesLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const lastSpokenNoMatchRef = useRef<string | null>(null);
 
   // Load building index on mount for STT fuzzy matching
@@ -103,122 +121,131 @@ export default function HomeScreen() {
     void loadBuildingIndex();
   }, []);
 
-  const startRouteNavigation = useCallback(async (
-    routeId: string,
-    routeName: string,
-    toLabel = '',
-  ) => {
-    await preloadRoute(routeId);
+  const startRouteNavigation = useCallback(
+    async (routeId: string, routeName: string, toLabel = '') => {
+      await preloadRoute(routeId);
 
-    const { data } = await supabase
-      .from('v_routes' as 'routes')
-      .select('*')
-      .eq('id', routeId)
-      .single();
+      const { data } = await supabase
+        .from('v_routes' as 'routes')
+        .select('*')
+        .eq('id', routeId)
+        .single();
 
-    if (data) {
-      setCurrentSession({
-        id: `session-${Date.now()}`,
-        userId: userId ?? 'anonymous',
-        route: data as Route,
-        status: 'searching',
-        positioningMode: 'unknown',
-        currentPosition: null,
-        currentWaypointIndex: 0,
-        distanceToNextWaypoint: null,
-        bearingToNextWaypoint: null,
-        startedAt: new Date().toISOString(),
-        arrivedAt: null,
+      if (data) {
+        setCurrentSession({
+          id: `session-${Date.now()}`,
+          userId: userId ?? 'anonymous',
+          route: data as Route,
+          status: 'searching',
+          positioningMode: 'unknown',
+          currentPosition: null,
+          currentWaypointIndex: 0,
+          distanceToNextWaypoint: null,
+          bearingToNextWaypoint: null,
+          startedAt: new Date().toISOString(),
+          arrivedAt: null,
+        });
+      }
+
+      AccessibilityInfo.announceForAccessibility(`Starting navigation to ${toLabel || routeName}`);
+      router.push(`/navigate/${routeId}`);
+    },
+    [setCurrentSession, userId],
+  );
+
+  const resolveRouteForDestination = useCallback(
+    async (destinationBuildingId: string, name: string) => {
+      let permission = await Location.getForegroundPermissionsAsync();
+      if (permission.status !== 'granted') {
+        permission = await Location.requestForegroundPermissionsAsync();
+      }
+      if (permission.status !== 'granted') {
+        setShowLocationPermissionHelp(true);
+        throw new Error('Location permission required. Enable location access in Settings.');
+      }
+
+      if (!campus?.id) {
+        await refreshCampus();
+      }
+
+      const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: 60_000 });
+      const current =
+        lastKnown ??
+        (await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        }));
+
+      const campusSelection = await resolveCampusForCoords(
+        current.coords.latitude,
+        current.coords.longitude,
+      );
+      const activeCampusId = campus?.id ?? campusSelection.selectedCampus?.id ?? null;
+
+      if (!activeCampusId) {
+        if (campusSelection.nearestCampus && campusSelection.nearestDistanceMeters != null) {
+          throw new Error(
+            `No nearby campus detected. The nearest campus is ${campusSelection.nearestCampus.name}, ${formatCampusDistance(campusSelection.nearestDistanceMeters)} away.`,
+          );
+        }
+        if (nearestCampus) {
+          throw new Error(
+            `No nearby campus detected. The nearest campus is ${nearestCampus.name}, ${formatCampusDistance(nearestCampus.distanceMeters)} away.`,
+          );
+        }
+        throw new Error('No nearby campus detected.');
+      }
+
+      const matched = await matchRoute({
+        lat: current.coords.latitude,
+        lng: current.coords.longitude,
+        destinationText: name,
+        campusId: activeCampusId,
+        limit: 5,
       });
-    }
 
-    AccessibilityInfo.announceForAccessibility(`Starting navigation to ${toLabel || routeName}`);
-    router.push(`/navigate/${routeId}`);
-  }, [setCurrentSession, userId]);
-
-  const resolveRouteForDestination = useCallback(async (destinationBuildingId: string, name: string) => {
-    let permission = await Location.getForegroundPermissionsAsync();
-    if (permission.status !== 'granted') {
-      permission = await Location.requestForegroundPermissionsAsync();
-    }
-    if (permission.status !== 'granted') {
-      setShowLocationPermissionHelp(true);
-      throw new Error('Location permission required. Enable location access in Settings.');
-    }
-
-    if (!campus?.id) {
-      await refreshCampus();
-    }
-
-    const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: 60_000 });
-    const current = lastKnown ?? await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
-
-    const campusSelection = await resolveCampusForCoords(
-      current.coords.latitude,
-      current.coords.longitude,
-    );
-    const activeCampusId = campus?.id ?? campusSelection.selectedCampus?.id ?? null;
-
-    if (!activeCampusId) {
-      if (campusSelection.nearestCampus && campusSelection.nearestDistanceMeters != null) {
-        throw new Error(
-          `No nearby campus detected. The nearest campus is ${campusSelection.nearestCampus.name}, ${formatCampusDistance(campusSelection.nearestDistanceMeters)} away.`,
-        );
+      if ('error' in matched) {
+        throw new Error(matched.error.message);
       }
-      if (nearestCampus) {
-        throw new Error(
-          `No nearby campus detected. The nearest campus is ${nearestCampus.name}, ${formatCampusDistance(nearestCampus.distanceMeters)} away.`,
-        );
+
+      const bestRoute =
+        matched.data.matches.find((route) => route.endBuildingId === destinationBuildingId) ??
+        matched.data.matches[0];
+
+      if (!bestRoute) {
+        if (matched.data.nearestBuildingId === destinationBuildingId) {
+          throw new Error(`You are already at ${name}.`);
+        }
+        if (matched.data.nearestBuildingName) {
+          throw new Error(
+            `No published route from ${matched.data.nearestBuildingName} to ${name}.`,
+          );
+        }
+        throw new Error(`No published route found for ${name}.`);
       }
-      throw new Error('No nearby campus detected.');
-    }
 
-    const matched = await matchRoute({
-      lat: current.coords.latitude,
-      lng: current.coords.longitude,
-      destinationText: name,
-      campusId: activeCampusId,
-      limit: 5,
-    });
+      await startRouteNavigation(bestRoute.routeId, bestRoute.routeName, bestRoute.endBuildingName);
+    },
+    [campus, nearestCampus, refreshCampus, startRouteNavigation],
+  );
 
-    if ('error' in matched) {
-      throw new Error(matched.error.message);
-    }
+  const handleDestinationSelect = useCallback(
+    (routeId: string, label: string) => {
+      void startRouteNavigation(routeId, label);
+    },
+    [startRouteNavigation],
+  );
 
-    const bestRoute = matched.data.matches.find((route) => route.endBuildingId === destinationBuildingId)
-      ?? matched.data.matches[0];
-
-    if (!bestRoute) {
-      if (matched.data.nearestBuildingId === destinationBuildingId) {
-        throw new Error(`You are already at ${name}.`);
-      }
-      if (matched.data.nearestBuildingName) {
-        throw new Error(`No published route from ${matched.data.nearestBuildingName} to ${name}.`);
-      }
-      throw new Error(`No published route found for ${name}.`);
-    }
-
-    await startRouteNavigation(
-      bestRoute.routeId,
-      bestRoute.routeName,
-      bestRoute.endBuildingName,
-    );
-  }, [campus, nearestCampus, refreshCampus, startRouteNavigation]);
-
-  const handleDestinationSelect = useCallback((routeId: string, label: string) => {
-    void startRouteNavigation(routeId, label);
-  }, [startRouteNavigation]);
-
-  const handleDestinationConfirmed = useCallback((destinationBuildingId: string, name: string) => {
-    void resolveRouteForDestination(destinationBuildingId, name).catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : 'Could not start navigation.';
-      Speech.stop();
-      Speech.speak(message);
-      AccessibilityInfo.announceForAccessibility(message);
-    });
-  }, [resolveRouteForDestination]);
+  const handleDestinationConfirmed = useCallback(
+    (destinationBuildingId: string, name: string) => {
+      void resolveRouteForDestination(destinationBuildingId, name).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : 'Could not start navigation.';
+        Speech.stop();
+        Speech.speak(message);
+        AccessibilityInfo.announceForAccessibility(message);
+      });
+    },
+    [resolveRouteForDestination],
+  );
 
   const handleOpenSettings = useCallback(() => {
     void Linking.openSettings();
@@ -236,62 +263,91 @@ export default function HomeScreen() {
     resetToIdle,
   } = useSttDestination(handleDestinationConfirmed, campus?.id);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadAvailableRoutes = useCallback(async (campusId: string) => {
+    setRoutesLoading(true);
+    await syncCampus(campusId, undefined, true);
 
-    async function loadAvailableRoutes() {
-      if (!campus?.id) {
-        setAvailableRoutes([]);
-        setAvailableRouteSummaries([]);
-        return;
-      }
+    const [localRoutes, routeHeaders, buildingRows] = await Promise.all([
+      getLocalRoutesForCampus(campusId),
+      supabase
+        .from('v_routes' as 'routes')
+        .select('id, name, fromBuildingId, toBuildingId, fromLabel, toLabel')
+        .eq('campusId' as 'campus_id', campusId)
+        .eq('status', 'published')
+        .order('name'),
+      supabase
+        .from('v_buildings' as 'buildings')
+        .select('id, name')
+        .eq('campusId' as 'campus_id', campusId),
+    ]);
 
-      // CampusProvider can complete a background sync after the home screen has
-      // already rendered from cached campus data. Force a sync here so the
-      // local route list reflects newly published routes immediately.
-      await syncCampus(campus.id, undefined, true);
-
-      const [localRoutes, routeHeaders, buildingRows] = await Promise.all([
-        getLocalRoutesForCampus(campus.id),
-        supabase
-          .from('v_routes' as 'routes')
-          .select('id, name, fromBuildingId, toBuildingId, fromLabel, toLabel')
-          .eq('campusId' as 'campus_id', campus.id)
-          .eq('status', 'published')
-          .order('name'),
-        supabase
-          .from('v_buildings' as 'buildings')
-          .select('id, name')
-          .eq('campusId' as 'campus_id', campus.id),
-      ]);
-
-      if (!cancelled) {
-        setAvailableRoutes(localRoutes);
-        if (routeHeaders.error || !routeHeaders.data) {
-          setAvailableRouteSummaries([]);
-          return;
-        }
-
-        const buildingNameById = new Map<string, string>(
-          ((buildingRows.error || !buildingRows.data ? [] : buildingRows.data) as Array<{
-            id: string;
-            name: string;
-          }>).map((building) => [building.id, building.name]),
-        );
-
-        setAvailableRouteSummaries((routeHeaders.data as AssistRoute[]).map((route) => ({
-          ...route,
-          fromLabel: route.fromLabel?.trim() || (route.fromBuildingId ? buildingNameById.get(route.fromBuildingId) ?? 'Unknown start' : 'Unknown start'),
-          toLabel: route.toLabel?.trim() || (route.toBuildingId ? buildingNameById.get(route.toBuildingId) ?? 'Unknown destination' : 'Unknown destination'),
-        })));
-      }
+    setAvailableRoutes(localRoutes);
+    if (routeHeaders.error || !routeHeaders.data) {
+      setAvailableRouteSummaries([]);
+      setRoutesLoading(false);
+      return;
     }
 
-    void loadAvailableRoutes();
-    return () => {
-      cancelled = true;
-    };
-  }, [campus?.id]);
+    const buildingNameById = new Map<string, string>(
+      (
+        (buildingRows.error || !buildingRows.data ? [] : buildingRows.data) as Array<{
+          id: string;
+          name: string;
+        }>
+      ).map((building) => [building.id, building.name]),
+    );
+
+    setAvailableRouteSummaries(
+      (routeHeaders.data as AssistRoute[]).map((route) => ({
+        ...route,
+        fromLabel:
+          route.fromLabel?.trim() ||
+          (route.fromBuildingId
+            ? (buildingNameById.get(route.fromBuildingId) ?? 'Unknown start')
+            : 'Unknown start'),
+        toLabel:
+          route.toLabel?.trim() ||
+          (route.toBuildingId
+            ? (buildingNameById.get(route.toBuildingId) ?? 'Unknown destination')
+            : 'Unknown destination'),
+      })),
+    );
+    setRoutesLoading(false);
+  }, []);
+
+  // Load routes when campus becomes available
+  useEffect(() => {
+    if (!campus?.id) {
+      setAvailableRoutes([]);
+      setAvailableRouteSummaries([]);
+      return;
+    }
+    void loadAvailableRoutes(campus.id);
+  }, [campus?.id, loadAvailableRoutes]);
+
+  // Re-detect campus when app returns to foreground (handles location permission
+  // being granted in Settings while the app was backgrounded).
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active' && !campus?.id) {
+        void refreshCampus();
+      }
+    });
+    return () => sub.remove();
+  }, [campus?.id, refreshCampus]);
+
+  // Pull-to-refresh: re-detect campus and reload routes. The campus?.id
+  // dependency ensures we pick up the latest value. If campus was null and
+  // refreshCampus detects one, the campus?.id change triggers
+  // loadAvailableRoutes via the effect above.
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshCampus();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refreshCampus]);
 
   // Pulsing animation while listening
   const [pulseAnim] = useState(() => new Animated.Value(1));
@@ -321,26 +377,29 @@ export default function HomeScreen() {
 
   const handleVoiceSearch = useCallback(() => {
     if (sttUnavailable) {
-      setShowKeyboardFallback(true);
+      setShowMicPermissionHelp(true);
       AccessibilityInfo.announceForAccessibility(
-        'Voice search unavailable. Keyboard input opened.'
+        'Microphone access is required for voice search. Open Settings to enable it, or type your destination instead.',
       );
       return;
     }
     void startListening();
   }, [sttUnavailable, startListening]);
 
-  const handleKeyboardSearch = useCallback((query: string) => {
-    const results = fuzzySearch(query, campus?.id);
-    if (results.length === 0) {
-      AccessibilityInfo.announceForAccessibility(`No destination found for ${query}.`);
-      return;
-    }
-    const best = results[0];
-    handleDestinationConfirmed(best.item.id, best.item.name);
-    setShowKeyboardFallback(false);
-    setKeyboardQuery('');
-  }, [campus?.id, handleDestinationConfirmed]);
+  const handleKeyboardSearch = useCallback(
+    (query: string) => {
+      const results = fuzzySearch(query, campus?.id);
+      if (results.length === 0) {
+        AccessibilityInfo.announceForAccessibility(`No destination found for ${query}.`);
+        return;
+      }
+      const best = results[0];
+      handleDestinationConfirmed(best.item.id, best.item.name);
+      setShowKeyboardFallback(false);
+      setKeyboardQuery('');
+    },
+    [campus?.id, handleDestinationConfirmed],
+  );
 
   useEffect(() => {
     if (sttState === 'transcribing') {
@@ -362,29 +421,44 @@ export default function HomeScreen() {
       return;
     }
 
-    const routeSummary = availableRouteSummaries.length > 0
-      ? `Available routes on ${campus?.name ?? 'this campus'} include ${availableRouteSummaries
-        .slice(0, 4)
-        .map((route) => `${route.name} from ${route.fromLabel} to ${route.toLabel}`)
-        .join(', ')}.`
-      : 'There are no synced routes available right now.';
+    const routeSummary =
+      availableRouteSummaries.length > 0
+        ? `Available routes on ${campus?.name ?? 'this campus'} include ${availableRouteSummaries
+            .slice(0, 4)
+            .map((route) => `${route.name} from ${route.fromLabel} to ${route.toLabel}`)
+            .join(', ')}.`
+        : 'There are no synced routes available right now.';
 
     Speech.stop();
-    Speech.speak(`I could not find ${transcript}. ${routeSummary} Review the route list below or try again.`);
+    setIsSpeaking(true);
+    Speech.speak(
+      `I could not find ${transcript}. ${routeSummary} Review the route list below or try again.`,
+      { onDone: () => setIsSpeaking(false), onStopped: () => setIsSpeaking(false) },
+    );
     lastSpokenNoMatchRef.current = transcript;
   }, [sttState, sttError, transcript, availableRouteSummaries, campus?.name]);
 
   const speakAvailableRoutes = useCallback(() => {
-    const routeSummary = availableRouteSummaries.length > 0
-      ? `${availableRouteSummaries.length} available route${availableRouteSummaries.length === 1 ? '' : 's'}: ${availableRouteSummaries
-        .slice(0, 6)
-        .map((route) => `${route.name} from ${route.fromLabel} to ${route.toLabel}`)
-        .join(', ')}.`
-      : 'There are no synced routes available on this device right now.';
+    if (isSpeaking) {
+      Speech.stop();
+      setIsSpeaking(false);
+      return;
+    }
+    const routeSummary =
+      availableRouteSummaries.length > 0
+        ? `${availableRouteSummaries.length} available route${availableRouteSummaries.length === 1 ? '' : 's'}: ${availableRouteSummaries
+            .slice(0, 6)
+            .map((route) => `${route.name} from ${route.fromLabel} to ${route.toLabel}`)
+            .join(', ')}.`
+        : 'There are no synced routes available on this device right now.';
     Speech.stop();
-    Speech.speak(routeSummary);
+    setIsSpeaking(true);
+    Speech.speak(routeSummary, {
+      onDone: () => setIsSpeaking(false),
+      onStopped: () => setIsSpeaking(false),
+    });
     AccessibilityInfo.announceForAccessibility(routeSummary);
-  }, [availableRouteSummaries]);
+  }, [availableRouteSummaries, isSpeaking]);
 
   const topFavorites = favorites.slice(0, HOME_FAVORITES_LIMIT);
 
@@ -410,257 +484,327 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <Text style={styles.appName} accessibilityRole="header">
-          EchoEcho
-        </Text>
-        <Text style={styles.tagline}>Where do you want to go?</Text>
-      </View>
-
-      {/* Voice input button with STT state feedback */}
-      <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-        <Pressable
-          style={({ pressed }) => [
-            styles.voiceBtn,
-            sttState === 'listening' && styles.voiceBtnListening,
-            pressed && styles.voiceBtnPressed,
-          ]}
-          onPress={sttState === 'listening' ? stopListening : handleVoiceSearch}
-          accessibilityLabel={
-            sttState === 'listening'
-              ? 'Listening. Tap to stop.'
-              : sttState === 'transcribing'
-                ? 'Processing your speech. Please wait.'
-                : 'Start voice destination input'
-          }
-          accessibilityRole="button"
-          accessibilityHint="Double tap to speak your destination"
-          accessibilityState={{ busy: sttState === 'transcribing' }}
-        >
-          <Ionicons
-            name={sttState === 'listening' ? 'mic' : 'mic-outline'}
-            size={40}
-            color={sttState === 'listening' ? '#fff' : '#060608'}
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor="#4FC3F7"
+            accessibilityLabel="Pull to refresh campus and routes"
           />
-          <Text
-            style={[
-              styles.voiceBtnLabel,
-              sttState === 'listening' && styles.voiceBtnLabelListening,
-            ]}
-          >
-            {sttState === 'listening'
-              ? 'Listening...'
-              : sttState === 'transcribing'
-                ? 'Processing...'
-                : 'Speak Destination'}
+        }
+      >
+        <View style={styles.header}>
+          <Text style={styles.appName} accessibilityRole="header">
+            EchoEcho
           </Text>
-        </Pressable>
-      </Animated.View>
-
-      <View style={styles.assistCard} accessibilityLiveRegion="polite">
-        <View style={styles.assistRow}>
-          <Text style={styles.assistLabel}>Campus</Text>
-          <Text style={styles.assistValue}>
-            {!campusLoaded
-              ? 'Detecting...'
-              : loadFailed
-                ? 'Unavailable'
-                : campus?.name ?? 'No nearby campus detected'}
-          </Text>
+          <Text style={styles.tagline}>Where do you want to go?</Text>
         </View>
-        {!campus && nearestCampus && (
-          <View style={styles.assistRowStack}>
-            <Text style={styles.assistLabel}>Nearest campus</Text>
-            <Text style={styles.assistTranscript}>
-              {`The nearest campus is ${nearestCampus.name}, ${formatCampusDistance(nearestCampus.distanceMeters)} away`}
+
+        {/* Voice input button with STT state feedback */}
+        <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.voiceBtn,
+              sttState === 'listening' && styles.voiceBtnListening,
+              pressed && styles.voiceBtnPressed,
+            ]}
+            onPress={sttState === 'listening' ? stopListening : handleVoiceSearch}
+            accessibilityLabel={
+              sttState === 'listening'
+                ? 'Listening. Tap to stop.'
+                : sttState === 'transcribing'
+                  ? 'Processing your speech. Please wait.'
+                  : 'Start voice destination input'
+            }
+            accessibilityRole="button"
+            accessibilityHint="Double tap to speak your destination"
+            accessibilityState={{ busy: sttState === 'transcribing' }}
+          >
+            <Ionicons
+              name={sttState === 'listening' ? 'mic' : 'mic-outline'}
+              size={40}
+              color={sttState === 'listening' ? '#fff' : '#060608'}
+            />
+            <Text
+              style={[
+                styles.voiceBtnLabel,
+                sttState === 'listening' && styles.voiceBtnLabelListening,
+              ]}
+            >
+              {sttState === 'listening'
+                ? 'Listening...'
+                : sttState === 'transcribing'
+                  ? 'Processing...'
+                  : 'Speak Destination'}
+            </Text>
+          </Pressable>
+        </Animated.View>
+
+        <View style={styles.assistCard} accessibilityLiveRegion="polite">
+          <View style={styles.assistRow}>
+            <Text style={styles.assistLabel}>Campus</Text>
+            <Text style={styles.assistValue}>
+              {!campusLoaded
+                ? 'Detecting...'
+                : loadFailed
+                  ? 'Unavailable'
+                  : (campus?.name ?? 'No nearby campus detected')}
             </Text>
           </View>
+          {!campus && nearestCampus && (
+            <View style={styles.assistRowStack}>
+              <Text style={styles.assistLabel}>Nearest campus</Text>
+              <Text style={styles.assistTranscript}>
+                {`The nearest campus is ${nearestCampus.name}, ${formatCampusDistance(nearestCampus.distanceMeters)} away`}
+              </Text>
+            </View>
+          )}
+          <View style={styles.assistRow}>
+            <Text style={styles.assistLabel}>Routes on device</Text>
+            {routesLoading ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <ActivityIndicator size="small" color="#4FC3F7" />
+                <Text style={styles.assistValue}>Syncing...</Text>
+              </View>
+            ) : (
+              <Text style={styles.assistValue}>{availableRoutes.length}</Text>
+            )}
+          </View>
+          <View style={styles.assistRowStack}>
+            <Text style={styles.assistLabel}>Heard</Text>
+            <Text style={styles.assistTranscript}>{transcript?.trim() || 'Nothing yet'}</Text>
+          </View>
+          <View style={styles.assistRowStack}>
+            <Text style={styles.assistLabel}>Available routes</Text>
+            {routesLoading ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <ActivityIndicator size="small" color="#4FC3F7" />
+                <Text style={styles.assistRouteList}>Syncing routes...</Text>
+              </View>
+            ) : (
+              <Text style={styles.assistRouteList}>
+                {availableRouteSummaries.length > 0
+                  ? availableRouteSummaries
+                      .slice(0, 6)
+                      .map((route) => `${route.name} (${route.fromLabel} → ${route.toLabel})`)
+                      .join(' • ')
+                  : 'No synced routes available yet'}
+              </Text>
+            )}
+          </View>
+          <Pressable
+            style={({ pressed }) => [styles.assistSecondaryBtn, pressed && { opacity: 0.75 }]}
+            onPress={speakAvailableRoutes}
+            accessibilityLabel={isSpeaking ? 'Stop speaking' : 'Speak the available routes'}
+            accessibilityRole="button"
+          >
+            <Ionicons
+              name={isSpeaking ? 'stop-circle-outline' : 'volume-high-outline'}
+              size={18}
+              color="#4FC3F7"
+            />
+            <Text style={styles.assistSecondaryBtnText}>
+              {isSpeaking ? 'Stop' : 'Speak available routes'}
+            </Text>
+          </Pressable>
+        </View>
+
+        {showLocationPermissionHelp && (
+          <View style={styles.permissionCard} accessibilityLiveRegion="assertive">
+            <Text style={styles.permissionTitle}>Location access needed</Text>
+            <Text style={styles.permissionText}>
+              EchoEcho needs your current location to choose the best route and start navigation.
+            </Text>
+            <View style={styles.permissionActions}>
+              <Pressable
+                style={({ pressed }) => [styles.sttConfirmBtn, pressed && { opacity: 0.7 }]}
+                onPress={handleOpenSettings}
+                accessibilityLabel="Open app settings"
+                accessibilityRole="button"
+              >
+                <Text style={styles.sttConfirmBtnText}>Enable Location</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.sttRejectBtn, pressed && { opacity: 0.7 }]}
+                onPress={() => setShowLocationPermissionHelp(false)}
+                accessibilityLabel="Dismiss permission help"
+                accessibilityRole="button"
+              >
+                <Text style={styles.sttRejectBtnText}>Dismiss</Text>
+              </Pressable>
+            </View>
+          </View>
         )}
-        <View style={styles.assistRow}>
-          <Text style={styles.assistLabel}>Routes on device</Text>
-          <Text style={styles.assistValue}>{availableRoutes.length}</Text>
-        </View>
-        <View style={styles.assistRowStack}>
-          <Text style={styles.assistLabel}>Heard</Text>
-          <Text style={styles.assistTranscript}>
-            {transcript?.trim() || 'Nothing yet'}
-          </Text>
-        </View>
-        <View style={styles.assistRowStack}>
-          <Text style={styles.assistLabel}>Available routes</Text>
-          <Text style={styles.assistRouteList}>
-            {availableRouteSummaries.length > 0
-              ? availableRouteSummaries
-                .slice(0, 6)
-                .map((route) => `${route.name} (${route.fromLabel} → ${route.toLabel})`)
-                .join(' • ')
-              : 'No synced routes available yet'}
-          </Text>
-        </View>
-        <Pressable
-          style={({ pressed }) => [styles.assistSecondaryBtn, pressed && { opacity: 0.75 }]}
-          onPress={speakAvailableRoutes}
-          accessibilityLabel="Speak the available routes"
-          accessibilityRole="button"
-        >
-          <Ionicons name="volume-high-outline" size={18} color="#4FC3F7" />
-          <Text style={styles.assistSecondaryBtnText}>Speak available routes</Text>
-        </Pressable>
-      </View>
 
-      {showLocationPermissionHelp && (
-        <View style={styles.permissionCard} accessibilityLiveRegion="assertive">
-          <Text style={styles.permissionTitle}>Location access needed</Text>
-          <Text style={styles.permissionText}>
-            EchoEcho needs your current location to choose the best route and start navigation.
-          </Text>
-          <View style={styles.permissionActions}>
-            <Pressable
-              style={({ pressed }) => [styles.sttConfirmBtn, pressed && { opacity: 0.7 }]}
-              onPress={handleOpenSettings}
-              accessibilityLabel="Open app settings"
-              accessibilityRole="button"
-            >
-              <Text style={styles.sttConfirmBtnText}>Enable Location</Text>
-            </Pressable>
+        {showMicPermissionHelp && (
+          <View style={styles.permissionCard} accessibilityLiveRegion="assertive">
+            <Text style={styles.permissionTitle}>Microphone access needed</Text>
+            <Text style={styles.permissionText}>
+              EchoEcho needs microphone access for voice destination input. Enable it in Settings,
+              or type your destination instead.
+            </Text>
+            <View style={styles.permissionActions}>
+              <Pressable
+                style={({ pressed }) => [styles.sttConfirmBtn, pressed && { opacity: 0.7 }]}
+                onPress={handleOpenSettings}
+                accessibilityLabel="Open app settings to enable microphone"
+                accessibilityRole="button"
+              >
+                <Text style={styles.sttConfirmBtnText}>Enable Microphone</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.sttRejectBtn, pressed && { opacity: 0.7 }]}
+                onPress={() => {
+                  setShowMicPermissionHelp(false);
+                  setShowKeyboardFallback(true);
+                }}
+                accessibilityLabel="Type destination instead"
+                accessibilityRole="button"
+              >
+                <Text style={styles.sttRejectBtnText}>Type instead</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
+        {/* STT confirmation prompt */}
+        {sttState === 'confirming' && pendingMatch && (
+          <View style={styles.sttConfirmCard} accessibilityLiveRegion="polite">
+            <Text style={styles.sttConfirmText}>Matched destination: {pendingMatch.name}</Text>
+            <Text style={styles.sttConfirmSubtext}>Starting navigation…</Text>
+          </View>
+        )}
+
+        {/* STT disambiguation */}
+        {sttState === 'disambiguating' && matches.length > 0 && (
+          <View style={styles.sttConfirmCard} accessibilityLiveRegion="polite">
+            <Text style={styles.sttConfirmText}>Did you mean:</Text>
+            {matches.map((m) => (
+              <Pressable
+                key={m.buildingId}
+                style={({ pressed }) => [styles.sttDisambigBtn, pressed && { opacity: 0.7 }]}
+                onPress={() => handleDestinationConfirmed(m.buildingId, m.name)}
+                accessibilityLabel={`Navigate to ${m.name}`}
+                accessibilityRole="button"
+              >
+                <Ionicons name="navigate" size={18} color="#4FC3F7" />
+                <Text style={styles.sttDisambigText}>{m.name}</Text>
+              </Pressable>
+            ))}
             <Pressable
               style={({ pressed }) => [styles.sttRejectBtn, pressed && { opacity: 0.7 }]}
-              onPress={() => setShowLocationPermissionHelp(false)}
-              accessibilityLabel="Dismiss permission help"
+              onPress={resetToIdle}
+              accessibilityLabel="Cancel and try again"
               accessibilityRole="button"
             >
-              <Text style={styles.sttRejectBtnText}>Dismiss</Text>
+              <Text style={styles.sttRejectBtnText}>Try again</Text>
             </Pressable>
           </View>
-        </View>
-      )}
+        )}
 
-      {/* STT confirmation prompt */}
-      {sttState === 'confirming' && pendingMatch && (
-        <View style={styles.sttConfirmCard} accessibilityLiveRegion="polite">
-          <Text style={styles.sttConfirmText}>
-            Matched destination: {pendingMatch.name}
-          </Text>
-          <Text style={styles.sttConfirmSubtext}>
-            Starting navigation…
-          </Text>
-        </View>
-      )}
+        {/* STT error state */}
+        {sttState === 'error' && sttError && (
+          <View style={styles.sttErrorCard} accessibilityLiveRegion="assertive">
+            <Text style={styles.sttErrorText}>{sttError}</Text>
+            <View style={styles.sttConfirmActions}>
+              <Pressable
+                style={({ pressed }) => [styles.sttConfirmBtn, pressed && { opacity: 0.7 }]}
+                onPress={() => void startListening()}
+                accessibilityLabel="Try voice search again"
+                accessibilityRole="button"
+              >
+                <Text style={styles.sttConfirmBtnText}>Try again</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.sttRejectBtn, pressed && { opacity: 0.7 }]}
+                onPress={() => {
+                  resetToIdle();
+                  setShowKeyboardFallback(true);
+                }}
+                accessibilityLabel="Switch to keyboard input"
+                accessibilityRole="button"
+              >
+                <Text style={styles.sttRejectBtnText}>Type instead</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
 
-      {/* STT disambiguation */}
-      {sttState === 'disambiguating' && matches.length > 0 && (
-        <View style={styles.sttConfirmCard} accessibilityLiveRegion="polite">
-          <Text style={styles.sttConfirmText}>Did you mean:</Text>
-          {matches.map((m) => (
-            <Pressable
-              key={m.buildingId}
-              style={({ pressed }) => [styles.sttDisambigBtn, pressed && { opacity: 0.7 }]}
-              onPress={() => handleDestinationConfirmed(m.buildingId, m.name)}
-              accessibilityLabel={`Navigate to ${m.name}`}
-              accessibilityRole="button"
-            >
-              <Ionicons name="navigate" size={18} color="#4FC3F7" />
-              <Text style={styles.sttDisambigText}>{m.name}</Text>
-            </Pressable>
-          ))}
-          <Pressable
-            style={({ pressed }) => [styles.sttRejectBtn, pressed && { opacity: 0.7 }]}
-            onPress={resetToIdle}
-            accessibilityLabel="Cancel and try again"
-            accessibilityRole="button"
-          >
-            <Text style={styles.sttRejectBtnText}>Try again</Text>
-          </Pressable>
-        </View>
-      )}
-
-      {/* STT error state */}
-      {sttState === 'error' && sttError && (
-        <View style={styles.sttErrorCard} accessibilityLiveRegion="assertive">
-          <Text style={styles.sttErrorText}>{sttError}</Text>
-          <View style={styles.sttConfirmActions}>
-            <Pressable
-              style={({ pressed }) => [styles.sttConfirmBtn, pressed && { opacity: 0.7 }]}
-              onPress={() => void startListening()}
-              accessibilityLabel="Try voice search again"
-              accessibilityRole="button"
-            >
-              <Text style={styles.sttConfirmBtnText}>Try again</Text>
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [styles.sttRejectBtn, pressed && { opacity: 0.7 }]}
-              onPress={() => {
-                resetToIdle();
-                setShowKeyboardFallback(true);
+        {/* Keyboard fallback */}
+        {showKeyboardFallback && (
+          <View style={styles.keyboardFallback}>
+            <TextInput
+              style={styles.keyboardInput}
+              value={keyboardQuery}
+              onChangeText={setKeyboardQuery}
+              placeholder="Type destination name..."
+              placeholderTextColor="#404050"
+              autoFocus
+              accessibilityLabel="Type your destination"
+              returnKeyType="search"
+              onSubmitEditing={() => {
+                const q = keyboardQuery.trim();
+                if (q) handleKeyboardSearch(q);
               }}
-              accessibilityLabel="Switch to keyboard input"
+            />
+            <View style={styles.sttConfirmActions}>
+              <Pressable
+                style={({ pressed }) => [styles.sttConfirmBtn, pressed && { opacity: 0.7 }]}
+                onPress={() => {
+                  const q = keyboardQuery.trim();
+                  if (q) handleKeyboardSearch(q);
+                }}
+                accessibilityLabel="Search for destination"
+                accessibilityRole="button"
+              >
+                <Text style={styles.sttConfirmBtnText}>Search</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.sttRejectBtn, pressed && { opacity: 0.7 }]}
+                onPress={() => {
+                  setShowKeyboardFallback(false);
+                  setKeyboardQuery('');
+                }}
+                accessibilityLabel="Close keyboard input"
+                accessibilityRole="button"
+              >
+                <Text style={styles.sttRejectBtnText}>Cancel</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
+        <View style={styles.favoritesSection}>
+          <View style={styles.sectionRow}>
+            <Text style={styles.sectionTitle} accessibilityRole="header">
+              Favorites
+            </Text>
+            <Pressable
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              onPress={() => router.push('/favorites' as any)}
+              style={styles.seeAllBtn}
+              accessibilityLabel="See all favorites and history"
               accessibilityRole="button"
+              accessibilityHint="Double tap to view all favorites and recent routes"
             >
-              <Text style={styles.sttRejectBtnText}>Type instead</Text>
+              <Text style={styles.seeAllLabel}>See all</Text>
             </Pressable>
           </View>
-        </View>
-      )}
 
-      {/* Keyboard fallback */}
-      {showKeyboardFallback && (
-        <View style={styles.keyboardFallback}>
-          <TextInput
-            style={styles.keyboardInput}
-            value={keyboardQuery}
-            onChangeText={setKeyboardQuery}
-            placeholder="Type destination name..."
-            placeholderTextColor="#404050"
-            autoFocus
-            accessibilityLabel="Type your destination"
-            returnKeyType="search"
-            onSubmitEditing={() => {
-              const q = keyboardQuery.trim();
-              if (q) handleKeyboardSearch(q);
-            }}
+          <FlatList
+            data={topFavorites}
+            keyExtractor={(item) => item.routeId}
+            contentContainerStyle={styles.favList}
+            ListEmptyComponent={<FavoritesEmpty />}
+            renderItem={renderFavoriteItem}
+            ItemSeparatorComponent={FavoriteSeparator}
+            accessibilityRole="list"
+            scrollEnabled={false}
           />
-          <Pressable
-            style={({ pressed }) => [styles.sttRejectBtn, pressed && { opacity: 0.7 }]}
-            onPress={() => {
-              setShowKeyboardFallback(false);
-              setKeyboardQuery('');
-            }}
-            accessibilityLabel="Close keyboard input"
-            accessibilityRole="button"
-          >
-            <Text style={styles.sttRejectBtnText}>Cancel</Text>
-          </Pressable>
         </View>
-      )}
-
-      <View style={styles.favoritesSection}>
-        <View style={styles.sectionRow}>
-          <Text style={styles.sectionTitle} accessibilityRole="header">
-            Favorites
-          </Text>
-          <Pressable
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            onPress={() => router.push('/favorites' as any)}
-            style={styles.seeAllBtn}
-            accessibilityLabel="See all favorites and history"
-            accessibilityRole="button"
-            accessibilityHint="Double tap to view all favorites and recent routes"
-          >
-            <Text style={styles.seeAllLabel}>See all</Text>
-          </Pressable>
-        </View>
-
-        <FlatList
-          data={topFavorites}
-          keyExtractor={(item) => item.routeId}
-          contentContainerStyle={styles.favList}
-          ListEmptyComponent={<FavoritesEmpty />}
-          renderItem={renderFavoriteItem}
-          ItemSeparatorComponent={FavoriteSeparator}
-          accessibilityRole="list"
-          scrollEnabled={false}
-        />
-      </View>
+      </ScrollView>
 
       {/* Emergency FAB — direct tap; triple-tap is also available on any screen */}
       <Pressable
@@ -721,7 +865,9 @@ const DestinationCard = memo(function DestinationCard({
       <Pressable
         style={({ pressed }) => [styles.favToggle, pressed && styles.favTogglePressed]}
         onPress={onToggleFavorite}
-        accessibilityLabel={isFavorite ? `Remove ${label} from favorites` : `Add ${label} to favorites`}
+        accessibilityLabel={
+          isFavorite ? `Remove ${label} from favorites` : `Add ${label} to favorites`
+        }
         accessibilityRole="button"
         accessibilityState={{ selected: isFavorite }}
       >
@@ -754,6 +900,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#060608',
     paddingHorizontal: 20,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   header: {
     paddingTop: 24,

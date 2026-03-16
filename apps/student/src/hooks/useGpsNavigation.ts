@@ -32,9 +32,12 @@ const OFF_ROUTE_DEBOUNCE_MS = 5_000;
 
 /** Project point P onto segment AB; return projected point. */
 function projectOntoSegment(
-  pLat: number, pLng: number,
-  aLat: number, aLng: number,
-  bLat: number, bLng: number
+  pLat: number,
+  pLng: number,
+  aLat: number,
+  aLng: number,
+  bLat: number,
+  bLng: number,
 ): { lat: number; lng: number } {
   const abLat = bLat - aLat;
   const abLng = bLng - aLng;
@@ -48,8 +51,9 @@ function projectOntoSegment(
 
 /** Distance from point to the nearest segment on the route polyline. */
 function distanceToRoute(
-  pLat: number, pLng: number,
-  waypoints: LocalWaypoint[]
+  pLat: number,
+  pLng: number,
+  waypoints: LocalWaypoint[],
 ): { dist: number; bearing: number } {
   if (waypoints.length === 0) return { dist: 0, bearing: 0 };
   let minDist = Infinity;
@@ -76,7 +80,7 @@ function distanceToRoute(
 /** Turn direction from bearing delta (per ALP-956 spec). */
 function turnDirection(
   currentBearing: number,
-  nextBearing: number
+  nextBearing: number,
 ): 'left' | 'right' | 'straight' | 'arrived' {
   const delta = normalizeAngle(nextBearing - currentBearing);
   if (Math.abs(delta) < 30) return 'straight';
@@ -112,85 +116,95 @@ export function useGpsNavigation(): UseGpsNavigationResult {
     handlerRef.current?.(event);
   }, []);
 
-  const processPosition = useCallback((update: TrackPositionUpdate) => {
-    const wps = waypointsRef.current;
-    const idx = wpIndexRef.current;
-    if (idx >= wps.length) return;
+  const processPosition = useCallback(
+    (update: TrackPositionUpdate) => {
+      const wps = waypointsRef.current;
+      const idx = wpIndexRef.current;
+      if (idx >= wps.length) return;
 
-    lastUpdateTimeRef.current = Date.now();
-    lastPositionRef.current = update;
+      lastUpdateTimeRef.current = Date.now();
+      lastPositionRef.current = update;
 
-    // Accuracy gate — holds invalid GPS fixes; PDR injections bypass
-    if (update.source === 'gps' && update.accuracy > MAX_VALID_ACCURACY_M) return;
+      // Accuracy gate — holds invalid GPS fixes; PDR injections bypass
+      if (update.source === 'gps' && update.accuracy > MAX_VALID_ACCURACY_M) return;
 
-    // Off-route detection against full route polyline
-    const { dist: routeDist, bearing: bearingToRoute } = distanceToRoute(
-      update.lat, update.lng, wps
-    );
-
-    if (routeDist > OFF_ROUTE_THRESHOLD_M) {
-      if (!offRouteTimerRef.current && !offRouteFiredRef.current) {
-        offRouteTimerRef.current = setTimeout(() => {
-          offRouteFiredRef.current = true;
-          emit({
-            type: 'off_route',
-            deviationMeters: routeDist,
-            bearingToRoute,
-            source: update.source,
-          });
-          offRouteTimerRef.current = null;
-        }, OFF_ROUTE_DEBOUNCE_MS);
-      }
-    } else {
-      if (offRouteTimerRef.current) {
-        clearTimeout(offRouteTimerRef.current);
-        offRouteTimerRef.current = null;
-      }
-      offRouteFiredRef.current = false;
-    }
-
-    // Route segment snapping for waypoint distance calculation
-    const target = wps[idx];
-    let distToTarget = haversineM(update.lat, update.lng, target.lat, target.lng);
-
-    if (idx > 0) {
-      const prev = wps[idx - 1];
-      const projected = projectOntoSegment(
-        update.lat, update.lng, prev.lat, prev.lng, target.lat, target.lng
+      // Off-route detection against full route polyline
+      const { dist: routeDist, bearing: bearingToRoute } = distanceToRoute(
+        update.lat,
+        update.lng,
+        wps,
       );
-      const snapDist = haversineM(update.lat, update.lng, projected.lat, projected.lng);
-      if (snapDist < SNAP_THRESHOLD_M) {
-        distToTarget = haversineM(projected.lat, projected.lng, target.lat, target.lng);
+
+      if (routeDist > OFF_ROUTE_THRESHOLD_M) {
+        if (!offRouteTimerRef.current && !offRouteFiredRef.current) {
+          offRouteTimerRef.current = setTimeout(() => {
+            offRouteFiredRef.current = true;
+            emit({
+              type: 'off_route',
+              deviationMeters: routeDist,
+              bearingToRoute,
+              source: update.source,
+            });
+            offRouteTimerRef.current = null;
+          }, OFF_ROUTE_DEBOUNCE_MS);
+        }
+      } else {
+        if (offRouteTimerRef.current) {
+          clearTimeout(offRouteTimerRef.current);
+          offRouteTimerRef.current = null;
+        }
+        offRouteFiredRef.current = false;
       }
-    }
 
-    // Waypoint arrival
-    if (distToTarget < AT_WAYPOINT_DISTANCE_M) {
-      approachingFiredRef.current = false;
-      const isLast = idx === wps.length - 1;
+      // Route segment snapping for waypoint distance calculation
+      const target = wps[idx];
+      let distToTarget = haversineM(update.lat, update.lng, target.lat, target.lng);
 
-      let dir: 'left' | 'right' | 'straight' | 'arrived' = 'arrived';
-      if (!isLast && idx > 0) {
+      if (idx > 0) {
         const prev = wps[idx - 1];
-        const curBearing = bearingDeg(prev.lat, prev.lng, target.lat, target.lng);
-        const next = wps[idx + 1];
-        const nextBearing = bearingDeg(target.lat, target.lng, next.lat, next.lng);
-        dir = turnDirection(curBearing, nextBearing);
+        const projected = projectOntoSegment(
+          update.lat,
+          update.lng,
+          prev.lat,
+          prev.lng,
+          target.lat,
+          target.lng,
+        );
+        const snapDist = haversineM(update.lat, update.lng, projected.lat, projected.lng);
+        if (snapDist < SNAP_THRESHOLD_M) {
+          distToTarget = haversineM(projected.lat, projected.lng, target.lat, target.lng);
+        }
       }
 
-      emit({ type: 'at_waypoint', waypointId: target.id, turnDirection: dir });
-      wpIndexRef.current += 1;
+      // Waypoint arrival
+      if (distToTarget < AT_WAYPOINT_DISTANCE_M) {
+        approachingFiredRef.current = false;
+        const isLast = idx === wps.length - 1;
 
-      if (isLast) emit({ type: 'arrived' });
-      return;
-    }
+        let dir: 'left' | 'right' | 'straight' | 'arrived' = 'arrived';
+        if (!isLast && idx > 0) {
+          const prev = wps[idx - 1];
+          const curBearing = bearingDeg(prev.lat, prev.lng, target.lat, target.lng);
+          const next = wps[idx + 1];
+          const nextBearing = bearingDeg(target.lat, target.lng, next.lat, next.lng);
+          dir = turnDirection(curBearing, nextBearing);
+        }
 
-    // Approaching pre-announcement
-    if (distToTarget < APPROACHING_DISTANCE_M && !approachingFiredRef.current) {
-      approachingFiredRef.current = true;
-      emit({ type: 'approaching_waypoint', waypointId: target.id, distanceMeters: distToTarget });
-    }
-  }, [emit]);
+        emit({ type: 'at_waypoint', waypointId: target.id, turnDirection: dir });
+        wpIndexRef.current += 1;
+
+        if (isLast) emit({ type: 'arrived' });
+        return;
+      }
+
+      // Approaching pre-announcement
+      if (distToTarget < APPROACHING_DISTANCE_M && !approachingFiredRef.current) {
+        approachingFiredRef.current = true;
+        emit({ type: 'approaching_waypoint', waypointId: target.id, distanceMeters: distToTarget });
+      }
+    },
+    [emit],
+  );
 
   const handleDegradedTimer = useCallback(() => {
     if (!degradedRef.current) {
@@ -220,74 +234,67 @@ export function useGpsNavigation(): UseGpsNavigationResult {
     }, 1_000);
   }, [emit, stopWatchdog]);
 
-  const startTracking = useCallback(async (
-    waypoints: LocalWaypoint[],
-    onEvent: NavEventHandler
-  ) => {
-    waypointsRef.current = waypoints;
-    handlerRef.current = onEvent;
-    wpIndexRef.current = 0;
-    approachingFiredRef.current = false;
-    degradedRef.current = false;
-    offRouteFiredRef.current = false;
-    activeRef.current = true;
+  const startTracking = useCallback(
+    async (waypoints: LocalWaypoint[], onEvent: NavEventHandler) => {
+      waypointsRef.current = waypoints;
+      handlerRef.current = onEvent;
+      wpIndexRef.current = 0;
+      approachingFiredRef.current = false;
+      degradedRef.current = false;
+      offRouteFiredRef.current = false;
+      activeRef.current = true;
 
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted' || !activeRef.current) return;
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== 'granted' || !activeRef.current) return;
 
-    const bgPerm = await Location.getBackgroundPermissionsAsync();
-    if (!activeRef.current) return;
-    if (bgPerm.status !== 'granted') {
-      await Location.requestBackgroundPermissionsAsync();
-      if (!activeRef.current) return;
-    }
+      startWatchdog();
 
-    startWatchdog();
+      const sub = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 1000,
+          distanceInterval: 0,
+        },
+        (loc) => {
+          lastUpdateTimeRef.current = Date.now();
+          const acc = loc.coords.accuracy ?? 999;
 
-    const sub = await Location.watchPositionAsync(
-      {
-        accuracy: Location.Accuracy.High,
-        timeInterval: 1000,
-        distanceInterval: 0,
-      },
-      (loc) => {
-        lastUpdateTimeRef.current = Date.now();
-        const acc = loc.coords.accuracy ?? 999;
-
-        if (acc > DEGRADED_ACCURACY_M) {
-          if (!degradedTimerRef.current) {
-            degradedTimerRef.current = setTimeout(handleDegradedTimer, DEGRADED_GAP_MS);
+          if (acc > DEGRADED_ACCURACY_M) {
+            if (!degradedTimerRef.current) {
+              degradedTimerRef.current = setTimeout(handleDegradedTimer, DEGRADED_GAP_MS);
+            }
+          } else {
+            if (degradedTimerRef.current) {
+              clearTimeout(degradedTimerRef.current);
+              degradedTimerRef.current = null;
+            }
+            if (degradedRef.current) {
+              degradedRef.current = false;
+              emit({ type: 'position_restored' });
+            }
           }
-        } else {
-          if (degradedTimerRef.current) {
-            clearTimeout(degradedTimerRef.current);
-            degradedTimerRef.current = null;
-          }
-          if (degradedRef.current) {
-            degradedRef.current = false;
-            emit({ type: 'position_restored' });
-          }
-        }
 
-        processPosition({
-          lat: loc.coords.latitude,
-          lng: loc.coords.longitude,
-          heading: loc.coords.heading ?? 0,
-          accuracy: acc,
-          speed: loc.coords.speed ?? 0,
-          source: 'gps',
-        });
+          processPosition({
+            lat: loc.coords.latitude,
+            lng: loc.coords.longitude,
+            heading: loc.coords.heading ?? 0,
+            accuracy: acc,
+            speed: loc.coords.speed ?? 0,
+            source: 'gps',
+          });
+        },
+      );
+
+      // If stopTracking was called while awaiting watchPositionAsync,
+      // remove the subscription immediately to prevent a leaked GPS listener
+      if (!activeRef.current) {
+        sub.remove();
+        return;
       }
-    );
-
-    // If stopTracking was called while awaiting watchPositionAsync,
-    // remove the subscription immediately to prevent a leaked GPS listener
-    if (!activeRef.current) {
-      sub.remove();
-      return;
-    }
-    subscriptionRef.current = sub;
-  }, [processPosition, handleDegradedTimer, startWatchdog, emit]);
+      subscriptionRef.current = sub;
+    },
+    [processPosition, handleDegradedTimer, startWatchdog, emit],
+  );
 
   const stopTracking = useCallback(() => {
     activeRef.current = false;
@@ -306,9 +313,12 @@ export function useGpsNavigation(): UseGpsNavigationResult {
   }, [stopWatchdog]);
 
   /** PDR positions (ALP-957) injected here; processed identically to GPS. */
-  const injectPosition = useCallback((update: TrackPositionUpdate) => {
-    processPosition(update);
-  }, [processPosition]);
+  const injectPosition = useCallback(
+    (update: TrackPositionUpdate) => {
+      processPosition(update);
+    },
+    [processPosition],
+  );
 
   return { startTracking, stopTracking, injectPosition, lastPositionRef };
 }
